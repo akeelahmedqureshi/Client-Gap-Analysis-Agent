@@ -1,0 +1,248 @@
+# Normalized feature taxonomy.
+#
+# Every client and competitor feature is mapped onto these ids so that products
+# can be compared like-for-like. Per feature:
+#   keywords      phrases that, when found in website/docs text, indicate the feature
+#   code_signals  dependency names or path fragments that indicate an implementation
+#   defaults      baseline factor scores (0-5) used by the prioritization engine
+#                 when no better estimate is available. complexity/risk are
+#                 penalties (higher = harder / riskier).
+#   ai            true when the feature is an AI capability (feeds AI-gap analysis);
+#                 defaults to true for every feature in the "ai" category
+
+categories:
+  - id: authentication
+    name: Authentication
+    features:
+      - id: auth.email_login
+        name: Email / password login
+        keywords: ["sign in", "log in", "login", "sign up", "create account"]
+        code_signals: ["passport", "devise", "django.contrib.auth", "next-auth", "authlib", "bcrypt", "flask-login", "/auth/", "/login"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 1, strategic_alignment: 2, ai_opportunity: 0, complexity: 1, risk: 2}
+      - id: auth.oauth
+        name: Social / OAuth login
+        keywords: ["sign in with google", "continue with google", "sign in with microsoft", "oauth", "login with github"]
+        code_signals: ["passport-google", "omniauth", "social-auth", "next-auth", "authlib", "oauth2", "@react-oauth"]
+        defaults: {business_value: 2, user_impact: 3, revenue_potential: 1, strategic_alignment: 2, ai_opportunity: 0, complexity: 2, risk: 2}
+      - id: auth.sso
+        name: Enterprise SSO (SAML / OIDC)
+        keywords: ["single sign-on", "sso", "saml", "okta", "azure ad", "entra id", "openid connect"]
+        code_signals: ["saml", "python3-saml", "passport-saml", "ruby-saml", "oidc", "openid-client", "keycloak", "auth0", "workos"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 4, strategic_alignment: 4, ai_opportunity: 0, complexity: 3, risk: 2}
+      - id: auth.mfa
+        name: Multi-factor authentication
+        keywords: ["two-factor", "2fa", "multi-factor", "mfa", "authenticator app"]
+        code_signals: ["pyotp", "speakeasy", "otplib", "rotp", "django-otp", "two_factor", "webauthn"]
+        defaults: {business_value: 3, user_impact: 2, revenue_potential: 2, strategic_alignment: 4, ai_opportunity: 0, complexity: 2, risk: 1}
+      - id: auth.rbac
+        name: Roles & permissions (RBAC)
+        keywords: ["roles and permissions", "role-based", "user roles", "access control", "permissions"]
+        code_signals: ["casbin", "pundit", "cancancan", "django-guardian", "accesscontrol", "casl", "rbac"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 0, complexity: 3, risk: 2}
+
+  - id: communication
+    name: Communication
+    features:
+      - id: comm.email
+        name: Email notifications
+        keywords: ["email notifications", "email reminders", "email alerts"]
+        code_signals: ["nodemailer", "sendgrid", "@sendgrid", "mailgun", "postmark", "aws-sdk/client-ses", "actionmailer", "django.core.mail", "resend"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 1, strategic_alignment: 2, ai_opportunity: 1, complexity: 1, risk: 1}
+      - id: comm.sms
+        name: SMS notifications
+        keywords: ["sms", "text message", "text reminders"]
+        code_signals: ["twilio", "vonage", "nexmo", "messagebird", "plivo"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 2, strategic_alignment: 2, ai_opportunity: 0, complexity: 2, risk: 1}
+      - id: comm.whatsapp
+        name: WhatsApp messaging
+        keywords: ["whatsapp"]
+        code_signals: ["whatsapp", "twilio"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 2, strategic_alignment: 3, ai_opportunity: 1, complexity: 2, risk: 2}
+      - id: comm.video
+        name: Video calls
+        keywords: ["video call", "video consultation", "telehealth", "video conferencing", "virtual meeting"]
+        code_signals: ["twilio-video", "agora", "daily-js", "@daily-co", "vonage-video", "zoom", "livekit", "webrtc", "jitsi"]
+        defaults: {business_value: 4, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 2, complexity: 4, risk: 3}
+      - id: comm.in_app_chat
+        name: In-app chat / messaging
+        keywords: ["live chat", "in-app messaging", "chat with", "secure messaging"]
+        code_signals: ["socket.io", "pusher", "ably", "stream-chat", "sendbird", "intercom", "actioncable", "channels"]
+        defaults: {business_value: 3, user_impact: 4, revenue_potential: 2, strategic_alignment: 3, ai_opportunity: 3, complexity: 3, risk: 2}
+      - id: comm.push
+        name: Push notifications
+        keywords: ["push notification"]
+        code_signals: ["firebase-admin", "onesignal", "expo-notifications", "web-push", "apns", "fcm"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 1, strategic_alignment: 2, ai_opportunity: 1, complexity: 2, risk: 1}
+
+  - id: ai
+    name: AI
+    features:
+      - id: ai.assistant
+        name: AI assistant / chatbot
+        keywords: ["ai assistant", "chatbot", "virtual assistant", "ai chat", "copilot", "ask ai", "ai agent"]
+        code_signals: ["openai", "anthropic", "@anthropic-ai", "langchain", "llamaindex", "llama-index", "google-generativeai", "@google/generative-ai", "cohere", "mistralai", "ollama", "openrouter"]
+        defaults: {business_value: 4, user_impact: 4, revenue_potential: 4, strategic_alignment: 5, ai_opportunity: 5, complexity: 3, risk: 3}
+      - id: ai.search
+        name: AI / semantic search
+        keywords: ["ai search", "semantic search", "smart search", "natural language search"]
+        code_signals: ["pgvector", "pinecone", "weaviate", "qdrant", "chromadb", "milvus", "faiss", "sentence-transformers", "embeddings"]
+        defaults: {business_value: 3, user_impact: 4, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 5, complexity: 3, risk: 2}
+      - id: ai.rag
+        name: Knowledge base Q&A (RAG)
+        keywords: ["knowledge base", "answers from your documents", "retrieval", "ask your docs"]
+        code_signals: ["langchain", "llamaindex", "llama-index", "haystack", "pgvector", "pinecone", "qdrant", "chromadb"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 5, complexity: 3, risk: 3}
+      - id: ai.automation
+        name: AI workflow automation / agents
+        keywords: ["ai automation", "automate with ai", "intelligent automation", "ai workflows", "autonomous agents"]
+        code_signals: ["langgraph", "crewai", "autogen", "openai-agents", "temporalio"]
+        defaults: {business_value: 5, user_impact: 4, revenue_potential: 4, strategic_alignment: 5, ai_opportunity: 5, complexity: 4, risk: 3}
+      - id: ai.recommendations
+        name: AI recommendations / personalization
+        keywords: ["recommendations", "personalized", "personalised", "suggested for you"]
+        code_signals: ["scikit-learn", "sklearn", "lightfm", "implicit", "surprise", "recombee", "tensorflow-recommenders"]
+        defaults: {business_value: 4, user_impact: 4, revenue_potential: 4, strategic_alignment: 4, ai_opportunity: 5, complexity: 4, risk: 2}
+      - id: ai.predictive
+        name: Predictive analytics
+        keywords: ["predictive", "forecast", "prediction", "risk score", "churn prediction"]
+        code_signals: ["prophet", "xgboost", "lightgbm", "statsmodels", "scikit-learn", "sklearn", "tensorflow", "torch", "pytorch"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 4, strategic_alignment: 4, ai_opportunity: 5, complexity: 4, risk: 3}
+      - id: ai.document_processing
+        name: AI document processing / OCR
+        keywords: ["ocr", "document extraction", "intelligent document", "scan documents", "auto-extract"]
+        code_signals: ["tesseract", "pytesseract", "textract", "document-ai", "azure-ai-formrecognizer", "unstructured"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 5, complexity: 3, risk: 2}
+      - id: ai.voice
+        name: Voice / speech AI
+        keywords: ["voice assistant", "speech to text", "transcription", "voice commands"]
+        code_signals: ["whisper", "deepgram", "assemblyai", "speechrecognition", "elevenlabs"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 5, complexity: 3, risk: 2}
+
+  - id: analytics
+    name: Analytics & Reporting
+    features:
+      - id: analytics.dashboard
+        name: Analytics dashboard
+        keywords: ["dashboard", "analytics", "insights", "kpi"]
+        code_signals: ["chart.js", "recharts", "d3", "highcharts", "apexcharts", "plotly", "echarts", "metabase", "chartkick"]
+        defaults: {business_value: 4, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 2, complexity: 2, risk: 1}
+      - id: analytics.reports
+        name: Reports & exports
+        keywords: ["reports", "reporting", "export to csv", "export to pdf", "custom reports"]
+        code_signals: ["pdfkit", "reportlab", "weasyprint", "puppeteer", "exceljs", "openpyxl", "xlsx", "jspdf", "wicked_pdf", "prawn"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 2, strategic_alignment: 3, ai_opportunity: 2, complexity: 2, risk: 1}
+      - id: analytics.product_analytics
+        name: Product usage analytics
+        keywords: ["usage analytics", "product analytics"]
+        code_signals: ["mixpanel", "segment", "posthog", "amplitude", "@vercel/analytics", "react-ga", "gtag", "heap"]
+        defaults: {business_value: 3, user_impact: 1, revenue_potential: 2, strategic_alignment: 3, ai_opportunity: 2, complexity: 1, risk: 1}
+
+  - id: billing
+    name: Billing & Payments
+    features:
+      - id: billing.payments
+        name: Online payments
+        keywords: ["pay online", "online payment", "checkout", "credit card", "payments"]
+        code_signals: ["stripe", "braintree", "paypal", "adyen", "square", "razorpay", "mollie", "paddle"]
+        defaults: {business_value: 5, user_impact: 3, revenue_potential: 5, strategic_alignment: 4, ai_opportunity: 1, complexity: 3, risk: 3}
+      - id: billing.subscriptions
+        name: Subscription billing
+        keywords: ["subscription", "monthly plan", "annual plan", "billing portal"]
+        code_signals: ["stripe", "chargebee", "recurly", "paddle", "lemonsqueezy", "pay-rails", "laravel/cashier", "dj-stripe"]
+        defaults: {business_value: 5, user_impact: 2, revenue_potential: 5, strategic_alignment: 4, ai_opportunity: 1, complexity: 3, risk: 3}
+      - id: billing.invoicing
+        name: Invoicing
+        keywords: ["invoice", "invoicing"]
+        code_signals: ["invoice"]
+        defaults: {business_value: 3, user_impact: 2, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 2, complexity: 2, risk: 2}
+
+  - id: scheduling
+    name: Scheduling & Workflow
+    features:
+      - id: workflow.scheduling
+        name: Online booking / scheduling
+        keywords: ["book an appointment", "online booking", "schedule appointment", "scheduling", "calendar", "book online"]
+        code_signals: ["fullcalendar", "react-big-calendar", "calendly", "cal.com", "rrule", "ical"]
+        defaults: {business_value: 4, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 3, complexity: 2, risk: 1}
+      - id: workflow.automation
+        name: Workflow automation (rules)
+        keywords: ["workflow automation", "automated workflows", "automation rules", "triggers and actions"]
+        code_signals: ["bullmq", "celery", "sidekiq", "temporalio", "n8n", "node-cron", "apscheduler", "resque"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 3, complexity: 3, risk: 2}
+      - id: workflow.collaboration
+        name: Team collaboration
+        keywords: ["collaborate", "collaboration", "team workspace", "shared workspace", "comments and mentions"]
+        code_signals: ["yjs", "liveblocks", "sharedb"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 2, complexity: 3, risk: 2}
+
+  - id: integrations
+    name: Integrations & Platform
+    features:
+      - id: platform.public_api
+        name: Public API
+        keywords: ["api documentation", "rest api", "developer api", "api reference", "graphql api", "developers"]
+        code_signals: ["openapi", "swagger", "fastapi", "graphql", "apollo-server", "drf-spectacular", "rswag"]
+        defaults: {business_value: 4, user_impact: 2, revenue_potential: 4, strategic_alignment: 4, ai_opportunity: 2, complexity: 3, risk: 2}
+      - id: platform.webhooks
+        name: Webhooks
+        keywords: ["webhook"]
+        code_signals: ["webhook", "svix"]
+        defaults: {business_value: 3, user_impact: 1, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 1, complexity: 2, risk: 1}
+      - id: platform.integrations_marketplace
+        name: Integrations marketplace
+        keywords: ["integrations", "marketplace", "app directory", "connect your tools", "zapier"]
+        code_signals: ["zapier", "merge-api", "nango", "paragon"]
+        defaults: {business_value: 4, user_impact: 3, revenue_potential: 4, strategic_alignment: 4, ai_opportunity: 2, complexity: 4, risk: 2}
+      - id: platform.crm_integration
+        name: CRM integration
+        keywords: ["salesforce", "hubspot", "crm integration"]
+        code_signals: ["jsforce", "simple-salesforce", "@hubspot/api-client", "hubspot"]
+        defaults: {business_value: 3, user_impact: 2, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 1, complexity: 3, risk: 2}
+      - id: platform.multi_tenant
+        name: Multi-tenant / organizations
+        keywords: ["organizations", "multi-location", "multiple locations", "teams and workspaces"]
+        code_signals: ["apartment", "django-tenants", "acts_as_tenant", "tenant"]
+        defaults: {business_value: 4, user_impact: 2, revenue_potential: 4, strategic_alignment: 4, ai_opportunity: 0, complexity: 4, risk: 3}
+
+  - id: experience
+    name: User Experience
+    features:
+      - id: ux.mobile_app
+        name: Native mobile app
+        keywords: ["app store", "google play", "ios app", "android app", "mobile app", "download the app"]
+        code_signals: ["react-native", "expo", "flutter", "ionic", "capacitor", "swiftui", "kotlin", "android/app"]
+        defaults: {business_value: 4, user_impact: 5, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 1, complexity: 4, risk: 3}
+      - id: ux.self_service_portal
+        name: Customer self-service portal
+        keywords: ["self-service", "customer portal", "patient portal", "client portal", "my account"]
+        code_signals: ["/portal", "/account", "/my-account"]
+        defaults: {business_value: 4, user_impact: 4, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 2, complexity: 3, risk: 2}
+      - id: ux.onboarding
+        name: Guided onboarding
+        keywords: ["onboarding", "getting started", "setup wizard", "free trial", "start free"]
+        code_signals: ["react-joyride", "intro.js", "shepherd.js", "driver.js", "userflow", "appcues"]
+        defaults: {business_value: 3, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 3, complexity: 2, risk: 1}
+      - id: ux.localization
+        name: Multi-language support
+        keywords: ["multi-language", "multilingual", "languages supported", "translate"]
+        code_signals: ["i18next", "react-intl", "vue-i18n", "gettext", "rails-i18n", "django.utils.translation", "next-intl", "formatjs"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 2, complexity: 3, risk: 2}
+      - id: ux.accessibility
+        name: Accessibility (WCAG)
+        keywords: ["accessibility", "wcag", "ada compliant", "screen reader"]
+        code_signals: ["axe-core", "@axe-core", "eslint-plugin-jsx-a11y", "pa11y"]
+        defaults: {business_value: 3, user_impact: 3, revenue_potential: 2, strategic_alignment: 3, ai_opportunity: 1, complexity: 2, risk: 1}
+
+  - id: trust
+    name: Security & Compliance
+    features:
+      - id: security.compliance
+        name: Compliance certifications (SOC 2 / HIPAA / GDPR / ISO)
+        keywords: ["soc 2", "soc2", "hipaa", "gdpr", "iso 27001", "pci dss", "compliant"]
+        code_signals: []
+        defaults: {business_value: 4, user_impact: 1, revenue_potential: 4, strategic_alignment: 5, ai_opportunity: 0, complexity: 4, risk: 2}
+      - id: security.audit_log
+        name: Audit logs
+        keywords: ["audit log", "audit trail", "activity log"]
+        code_signals: ["paper_trail", "audited", "django-auditlog", "django-simple-history", "audit"]
+        defaults: {business_value: 3, user_impact: 1, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 1, complexity: 2, risk: 1}

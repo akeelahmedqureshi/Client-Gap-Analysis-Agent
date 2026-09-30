@@ -1,0 +1,4 @@
+Client Name,Client Email,Project Name,Project URL,Description,Industry,Technology,Repository URL,Project Status,Start Date,Existing Features,Notes
+ABC Healthcare,ops@abc-healthcare.com,ABC Patient Management,https://abc-healthcare.com,Healthcare appointment management platform,Healthcare,"React, Node.js, PostgreSQL",https://github.com/abc/project,Live,2023-02-01,"Online booking; email reminders; patient records",Phase 2 discussions pending
+Northwind Logistics,it@northwind-logistics.com,Fleet Tracker,https://northwind-logistics.com,Real-time fleet tracking and delivery dashboard,Logistics,"Vue, Django",https://gitlab.com/northwind/fleet-tracker,Maintenance,2021-06-15,"GPS tracking; delivery dashboard; driver mobile app",
+Contoso Retail,,Contoso Shop,https://shop.contoso-retail.com,E-commerce storefront with loyalty program,Retail,"Next.js, Stripe",,Live,2022-09-01,"Product catalog; checkout; loyalty points",See https://www.linkedin.com/company/contoso-retail

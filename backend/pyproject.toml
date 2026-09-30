@@ -1,0 +1,40 @@
+[project]
+name = "client-intelligence-platform"
+version = "0.1.0"
+description = "Multi-agent client intelligence & product gap analysis platform"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "httpx>=0.27",
+    "pyjwt>=2.8",
+    "bcrypt>=4.1",
+    "cryptography>=42",
+    "beautifulsoup4>=4.12",
+    "python-multipart>=0.0.9",
+    "pyyaml>=6.0",
+    "email-validator>=2.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cip*"]
+
+[tool.setuptools.package-data]
+"cip.core" = ["*.yaml"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

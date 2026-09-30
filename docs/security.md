@@ -1,0 +1,66 @@
+# Security
+
+## Authentication and authorization
+
+- Access tokens are JWTs (HS256) that carry `sub`, `org` and `role`. Passwords are hashed with bcrypt.
+- Roles:
+  - `viewer`: read-only;
+  - `analyst`: upload, start runs, approve gates;
+  - `admin`: everything above, plus source-control connections and users.
+- Self-service registration creates a new organization. Disable it with `CIP_ALLOW_REGISTRATION=false`.
+- In production the app refuses to start with the default `CIP_JWT_SECRET`, and a
+  `CIP_TOKEN_ENCRYPTION_KEY` is required.
+
+## Data isolation
+
+`Organization → Client → Project → Analysis`. Every row owned by a tenant carries `org_id`, and every
+endpoint checks it. A resource that belongs to another organization returns 404, the same response as
+a missing one, so its existence isn't leaked.
+
+## Repository credentials
+
+- OAuth and personal access tokens are encrypted at rest with Fernet (`CIP_TOKEN_ENCRYPTION_KEY`).
+- The API never returns them.
+- They are decrypted only inside `token_resolver` at call time and never stored in agent results,
+  evidence or prompts.
+- OAuth `state` is single-use, expires after 10 minutes, and is bound to the organization and user.
+- GitLab expiry (`expires_in`) is recorded, and expired tokens are not used.
+
+## Source code and LLM safety
+
+1. **Sensitive files are never fetched.** This covers `.env*` (templates excepted), private keys,
+   `*.pem`/`*.key`/`*.p12`, credential JSON/YAML, Terraform state and tfvars, kubeconfig, and similar.
+   They are listed as a security finding instead ("sensitive files committed").
+2. **Fetched files are secret-scanned and redacted before storage.** The scanner covers AWS keys,
+   GitHub/GitLab/Slack/Stripe/OpenAI-style tokens, Google API keys, JWTs, private-key blocks,
+   connection strings with credentials, and high-entropy `secret=` / `password=` / `api_key=`
+   assignments. Placeholders such as `${VAR}` and `process.env.X` are left alone.
+3. **Every LLM prompt is redacted again** in `OpenRouterClient` as a last line of defense.
+4. Only selected key files are sent to the LLM (never the whole repository), with a per-file size cap.
+
+## Web research
+
+- SSRF guard: only http(s), only public IP addresses (checked again after redirects), and no
+  `file://` URLs.
+- robots.txt is honoured and response sizes are capped.
+- **Privacy:** only role-based business contacts are kept (support@, sales@, …). Personal emails and
+  LinkedIn personal profiles are discarded, and the number discarded is reported. Leadership names are
+  collected only from the company's own team or about pages.
+
+## Human approval gates
+
+These steps pause until someone approves them, and each request states what will be accessed, why, the
+target, and what data is analyzed:
+
+- external research;
+- repository access, including private repositories;
+- large repository scans;
+- client-facing report generation.
+
+Decisions, including pre-approvals given when a run starts, are stored with the deciding user and a
+timestamp.
+
+## Uploads
+
+CSV files are limited to 10 MB and 5,000 rows. Filenames are sanitized, and the storage-key path is
+checked so it can't escape the storage directory.

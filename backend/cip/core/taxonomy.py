@@ -1,0 +1,102 @@
+"""Loader and matching helpers for the normalized feature taxonomy."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+
+TAXONOMY_PATH = Path(__file__).with_name("taxonomy.yaml")
+
+
+@dataclass(frozen=True)
+class TaxonomyFeature:
+    id: str
+    name: str
+    category_id: str
+    category_name: str
+    keywords: tuple[str, ...]
+    code_signals: tuple[str, ...]
+    defaults: dict[str, float] = field(hash=False)
+    ai: bool = False
+
+
+class Taxonomy:
+    def __init__(self, features: list[TaxonomyFeature]) -> None:
+        self.features = features
+        self._by_id = {f.id: f for f in features}
+        self._kw_patterns = {
+            f.id: [_phrase_pattern(k) for k in f.keywords] for f in features
+        }
+
+    def get(self, feature_id: str) -> TaxonomyFeature | None:
+        return self._by_id.get(feature_id)
+
+    def __contains__(self, feature_id: str) -> bool:
+        return feature_id in self._by_id
+
+    def ids(self) -> list[str]:
+        return list(self._by_id)
+
+    def match_text(self, text: str) -> dict[str, list[str]]:
+        """Return ``{feature_id: [matched keywords]}`` for phrases present in ``text``."""
+        out: dict[str, list[str]] = {}
+        if not text:
+            return out
+        for fid, patterns in self._kw_patterns.items():
+            feature = self._by_id[fid]
+            hits = [kw for kw, pat in zip(feature.keywords, patterns) if pat.search(text)]
+            if hits:
+                out[fid] = hits
+        return out
+
+    def match_code_signal(self, token: str) -> list[str]:
+        """Feature ids whose code signals match a dependency name or file path."""
+        token_l = token.lower()
+        hits = []
+        for f in self.features:
+            for sig in f.code_signals:
+                if sig.startswith("/"):
+                    if sig in token_l:
+                        hits.append(f.id)
+                        break
+                elif token_l == sig or token_l.startswith(sig + "-") or token_l.startswith(sig + "/") \
+                        or token_l.endswith("/" + sig) or token_l.startswith("@" + sig):
+                    hits.append(f.id)
+                    break
+        return hits
+
+    def describe_for_prompt(self) -> str:
+        lines = []
+        for f in self.features:
+            lines.append(f"- {f.id}: {f.name} ({f.category_name})")
+        return "\n".join(lines)
+
+
+def _phrase_pattern(phrase: str) -> re.Pattern[str]:
+    escaped = re.escape(phrase.lower()).replace(r"\ ", r"[\s\-]+")
+    return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", re.IGNORECASE)
+
+
+@lru_cache
+def load_taxonomy(path: str | None = None) -> Taxonomy:
+    raw = yaml.safe_load(Path(path or TAXONOMY_PATH).read_text())
+    features: list[TaxonomyFeature] = []
+    for cat in raw["categories"]:
+        for f in cat["features"]:
+            features.append(
+                TaxonomyFeature(
+                    id=f["id"],
+                    name=f["name"],
+                    category_id=cat["id"],
+                    category_name=cat["name"],
+                    keywords=tuple(k.lower() for k in f.get("keywords", [])),
+                    code_signals=tuple(s.lower() for s in f.get("code_signals", [])),
+                    defaults=dict(f.get("defaults", {})),
+                    ai=bool(f.get("ai", cat["id"] == "ai")),
+                )
+            )
+    return Taxonomy(features)
