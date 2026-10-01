@@ -4,12 +4,15 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Client, Project } from "../lib/types";
 import { Badge, Card, Empty } from "../components/ui";
+import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 
 interface ClientDetail {
   client: Client;
   projects: Project[];
   profile: any | null;
   profile_run_id: string | null;
+  hiring: any | null;
+  announcements: any[];
   recommendations: { project_id: string; project: string; run_id: string; feature: string; phase: string;
     complexity: string; score: number; opportunity: string }[];
 }
@@ -40,12 +43,7 @@ export default function ClientDetailPage() {
           {profile ? (
             <div className="text-sm space-y-2">
               <p>{profile.description ?? <span className="text-slate-500 italic">No public description found.</span>}</p>
-              <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
-                {["headquarters", "founded_year", "company_size", "business_model"].filter((k) => profile[k]).map((k) => (
-                  <div key={k} className="contents"><dt className="text-slate-500 capitalize">{k.replaceAll("_", " ")}</dt><dd>{String(profile[k])}</dd></div>
-                ))}
-                {profile.locations?.length > 0 && <div className="contents"><dt className="text-slate-500">Locations</dt><dd>{profile.locations.join(", ")}</dd></div>}
-              </dl>
+              <CompanyFacts profile={profile} />
               {q.data.profile_run_id && (
                 <Link className="text-xs text-indigo-600 underline" to={`/runs/${q.data.profile_run_id}`}>Source analysis & evidence →</Link>
               )}
@@ -68,6 +66,13 @@ export default function ClientDetailPage() {
           ) : <Empty>—</Empty>}
         </Card>
       </div>
+
+      {profile && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <HiringCard hiring={q.data.hiring} withEvidence={false} />
+          <AnnouncementsCard items={q.data.announcements} withEvidence={false} />
+        </div>
+      )}
 
       <Card title="Top opportunities (latest analysis per project)">
         {recommendations.length ? (

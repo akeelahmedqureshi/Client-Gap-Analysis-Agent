@@ -76,8 +76,17 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "ai_generated": summary is not None,
     }
     sections["client_intelligence"] = {
-        "company": {k: profile.get(k) for k in ("name", "domain", "description", "industry", "headquarters",
-                                                "founded_year", "company_size", "business_model")},
+        "company": {k: profile.get(k) for k in ("name", "legal_name", "domain", "description", "industry",
+                                                "headquarters", "founded_year", "company_size", "business_model",
+                                                "revenue_model")},
+        "brands": profile.get("brands", []),
+        "subsidiaries": profile.get("subsidiaries", []),
+        "divisions": profile.get("divisions", []),
+        "geographic_markets": profile.get("geographic_markets", []),
+        "hiring": {**research.get("hiring", {}),
+                   "signals": [{**s, "cite": cite([s["evidence_id"]])}
+                               for s in research.get("hiring", {}).get("signals", [])]},
+        "announcements": [{**a, "cite": cite([a["evidence_id"]])} for a in research.get("announcements", [])],
         "company_citations": cite(profile.get("evidence_ids"), 5),
         "locations": profile.get("locations", []),
         "target_customers": profile.get("target_customers", []),
@@ -151,12 +160,29 @@ def render_markdown(report: dict) -> str:
     out += [_md_list(facts), ""]
     if ci["locations"]:
         out += [f"**Locations:** {', '.join(ci['locations'])}", ""]
+    for key, label in (("geographic_markets", "Markets served"), ("brands", "Brands"),
+                       ("subsidiaries", "Subsidiaries"), ("divisions", "Business divisions")):
+        if ci.get(key):
+            out += [f"**{label}:** {', '.join(ci[key])}", ""]
     out += ["### Products & services"]
     out += [_md_list([f"**{p['name']}** ({p['kind']}) — {p.get('description', '')}{p['cite']}" for p in ci["products"]]), ""]
     if ci["leadership"]:
         out += ["### Leadership", _md_list([f"{p['name']} — {p['title']}{p['cite']}" for p in ci["leadership"]]), ""]
     if ci["contacts"]:
         out += ["### Contact & social", _md_list([f"{x['type']}: {x['value']}" for x in ci["contacts"]]), ""]
+    hiring = ci.get("hiring") or {}
+    if hiring.get("signals"):
+        out += ["### Hiring signals",
+                f"{hiring['job_count']} open role(s) on the company's job board — where they are investing:", "",
+                "| Area | Open roles | Examples | Evidence |", "|---|---|---|---|"]
+        out += [f"| {s['area']} | {s['count']} | {'; '.join(s['examples'][:3])} | {s['cite'].strip()} |"
+                for s in hiring["signals"]]
+        out.append("")
+    if ci.get("announcements"):
+        out += ["### Recent announcements",
+                _md_list([f"{'**Product:** ' if a['is_product'] else ''}[{a['title']}]({a['url']})"
+                          + (f" ({a['date']})" if a.get("date") else "") + a["cite"] for a in ci["announcements"]]),
+                ""]
 
     out += ["## 3. Existing Project Analysis", "### Features",
             "| Feature | Status | Technology | Evidence |", "|---|---|---|---|"]

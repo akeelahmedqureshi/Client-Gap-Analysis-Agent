@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import get_args
 
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
 from cip.connectors.research.web import registrable_domain
+from cip.connectors.source_control.base import parse_repo_url
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
@@ -84,13 +86,38 @@ enterprise, emerging). Extract description, target market and pricing, and the p
 feature ids from the taxonomy. Every value needs the SOURCE url and a verbatim quote from that page."""
 
 
+MARKETPLACE_HOSTS = ("g2.com", "capterra.com", "producthunt.com", "getapp.com", "softwareadvice.com",
+                     "trustradius.com", "alternativeto.net", "saasworthy.com")
+STOPWORDS = {"the", "and", "for", "with", "platform", "software", "solution", "solutions", "system", "app",
+             "application", "management", "online", "based", "web", "tool", "tools", "service", "services", "from",
+             "that", "your", "their", "this", "into", "using", "our"}
+MIN_OSS_STARS = 50
+
+
 def _queries(ctx: RunContext, profile: dict) -> list[str]:
     rec = ctx.record
     desc = (rec.project.description or profile.get("description") or rec.project.name)[:120]
     industry = profile.get("industry") or rec.client.industry or ""
     qs = [f"{desc} software alternatives", f"{rec.project.name} competitors",
-          f"best {industry} {desc} platforms".strip()]
+          f"best {industry} {desc} platforms".strip(),
+          # Review sites & launch directories: used as *sources of names*, never as competitors themselves.
+          f"{desc} alternatives site:g2.com", f"{desc} site:capterra.com", f"{desc} site:producthunt.com"]
     return [q for q in qs if q.strip()]
+
+
+def _keywords(text: str, n: int = 3) -> list[str]:
+    words = [w for w in re.findall(r"[a-zA-Z][a-zA-Z0-9-]{3,}", text.lower()) if w not in STOPWORDS]
+    return list(dict.fromkeys(words))[:n]
+
+
+def _source_type(url: str | None) -> str:
+    host = registrable_domain(url or "")
+    return "marketplace" if any(host == m or host.endswith("." + m) for m in MARKETPLACE_HOSTS) else "search"
+
+
+def _key(url: str) -> str:
+    ref = parse_repo_url(url)
+    return f"{ref.host}/{ref.full_name}".lower() if ref else registrable_domain(url)
 
 
 class CompetitorResearchAgent(Agent):
@@ -130,7 +157,7 @@ class CompetitorResearchAgent(Agent):
             )
             for c in llm_c.candidates:
                 if c.url:
-                    candidates.setdefault(registrable_domain(c.url), c)
+                    candidates.setdefault(_key(c.url), c)
         except LLMUnavailable:
             # Deterministic fallback: vendor-looking search results only.
             for r in results:
@@ -142,6 +169,10 @@ class CompetitorResearchAgent(Agent):
                                                           rationale="search result"))
         except LLMError as exc:
             errors.append(f"LLM competitor discovery failed: {exc}")
+
+        # Open-source alternatives via GitHub's search API (verified through the API, not crawling).
+        for key, cand in (await self._github_candidates(ctx, profile, errors)).items():
+            candidates.setdefault(key, cand)
 
         candidates = {h: c for h, c in candidates.items()
                       if h and h != client_domain and not any(h == n or h.endswith("." + n) for n in NON_VENDOR_HOSTS)}
@@ -178,6 +209,63 @@ class CompetitorResearchAgent(Agent):
             data={"competitors": [c.model_dump() for c in competitors], "rejected": rejected},
         )
 
+    async def _github_candidates(self, ctx: RunContext, profile: dict, errors: list[str]) -> dict[str, _LLMCandidate]:
+        rec = ctx.record
+        kws = _keywords(rec.project.description or profile.get("description") or rec.project.name)
+        if not kws:
+            return {}
+        api = ctx.settings.github_api_url.rstrip("/")
+        data = None
+        for n in (len(kws), 2):  # broaden if the full keyword set finds nothing
+            q = "+".join(kws[:n]) + "+in:name,description,topics+archived:false"
+            data = await ctx.fetcher.get_json(f"{api}/search/repositories?q={q}&sort=stars&order=desc&per_page=5")
+            if isinstance(data, dict) and data.get("items"):
+                break
+        out: dict[str, _LLMCandidate] = {}
+        for item in (data or {}).get("items", []) if isinstance(data, dict) else []:
+            if item.get("stargazers_count", 0) < MIN_OSS_STARS or item.get("fork"):
+                continue
+            url = item.get("html_url", "")
+            out[_key(url)] = _LLMCandidate(
+                name=item.get("name", url), url=url, classification="open_source",
+                rationale=f"Open-source project on GitHub ({item.get('stargazers_count', 0):,} stars): "
+                          f"{(item.get('description') or '')[:200]}")
+        return out
+
+    async def _profile_github(self, ctx: RunContext, repo, comp: Competitor, client_feats: set[str]) -> Competitor:
+        """Verify an open-source alternative through the GitHub API (README + metadata)."""
+        api = ctx.settings.github_api_url.rstrip("/")
+        meta = await ctx.fetcher.get_json(f"{api}/repos/{repo.full_name}")
+        readme = await ctx.fetcher.get_text(f"{api}/repos/{repo.full_name}/readme",
+                                            headers={"Accept": "application/vnd.github.raw+json"})
+        if not isinstance(meta, dict) or not readme:
+            comp.rationale = (comp.rationale + " — repository could not be verified").strip(" —")
+            comp.confidence = 0.2
+            return comp
+        comp.verified = True
+        comp.classification = "open_source"
+        comp.description = (meta.get("description") or "")[:300]
+        ev = ctx.ledger.add(f"{comp.name}: open-source repository ({meta.get('stargazers_count', 0):,} stars, "
+                            f"last push {str(meta.get('pushed_at') or '')[:10]})", comp.url, "github", 0.9,
+                            extracted_text=comp.description or None, repository_path="README")
+        comp.evidence_ids.append(ev.id)
+        obs: dict[str, FeatureObservation] = {}
+        for fid, kws in ctx.taxonomy.match_text(readme).items():
+            e = ctx.ledger.add(f"{comp.name} offers {ctx.taxonomy.get(fid).name}", comp.url, "github",
+                               0.6 if len(kws) > 1 else 0.5, extracted_text=snippet(readme, kws[0]),
+                               repository_path="README")
+            obs[fid] = FeatureObservation(feature_id=fid, status=FeatureStatus.AVAILABLE, confidence=e.confidence,
+                                          evidence_ids=[e.id], basis=Basis.EVIDENCE)
+        comp.features = list(obs.values())
+        overlap = len(set(obs) & client_feats) / max(1, len(client_feats)) if client_feats else 0.5
+        if overlap < 0.1 and client_feats:
+            comp.verified = False
+            comp.rationale = f"Rejected as not comparable (feature overlap {overlap:.0%}). {comp.rationale}".strip()
+            comp.confidence = 0.3
+            return comp
+        comp.confidence = round(min(0.9, 0.45 + overlap * 0.5), 3)
+        return comp
+
     async def _profile(self, ctx: RunContext, host: str, cand: _LLMCandidate, client_feats: set[str],
                        search_docs: list[SourceDoc], errors: list[str]) -> Competitor | None:
         ledger = ctx.ledger
@@ -186,9 +274,14 @@ class CompetitorResearchAgent(Agent):
                           rationale=cand.rationale)
         if cand.source_url:
             sd = next((d for d in search_docs if d.url == cand.source_url), None)
-            ev = ledger.add(f"{cand.name} surfaced in market search", cand.source_url, "search", 0.5,
-                            extracted_text=sd.text[:400] if sd else None)
+            stype = _source_type(cand.source_url)
+            ev = ledger.add(f"{cand.name} surfaced in {'a review/launch directory' if stype == 'marketplace' else 'market search'}",
+                            cand.source_url, stype, 0.5, extracted_text=sd.text[:400] if sd else None)
             comp.evidence_ids.append(ev.id)
+
+        repo = parse_repo_url(comp.url)
+        if repo and repo.provider == "github":
+            return await self._profile_github(ctx, repo, comp, client_feats)
 
         pages = await ctx.fetcher.crawl(comp.url, max_pages=6)
         if not pages:

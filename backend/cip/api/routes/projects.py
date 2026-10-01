@@ -49,6 +49,8 @@ class ClientDetailOut(BaseModel):
     # From the most recent completed run (visible to the caller) that researched this client.
     profile: dict | None = None
     profile_run_id: str | None = None
+    hiring: dict | None = None
+    announcements: list[dict] = Field(default_factory=list)
     recommendations: list[dict] = Field(default_factory=list)
 
 
@@ -118,6 +120,8 @@ async def get_client(client_id: str, user: User = Depends(require_role("viewer")
             data = (ex.result or {}).get("data", {})
             if ex.agent == "client_research" and detail.profile is None and data.get("profile"):
                 detail.profile, detail.profile_run_id = data["profile"], run.id
+                detail.hiring = data.get("hiring")
+                detail.announcements = data.get("announcements", [])
             elif ex.agent == "opportunity_prioritization" and run.project_id not in seen_projects:
                 seen_projects.add(run.project_id)  # latest run per project only
                 for rec in data.get("recommendations", [])[:3]:

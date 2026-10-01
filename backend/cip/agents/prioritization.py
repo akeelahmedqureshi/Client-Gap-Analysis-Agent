@@ -91,6 +91,28 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
     return {k: clamp_factor(v) for k, v in base.items()}
 
 
+# Hiring area (from the client's job board) -> which gaps it signals strategic intent for.
+TECH_OPS_GAPS = {"CI/CD pipeline", "Observability (error tracking, metrics, tracing)",
+                 "Containerized, reproducible deployment", "Automated test coverage"}
+HIRING_GAP_MATCH = {
+    "AI / Machine learning": lambda g: g["gap_type"] == "ai",
+    "Mobile": lambda g: g.get("feature_id") == "ux.mobile_app",
+    "Security": lambda g: (g.get("feature_id") or "").startswith(("security.", "auth.sso", "auth.mfa"))
+    or g["name"] == "Secrets management",
+    "Cloud / DevOps / SRE": lambda g: g["name"] in TECH_OPS_GAPS,
+    "Data & analytics": lambda g: (g.get("feature_id") or "").startswith("analytics.")
+    or g.get("feature_id") == "ai.predictive",
+}
+
+
+def hiring_signal_for(gap: dict, signals: list[dict]) -> dict | None:
+    for s in signals:
+        match = HIRING_GAP_MATCH.get(s["area"])
+        if match and match(gap):
+            return s
+    return None
+
+
 def default_narrative(gap: dict) -> dict[str, str]:
     t = gap["gap_type"]
     if t == "technology":
@@ -140,9 +162,14 @@ class PrioritizationAgent(Agent):
         except LLMError as exc:
             errors.append(f"LLM opportunity analysis failed: {exc}")
 
+        signals = ctx.data("client_research").get("hiring", {}).get("signals", [])
         scored: list[tuple[float, dict, Opportunity, Recommendation]] = []
         for g in gaps:
             factors = baseline_factors(ctx, g, stack)
+            hiring = hiring_signal_for(g, signals)
+            if hiring:
+                # The client is staffing up in this area: evidence of strategic intent.
+                factors["strategic_alignment"] = clamp_factor(factors.get("strategic_alignment", 0) + 1)
             narrative = default_narrative(g)
             approach = ""
             llm = llm_by_gap.get(g["id"])
@@ -155,6 +182,10 @@ class PrioritizationAgent(Agent):
                     "revenue_opportunity": llm.revenue_opportunity, "user_impact_text": llm.user_impact_text,
                 }.items() if v})
                 approach = llm.technical_approach
+            if hiring:
+                narrative["business_opportunity"] += (
+                    f" The client is currently hiring {hiring['count']} {hiring['area']} role(s), "
+                    "signalling strategic intent.")
             score = score_opportunity(factors, ctx.scoring)
             opp = Opportunity(gap_id=g["id"], name=g["name"], business_opportunity=narrative["business_opportunity"],
                               potential_users=narrative["potential_users"],
@@ -178,7 +209,7 @@ class PrioritizationAgent(Agent):
                                   f"{len(g.get('competitors_with', []))} competitor(s)."
                                   if g.get("competitors_with") else
                                   f"{g['name']} available to users as a differentiator."),
-                evidence_ids=g.get("evidence_ids", []), score=score,
+                evidence_ids=g.get("evidence_ids", []) + ([hiring["evidence_id"]] if hiring else []), score=score,
             )
             scored.append((normalized(score, ctx.scoring), g, opp, rec))
 

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useParams } from "react-router-dom";
@@ -8,6 +8,7 @@ import { api } from "../lib/api";
 import type { AgentResult, Evidence, Run } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
+import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 
 const TABS = ["Pipeline", "Client", "Project", "Competitors", "Comparison", "Gaps", "Opportunities", "Roadmap",
   "Evidence", "Report"] as const;
@@ -169,12 +170,7 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
     <div className="grid lg:grid-cols-2 gap-4">
       <Card title={p.name}>
         <p className="text-sm">{p.description ?? <Empty>No public description found.</Empty>} <EvidenceRefs ids={p.evidence_ids} /></p>
-        <dl className="mt-3 text-sm grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
-          {["domain", "industry", "headquarters", "founded_year", "company_size", "business_model"].map((k) =>
-            p[k] ? (<Fragment key={k}><dt className="text-slate-500 capitalize">{k.replaceAll("_", " ")}</dt><dd>{String(p[k])}</dd></Fragment>) : null)}
-          {p.locations?.length > 0 && (<><dt className="text-slate-500">Locations</dt><dd>{p.locations.join(", ")}</dd></>)}
-          {p.target_customers?.length > 0 && (<><dt className="text-slate-500">Target customers</dt><dd>{p.target_customers.join(", ")}</dd></>)}
-        </dl>
+        <CompanyFacts profile={p} />
       </Card>
       <Card title="Products & services">
         {p.products.length ? (
@@ -193,6 +189,8 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
           <ul className="text-sm space-y-1">{d.leadership.map((l: any) => <li key={l.name}>{l.name} — {l.title} <EvidenceRefs ids={l.evidence_ids} /></li>)}</ul>
         ) : <Empty>No public leadership information found.</Empty>}
       </Card>
+      <HiringCard hiring={d.hiring} />
+      <AnnouncementsCard items={d.announcements ?? []} />
       <Card title="Contact & social">
         {p.contacts.length ? (
           <ul className="text-sm space-y-1">

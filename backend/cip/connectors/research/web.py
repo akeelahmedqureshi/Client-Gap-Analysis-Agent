@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import logging
 import re
 import socket
@@ -57,6 +58,8 @@ class Page:
     scripts: list[str] = field(default_factory=list)
     generator: str | None = None
     rendered: bool = False  # True when the content came from the headless browser
+    structured_data: list[dict] = field(default_factory=list)  # schema.org JSON-LD objects
+    link_texts: list[tuple[str, str]] = field(default_factory=list)  # (same-site url, anchor text)
 
 
 def normalize_url(url: str) -> str:
@@ -99,15 +102,46 @@ _EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _PHONE = re.compile(r"(?:\+?\d{1,3}[\s.\-]?)?(?:\(\d{2,4}\)[\s.\-]?)?\d{3,4}[\s.\-]\d{3,4}(?:[\s.\-]\d{2,4})?")
 
 
+MAX_JSONLD_OBJECTS = 40
+
+
+def _flatten_jsonld(node, out: list[dict]) -> None:
+    if len(out) >= MAX_JSONLD_OBJECTS:
+        return
+    if isinstance(node, list):
+        for n in node:
+            _flatten_jsonld(n, out)
+    elif isinstance(node, dict):
+        if "@graph" in node:
+            _flatten_jsonld(node["@graph"], out)
+        if "@type" in node:
+            out.append(node)
+
+
+def extract_jsonld(soup: BeautifulSoup) -> list[dict]:
+    out: list[dict] = []
+    for tag in soup.find_all("script", attrs={"type": re.compile(r"ld\+json", re.I)}):
+        raw = (tag.string or tag.get_text() or "").strip()
+        if not raw:
+            continue
+        try:
+            _flatten_jsonld(json.loads(raw), out)
+        except ValueError:
+            continue
+    return out
+
+
 def parse_html(url: str, status: int, html: str) -> Page:
     soup = BeautifulSoup(html, "html.parser")
     scripts = [s.get("src") for s in soup.find_all("script") if s.get("src")]
+    structured = extract_jsonld(soup)
     gen = soup.find("meta", attrs={"name": "generator"})
     desc = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
     title = soup.title.get_text(strip=True) if soup.title else ""
     headings = [h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"])][:60]
 
     links: list[str] = []
+    link_texts: list[tuple[str, str]] = []
     external: list[str] = []
     emails: set[str] = set()
     phones: set[str] = set()
@@ -129,6 +163,9 @@ def parse_html(url: str, status: int, html: str) -> Page:
             continue
         if registrable_domain(absolute) == base_domain:
             links.append(absolute)
+            anchor = " ".join(a.get_text(" ", strip=True).split())[:200]
+            if anchor and len(link_texts) < 300:
+                link_texts.append((absolute, anchor))
         else:
             external.append(absolute)
 
@@ -148,7 +185,7 @@ def parse_html(url: str, status: int, html: str) -> Page:
         description=(desc.get("content") or "").strip() if desc else "",
         text=text, links=list(dict.fromkeys(links)), external_links=list(dict.fromkeys(external)),
         emails=sorted(emails), phones=sorted(phones)[:10], headings=headings, scripts=scripts,
-        generator=gen.get("content") if gen else None,
+        generator=gen.get("content") if gen else None, structured_data=structured, link_texts=link_texts,
     )
 
 
@@ -211,6 +248,32 @@ class WebFetcher:
         finally:
             if own:
                 await client.aclose()
+
+    async def get_json(self, url: str, headers: dict | None = None) -> dict | list | None:
+        """GET a public JSON API (job boards, GitHub search). Same SSRF guard; returns None on any failure."""
+        try:
+            if self._check_public:
+                await assert_public_url(url)
+            async with self._client() as client:
+                resp = await client.get(url, headers={"Accept": "application/json", **(headers or {})})
+            if resp.status_code >= 400:
+                return None
+            return resp.json()
+        except (httpx.HTTPError, UnsafeURL, ValueError) as exc:
+            log.info("JSON fetch failed for %s: %s", url, exc)
+            return None
+
+    async def get_text(self, url: str, headers: dict | None = None, max_chars: int = 200_000) -> str | None:
+        """GET a public text resource (e.g. a README via the GitHub API). Same SSRF guard."""
+        try:
+            if self._check_public:
+                await assert_public_url(url)
+            async with self._client() as client:
+                resp = await client.get(url, headers=headers or {})
+            return resp.text[:max_chars] if resp.status_code < 400 else None
+        except (httpx.HTTPError, UnsafeURL) as exc:
+            log.info("text fetch failed for %s: %s", url, exc)
+            return None
 
     async def _maybe_render(self, page: Page, raw_html: str) -> Page:
         if self.renderer is None or not (

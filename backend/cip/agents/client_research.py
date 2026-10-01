@@ -17,6 +17,14 @@ from cip.connectors.research.company import (
     WebsiteCompanyProvider,
 )
 from cip.connectors.research.search import NullSearchProvider
+from cip.connectors.research.enrichment import (
+    CAREERS_HINTS,
+    fetch_jobs,
+    find_announcements,
+    hiring_signals,
+    legal_name_from_footer,
+    organization_facts,
+)
 from cip.connectors.research.web import Page, registrable_domain
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
@@ -54,13 +62,20 @@ class _LLMCompany(BaseModel):
     founded_year: SourcedValue | None = None
     company_size: SourcedValue | None = None
     business_model: SourcedValue | None = None
+    legal_name: SourcedValue | None = None
+    revenue_model: SourcedValue | None = None
     locations: list[SourcedValue] = Field(default_factory=list)
     target_customers: list[SourcedValue] = Field(default_factory=list)
+    geographic_markets: list[SourcedValue] = Field(default_factory=list)
+    brands: list[SourcedValue] = Field(default_factory=list)
+    subsidiaries: list[SourcedValue] = Field(default_factory=list)
+    divisions: list[SourcedValue] = Field(default_factory=list)
     products: list[_LLMProduct] = Field(default_factory=list)
 
 
 SYSTEM_PROMPT = """You are a meticulous company research analyst. Extract ONLY facts that are explicitly
-stated in the provided website sources. For every value give the exact SOURCE url it came from and a short
+stated in the provided website sources (including legal entity name, revenue/pricing model, brands,
+subsidiaries, business divisions and geographic markets served when stated). For every value give the exact SOURCE url it came from and a short
 verbatim quote (copied exactly from that source) that supports it. If a fact is not stated, omit it.
 Products/services must be offerings of this company (not partners' or customers' products).
 Allowed product kinds: product, service, platform, mobile_app, saas, api, marketplace, other."""
@@ -136,6 +151,65 @@ class ClientResearchAgent(Agent):
             target=", ".join(targets) or rec.client.name,
             data_analyzed="Publicly available website content only; role-based contact details, no personal data.",
         )
+
+    @staticmethod
+    def _apply_structured_facts(ctx: RunContext, profile: CompanyProfile, pages: list[Page],
+                                contacts: list[Contact]) -> None:
+        name = ctx.record.client.name
+        facts = organization_facts(pages)
+        footer = legal_name_from_footer(pages)
+        if footer and not any(f.label == "legal_name" for f in facts):
+            facts.append(footer)
+        list_fields = {"brand": "brands", "subsidiary": "subsidiaries", "geographic_market": "geographic_markets"}
+        for f in facts:
+            if f.label == "social_profile":
+                host = registrable_domain(f.value)
+                ctype = next((t for h, t in SOCIAL_TYPES.items() if host == h or host.endswith("." + h)), None)
+                if ctype and not any(c.value.rstrip("/") == f.value.rstrip("/") for c in contacts):
+                    contacts.append(Contact(type=ctype, value=f.value, source=f.source_url, confidence=f.confidence))
+                    ctx.ledger.add(f"{ctype.title()}: {f.value}", f.source_url, "website", f.confidence,
+                                   extracted_text=f.extracted_text)
+                continue
+            ev = ctx.ledger.add(f"{name} {f.label.replace('_', ' ')}: {f.value}", f.source_url, "website",
+                                f.confidence, extracted_text=f.extracted_text)
+            if f.label in list_fields:
+                values = getattr(profile, list_fields[f.label])
+                if f.value not in values:
+                    values.append(f.value)
+                    profile.evidence_ids.append(ev.id)
+            elif f.label == "founded_year":
+                profile.founded_year = int(f.value)
+                profile.evidence_ids.append(ev.id)
+            elif f.label == "description":
+                if not profile.description:
+                    profile.description = f.value
+                    profile.evidence_ids.append(ev.id)
+            elif f.label in ("legal_name", "headquarters", "company_size"):
+                # The company's own structured data wins over text extraction (footer only fills blanks).
+                if f.confidence >= 0.9 or not getattr(profile, f.label):
+                    setattr(profile, f.label, f.value)
+                    profile.evidence_ids.append(ev.id)
+
+    @staticmethod
+    async def _hiring(ctx: RunContext, pages: list[Page], findings: list[Finding]) -> dict:
+        jobs, sources = await fetch_jobs(ctx.fetcher, pages)
+        careers_page = next((p.url for p in pages
+                             if any(h in urlparse(p.url).path.lower() for h in CAREERS_HINTS)), None)
+        signals = []
+        for s in hiring_signals(jobs):
+            src = next((j.source_url for j in jobs if j.title in s["examples"] and j.source_url), None) \
+                or careers_page or (pages[0].url if pages else "")
+            ev = ctx.ledger.add(f"Hiring signal: {s['count']} open {s['area']} role(s)", src, "website", 0.85,
+                                extracted_text="; ".join(s["examples"]))
+            signals.append({**s, "evidence_id": ev.id})
+        if signals:
+            top = ", ".join(f"{s['area']} ({s['count']})" for s in signals[:4])
+            findings.append(Finding(category="hiring", title=f"{len(jobs)} open role(s): {top}",
+                                    detail="Technology hiring signals from the company's job board.",
+                                    evidence_ids=[s["evidence_id"] for s in signals], confidence=0.85))
+        return {"job_count": len(jobs), "sources": sources, "careers_page": careers_page, "signals": signals,
+                "jobs": [{"title": j.title, "location": j.location, "department": j.department, "url": j.url}
+                         for j in jobs[:50]]}
 
     async def run(self, ctx: RunContext) -> AgentResult:
         rec = ctx.record
@@ -221,7 +295,8 @@ class ClientResearchAgent(Agent):
             )
             for label, attr in (("Description", "description"), ("Industry", "industry"),
                                 ("Headquarters", "headquarters"), ("Company size", "company_size"),
-                                ("Business model", "business_model")):
+                                ("Business model", "business_model"), ("Legal name", "legal_name"),
+                                ("Revenue model", "revenue_model")):
                 sv = getattr(extracted, attr)
                 ev = grounder.ground_value(f"{rec.client.name} {label.lower()}", sv)
                 if ev:
@@ -242,6 +317,13 @@ class ClientResearchAgent(Agent):
                 ev = grounder.ground_value(f"{rec.client.name} targets", sv, 0.75)
                 if ev:
                     profile.target_customers.append(sv.value)
+            for attr, label in (("geographic_markets", "serves market"), ("brands", "brand"),
+                                ("subsidiaries", "subsidiary"), ("divisions", "business division")):
+                for sv in getattr(extracted, attr):
+                    ev = grounder.ground_value(f"{rec.client.name} {label}", sv, 0.75)
+                    if ev and sv.value not in getattr(profile, attr):
+                        getattr(profile, attr).append(sv.value)
+                        profile.evidence_ids.append(ev.id)
             for lp in extracted.products:
                 ev = grounder.ground(f"{rec.client.name} offers '{lp.name}'", lp.source_url, lp.quote, 0.85)
                 if not ev:
@@ -261,6 +343,27 @@ class ClientResearchAgent(Agent):
         except LLMError as exc:
             errors.append(f"LLM extraction failed: {exc}")
 
+        # schema.org structured data: the company's own canonical statements --------
+        self._apply_structured_facts(ctx, profile, all_pages, contacts)
+
+        # Careers & technology hiring signals -----------------------------------
+        hiring = await self._hiring(ctx, all_pages, findings)
+
+        # Recent announcements (blog / news / changelog) ---------------------------
+        announcements = []
+        for a in find_announcements(all_pages):
+            ev = ledger.add(f"{rec.client.name} announcement: {a.title}", a.source_url, "website",
+                            0.8 if a.date else 0.7, extracted_text=f"{a.title} — {a.url}"
+                            + (f" ({a.date})" if a.date else ""))
+            announcements.append({"title": a.title, "url": a.url, "date": a.date, "is_product": a.is_product,
+                                  "section": a.section, "evidence_id": ev.id})
+        product_news = [a for a in announcements if a["is_product"]]
+        if product_news:
+            findings.append(Finding(category="announcement",
+                                    title=f"{len(product_news)} recent product announcement(s)",
+                                    detail="; ".join(a["title"] for a in product_news[:3]),
+                                    evidence_ids=[a["evidence_id"] for a in product_news[:5]], confidence=0.75))
+
         if not profile.industry and rec.client.industry:
             profile.industry = rec.client.industry
         profile.products = list(products.values())
@@ -273,6 +376,8 @@ class ClientResearchAgent(Agent):
         return AgentResult(
             findings=findings,
             evidence=[ledger.get(i) for i in {*profile.evidence_ids, *evidence_ids,
+                                               *(s["evidence_id"] for s in hiring["signals"]),
+                                               *(a["evidence_id"] for a in announcements),
                                                *(e for p in profile.products for e in p.evidence_ids),
                                                *(e for le in leadership for e in le["evidence_ids"])}
                       if ledger.get(i)],
@@ -282,6 +387,8 @@ class ClientResearchAgent(Agent):
                 "profile": profile.model_dump(),
                 "leadership": leadership,
                 "linkedin_url": linkedin,
+                "hiring": hiring,
+                "announcements": announcements,
                 "pages": [page_summary(p) for p in pages],
                 "project_pages": [page_summary(p) for p in project_pages],
                 "home_snippet": snippet(home.text if home else None),

@@ -163,7 +163,13 @@ class CompanyProfile(BaseModel):
     founded_year: int | None = None
     company_size: str | None = None
     business_model: str | None = None
+    legal_name: str | None = None
+    revenue_model: str | None = None
     target_customers: list[str] = Field(default_factory=list)
+    geographic_markets: list[str] = Field(default_factory=list)
+    brands: list[str] = Field(default_factory=list)
+    subsidiaries: list[str] = Field(default_factory=list)
+    divisions: list[str] = Field(default_factory=list)
     products: list[ProductDiscovery] = Field(default_factory=list)
     contacts: list[Contact] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)

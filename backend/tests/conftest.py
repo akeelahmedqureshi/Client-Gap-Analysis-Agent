@@ -35,7 +35,8 @@ def make_ctx(sample_record):
         return RunContext(
             run_id="run_test", project_id="prj_test", record=kw.pop("record", sample_record),
             ledger=EvidenceLedger(), approvals=set(approvals), llm=llm or NullLLM(),
-            fetcher=WebFetcher(transport=web_transport()), search=kw.pop("search", FakeSearch()),
+            fetcher=kw.pop("fetcher", None) or WebFetcher(transport=web_transport()),
+            search=kw.pop("search", FakeSearch()),
             source_control_factory=kw.pop("factory", lambda ref, token: FakeSourceControl(ref, token)),
             **kw,
         )

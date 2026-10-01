@@ -45,6 +45,17 @@ contact, …), then discovered links. It honours robots.txt and refuses non-publ
 - Contacts are kept only when they are role-based (sales@, support@, …). Personal emails are counted
   and discarded, and LinkedIn `/in/` profiles are ignored.
 - The LLM profile extraction must cite a source page and a verbatim quote for each fact.
+- **Structured data:** schema.org JSON-LD supplies legal name, founding date, address, employee
+  count, brands, subsidiaries, markets served and social profiles. These are the company's own
+  machine-readable statements, so they outrank text extraction. The footer copyright line is a
+  fallback for the legal name.
+- **Hiring signals:** links from the careers page to Greenhouse, Lever or Ashby boards are read
+  through the boards' official public JSON APIs, and JSON-LD `JobPosting` entries are used too. Open
+  roles are grouped into areas such as AI/ML, data, mobile, DevOps and security. Prioritization adds
+  +1 strategic alignment to gaps in an area the client is actively hiring for, and cites the job-board
+  evidence.
+- **Announcements:** posts under blog, news, press and changelog sections. Product launches
+  ("introducing…", "launches…", "now available…") are flagged.
 
 **Code Intelligence.** The whole repository is never sent to the LLM. The pipeline is:
 
@@ -66,6 +77,15 @@ Evidence links point to the exact file and line.
    comparable, are rejected. The report shows rejected candidates.
 
 Classes: direct, indirect, adjacent, open_source, enterprise, emerging.
+
+Candidate sources:
+
+- **General web search.**
+- **G2, Capterra and Product Hunt search queries.** These pages serve only as a source of product
+  names; they are never competitors, and their evidence is typed `marketplace`.
+- **Open-source alternatives** from GitHub's search API: at least 50 stars, no forks. They are
+  verified through the GitHub API (metadata and README), because GitHub's robots.txt disallows
+  crawling repository pages.
 
 **Gap Analysis.**
 

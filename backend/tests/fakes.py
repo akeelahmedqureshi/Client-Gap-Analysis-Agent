@@ -20,10 +20,20 @@ from cip.connectors.source_control.base import (
 from cip.core.llm import LLMUnavailable
 
 
-def html(title: str, body: str, desc: str = "", links: list[str] = ()) -> str:
+def html(title: str, body: str, desc: str = "", links: list[str] = (), head: str = "") -> str:
     anchors = "".join(f'<a href="{u}">{u}</a>' for u in links)
-    return (f"<html><head><title>{title}</title><meta name='description' content='{desc}'></head>"
+    return (f"<html><head><title>{title}</title><meta name='description' content='{desc}'>{head}</head>"
             f"<body><nav>{anchors}</nav>{body}</body></html>")
+
+
+ABC_JSONLD = json.dumps({
+    "@context": "https://schema.org", "@type": "Organization", "name": "ABC Healthcare",
+    "legalName": "ABC Healthcare Holdings Inc.", "foundingDate": "2012-03-01",
+    "address": {"@type": "PostalAddress", "addressLocality": "Austin", "addressRegion": "TX", "addressCountry": "US"},
+    "numberOfEmployees": {"@type": "QuantitativeValue", "minValue": 51, "maxValue": 200},
+    "brand": [{"@type": "Brand", "name": "Patient Scheduler"}], "areaServed": ["United States", "Canada"],
+    "sameAs": ["https://www.youtube.com/@abchealth"],
+})
 
 
 SITES: dict[str, str] = {
@@ -33,7 +43,25 @@ SITES: dict[str, str] = {
         "Email reminders keep patients on time. Founded in 2012 in Austin, Texas.</p>",
         "ABC Healthcare runs patient scheduling software for clinics.",
         ["/about", "/products/patient-scheduler", "/contact", "https://www.linkedin.com/company/abc-healthcare",
-         "https://twitter.com/abchealth"]),
+         "https://twitter.com/abchealth"],
+        head=f'<script type="application/ld+json">{ABC_JSONLD}</script>'),
+    "https://abc-healthcare.com/careers": html(
+        "Careers", "<h1>Join ABC Healthcare</h1><p>See our open roles.</p>"
+        "<a href='https://boards.greenhouse.io/abchealth'>Open positions</a>"),
+    "https://abc-healthcare.com/blog": html(
+        "Blog", "<h1>Blog</h1><a href='/blog/introducing-sms-reminders'>Introducing SMS reminders for every clinic</a>"
+        "<a href='/blog/patient-no-shows-guide'>A practical guide to reducing patient no-shows</a>"
+        "<a href='/blog/page/2'>2</a><p>© 2026 ABC Healthcare Holdings Inc. All rights reserved.</p>"),
+    "https://boards-api.greenhouse.io/v1/boards/abchealth/jobs": {"jobs": [
+        {"title": "Senior Machine Learning Engineer", "location": {"name": "Remote"},
+         "departments": [{"name": "Engineering"}], "absolute_url": "https://boards.greenhouse.io/abchealth/jobs/1"},
+        {"title": "Applied Scientist, LLM", "location": {"name": "Austin"}, "departments": [{"name": "AI"}],
+         "absolute_url": "https://boards.greenhouse.io/abchealth/jobs/2"},
+        {"title": "iOS Engineer", "location": {"name": "Remote"}, "departments": [{"name": "Mobile"}],
+         "absolute_url": "https://boards.greenhouse.io/abchealth/jobs/3"},
+        {"title": "Account Executive", "location": {"name": "Austin"}, "departments": [{"name": "Sales"}],
+         "absolute_url": "https://boards.greenhouse.io/abchealth/jobs/4"},
+    ]},
     "https://abc-healthcare.com/about": html(
         "About", "<h1>About us</h1><p>Our leadership: Jane Porter, CEO. Mark Levin, CTO. We serve clinics across "
         "the United States.</p>"),
@@ -61,15 +89,23 @@ def web_transport(sites: dict[str, str] | None = None) -> httpx.MockTransport:
     sites = sites or SITES
 
     def handler(request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
+        from urllib.parse import unquote
+
+        url = unquote(str(request.url))
+        prefixed = next((k for k in sites if k.endswith("*") and url.startswith(k[:-1])), None)
+        if prefixed:
+            body = sites[prefixed]
+            return httpx.Response(200, json=body) if isinstance(body, (dict, list)) else httpx.Response(200, text=body)
         if url.endswith("/robots.txt"):
             return httpx.Response(404)
         key = url if url.endswith("/") and url.count("/") == 3 else url.rstrip("/")
         if key.count("/") == 2:
             key += "/"
-        body = sites.get(key)
+        body = sites.get(key, sites.get(url))
         if body is None:
             return httpx.Response(404, text="not found")
+        if isinstance(body, (dict, list)):
+            return httpx.Response(200, json=body)
         return httpx.Response(200, text=body, headers={"content-type": "text/html; charset=utf-8"})
 
     return httpx.MockTransport(handler)
