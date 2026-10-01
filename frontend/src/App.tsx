@@ -12,6 +12,7 @@ import RunDetailPage from "./pages/RunDetail";
 import SettingsPage from "./pages/Settings";
 import AuditPage from "./pages/Audit";
 import ClientDetailPage from "./pages/ClientDetail";
+import MonitoringPage from "./pages/Monitoring";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -19,12 +20,18 @@ const NAV = [
   ["/projects", "Projects"],
   ["/clients", "Clients"],
   ["/runs", "Analysis Runs"],
+  ["/monitoring", "Monitoring"],
   ["/settings", "Settings"],
 ] as const;
 
 function Shell() {
   const navigate = useNavigate();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
+  const unread = useQuery({
+    queryKey: ["alerts-unread"],
+    queryFn: () => api.get<{ count: number }>("/api/alerts/unread-count"),
+    refetchInterval: 60_000,
+  });
   return (
     <div className="min-h-screen flex">
       <aside className="w-56 shrink-0 bg-slate-900 text-slate-200 flex flex-col">
@@ -43,6 +50,9 @@ function Shell() {
               }
             >
               {label}
+              {to === "/monitoring" && !!unread.data?.count && (
+                <span className="ml-2 rounded-full bg-rose-500 px-1.5 text-xs text-white" title="Unread alerts">{unread.data.count}</span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -69,6 +79,7 @@ function Shell() {
           <Route path="/clients/:clientId" element={<ClientDetailPage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:runId" element={<RunDetailPage />} />
+          <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" />} />

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -7,7 +8,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cip.api.deps import require_role
-from cip.api.routes import auth, connections, projects, runs, uploads, users
+from cip.api.routes import auth, connections, monitoring, projects, runs, uploads, users
 from cip.config import get_settings
 from cip.core.scoring import ScoringConfig
 from cip.core.taxonomy import load_taxonomy
@@ -31,7 +32,15 @@ async def lifespan(app: FastAPI):
             await runner.resume_interrupted()
         except Exception:  # noqa: BLE001 - e.g. Redis briefly unavailable; never block API start-up
             logging.getLogger(__name__).exception("Could not resume interrupted runs at start-up")
+    scheduler = None
+    if settings.monitor_scheduler_enabled:
+        from cip.services.monitoring import scheduler_loop
+
+        scheduler = asyncio.create_task(scheduler_loop(), name="monitor-scheduler")
     yield
+    if scheduler is not None:
+        scheduler.cancel()
+        await asyncio.gather(scheduler, return_exceptions=True)
     await limiter.aclose()
     await db.dispose()
 
@@ -39,7 +48,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Client Intelligence Platform", version="0.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
-for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router):
+for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router,
+          monitoring.router):
     app.include_router(r)
 
 

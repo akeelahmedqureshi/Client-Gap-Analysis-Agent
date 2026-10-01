@@ -114,6 +114,7 @@ export interface Run {
   agent_details: AgentState[];
   approvals: Approval[];
   has_report: boolean;
+  monitor_id: string | null;
 }
 
 export interface Evidence {
@@ -158,4 +159,64 @@ export interface Connection {
   account_login: string | null;
   created_at: string;
   expires_at: string | null;
+}
+
+export type Severity = "critical" | "warning" | "info";
+
+export interface Change {
+  kind: string;
+  severity: Severity;
+  title: string;
+  detail: string;
+  subject: string;
+  evidence_ids: string[];
+  before: unknown;
+  after: unknown;
+}
+
+export interface RunChanges {
+  run_id: string;
+  status: string;
+  baseline_run_id: string | null;
+  baseline_created_at: string | null;
+  changes: Change[];
+  summary: { counts: Record<Severity, number>; total: number; highest: Severity | null };
+}
+
+export interface Monitor {
+  id: string;
+  project_id: string;
+  project_name: string;
+  client_name: string;
+  enabled: boolean;
+  frequency: "daily" | "weekly" | "monthly";
+  standing_approvals: string[];
+  approvals_valid: boolean;
+  approved_by: string | null;
+  min_severity: Severity;
+  notify_emails: string[];
+  webhook: string | null;
+  email_enabled: boolean;
+  scoring_weights: Record<string, number>;
+  next_run_at: string | null;
+  last_run_id: string | null;
+  last_run_status: string | null;
+  last_triggered_at: string | null;
+  created_at: string;
+}
+
+export interface Alert {
+  id: string;
+  project_id: string;
+  project_name: string;
+  run_id: string;
+  monitor_id: string | null;
+  kind: "changes" | "approval_needed" | "run_failed";
+  severity: Severity;
+  title: string;
+  summary: string;
+  changes: Change[];
+  notifications: { channel: string; ok: boolean; status?: number; error?: string; recipients?: number }[];
+  read_at: string | null;
+  created_at: string;
 }

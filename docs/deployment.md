@@ -43,6 +43,16 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 | `CIP_SEARCH_PROVIDER` + `CIP_TAVILY_API_KEY` / `CIP_BRAVE_API_KEY` | Needed for competitor discovery |
 | `CIP_ALLOW_REGISTRATION` | `true` until the first admin signs up, then `false` |
 
+Optional, for monitoring alerts:
+
+| Variable | Value |
+|---|---|
+| `CIP_APP_BASE_URL` | Public URL of the web UI, e.g. `https://intel.yourdomain.com`. Used for links in alerts. |
+| `CIP_SMTP_HOST`, `CIP_SMTP_PORT`, `CIP_SMTP_USERNAME`, `CIP_SMTP_PASSWORD`, `CIP_SMTP_FROM` | Email alerts (STARTTLS by default). Without `CIP_SMTP_HOST`, only in-app and webhook alerts are sent. |
+
+The scheduler runs inside the API process, so it needs no extra service. With several API processes,
+each due run still starts only once.
+
 See `.env.example` for the full list, including the login-protection limits.
 
 ---
@@ -300,7 +310,9 @@ sudo -u postgres pg_dump cip > /var/backups/cip_$(date +%F).sql
    - Personal access token: preferably fine-grained and read-only.
    - OAuth app: use the callback URL `https://intel.yourdomain.com/api/connections/github/callback`
      (or `/gitlab/`).
-5. Review **Audit Log** (admin only) for sign-ins, lockouts, user and role changes, uploads, runs,
+5. Optional: set up **Monitoring** on a project (Projects → Monitor): a schedule, standing approvals, and
+   a Slack-compatible webhook or email recipients. Use **Send test** to check delivery.
+6. Review **Audit Log** (admin only) for sign-ins, lockouts, user and role changes, uploads, runs,
    approvals, connections and access changes.
 
 ## Security defaults

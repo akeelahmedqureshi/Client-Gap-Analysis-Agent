@@ -73,13 +73,38 @@ Agent state, as exposed by `GET /api/runs/{id}`:
 
 Either way, a resumed run rebuilds its context from the database, so completed agents never re-run.
 
+### Monitoring
+
+`services/monitoring.py` re-runs monitored projects on a schedule:
+
+```
+scheduler tick ─▶ due monitor (claimed atomically) ─▶ run with standing approvals
+run finishes   ─▶ services/changes.py diff vs previous completed run ─▶ alert ─▶ webhook / email
+```
+
+- **Scheduler.** A loop in every API process (`CIP_MONITOR_SCHEDULER_ENABLED`, every
+  `CIP_MONITOR_POLL_SECONDS`). A due monitor is claimed by a conditional `UPDATE` on its `version`, so
+  with several API processes the run still starts once. In celery mode the run itself goes to a worker as
+  usual. A monitor whose previous run is still running or waiting for approval skips the cycle.
+- **Standing approvals** become ordinary approval records on the new run, decided by the user who
+  saved them. They are re-checked on every run: if that user was deactivated, demoted to viewer or lost
+  access to a restricted project, they are not applied and the run waits for a human.
+- **Change detection** runs after every completed run, scheduled or manual, and is stored on the run
+  (`baseline_run_id`, `changes`). Competitors are matched by domain because their ids change per run.
+  A category is compared only when its agent completed in both runs and inspected the same scope, so a
+  skipped step never reads as "everything disappeared".
+- **Alerts** are raised for scheduled runs only: `changes`, `approval_needed` or `run_failed`. Every alert
+  is shown in the app; webhook and email notifications go out when the alert reaches the monitor's
+  `min_severity`.
+
 ## Data model
 
 `Organization → Client → Project → AnalysisRun → {AgentExecution, Evidence, Approval, Report}`
 
 Every tenant-owned row has an `org_id`, and every API query filters on it. Other tables:
-`users` (role-based), `source_connections` (encrypted tokens), `oauth_states`, and `csv_uploads` (raw
-files kept in object storage under `storage/{org}/csv/`).
+`users` (role-based), `source_connections` (encrypted tokens), `oauth_states`, `csv_uploads` (raw
+files kept in object storage under `storage/{org}/csv/`), `monitors` (one per project, encrypted
+webhook URL) and `alerts`.
 
 Migrations live in `backend/migrations` (Alembic). Development mode also runs `create_all` on
 start-up.

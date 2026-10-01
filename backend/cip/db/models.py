@@ -157,6 +157,11 @@ class AnalysisRun(Base):
     approved_gates: Mapped[list] = mapped_column(default=list)
     scoring_weights: Mapped[dict] = mapped_column(default=dict)
     created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Set when the run was started by a monitor's schedule (not by a person).
+    monitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    # What changed since the previous completed run of the project (see services/changes.py).
+    baseline_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    changes: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -219,3 +224,52 @@ class Report(Base):
     content: Mapped[dict] = mapped_column(default=dict)
     markdown: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Monitor(Base):
+    """Scheduled re-analysis of a project, with change alerts.
+
+    ``standing_approvals`` are approval gates granted in advance for scheduled runs by
+    ``approved_by`` (re-checked on every run: the approver must still be an active analyst/admin
+    who can see the project). The webhook URL is a credential and is stored encrypted.
+    """
+
+    __tablename__ = "monitors"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("mon"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    frequency: Mapped[str] = mapped_column(String(20), default="weekly")  # daily | weekly | monthly
+    standing_approvals: Mapped[list] = mapped_column(default=list)
+    approved_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    scoring_weights: Mapped[dict] = mapped_column(default=dict)
+    min_severity: Mapped[str] = mapped_column(String(20), default="warning")  # for external notifications
+    notify_emails: Mapped[list] = mapped_column(default=list)
+    encrypted_webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optimistic claim token: a scheduler instance starts a due run only if it bumps this first.
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    __table_args__ = (UniqueConstraint("run_id", "kind"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("alr"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("analysis_runs.id", ondelete="CASCADE"), index=True)
+    monitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    kind: Mapped[str] = mapped_column(String(30))  # changes | approval_needed | run_failed
+    severity: Mapped[str] = mapped_column(String(20))  # critical | warning | info
+    title: Mapped[str] = mapped_column(String(500))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    changes: Mapped[list] = mapped_column(default=list)
+    notifications: Mapped[list] = mapped_column(default=list)  # delivery results per channel
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    read_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

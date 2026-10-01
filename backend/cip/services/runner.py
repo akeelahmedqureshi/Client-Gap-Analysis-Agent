@@ -253,11 +253,22 @@ class AnalysisRunner:
             for name in rejected:
                 await store.set_agent_status(run_id, name, AgentStatus.SKIPPED, error="approval rejected")
             store._saved.update(e.id for e in ctx.ledger.all())
-            return await Orchestrator(store).run(ctx, statuses)
+            status = await Orchestrator(store).run(ctx, statuses)
         except Exception as exc:  # noqa: BLE001
             log.exception("Run %s crashed", run_id)
             await DbRunStore(run.org_id).set_run_status(run_id, "failed", error=str(exc))
-            return "failed"
+            status = "failed"
+        await self._after_pass(run_id, status)
+        return status
+
+    async def _after_pass(self, run_id: str, status: str) -> None:
+        """Change detection and monitoring alerts; never allowed to fail the run itself."""
+        from cip.services.monitoring import on_run_finished
+
+        try:
+            await on_run_finished(run_id, status)
+        except Exception:  # noqa: BLE001
+            log.exception("Post-run processing failed for %s", run_id)
 
 
 runner = AnalysisRunner()

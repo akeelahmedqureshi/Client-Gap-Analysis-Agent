@@ -3,14 +3,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { AgentResult, Evidence, Run } from "../lib/types";
+import type { AgentResult, Evidence, Run, RunChanges } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
+import { ChangeList, SeverityBadge } from "../components/Changes";
 
-const TABS = ["Pipeline", "Client", "Project", "Security", "Competitors", "Pricing", "Comparison", "Gaps", "Opportunities",
+const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "Competitors", "Pricing", "Comparison", "Gaps", "Opportunities",
   "Roadmap", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
@@ -70,7 +71,10 @@ export default function RunDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Analysis run</h1>
-            <div className="text-sm text-slate-500 font-mono">{r.run_id}</div>
+            <div className="text-sm text-slate-500 font-mono">
+              {r.run_id}
+              {r.monitor_id && <span className="ml-2 font-sans rounded bg-indigo-50 text-indigo-700 px-1.5 py-0.5 text-xs">⟳ scheduled</span>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge value={r.status} />
@@ -115,6 +119,7 @@ export default function RunDetailPage() {
         </div>
 
         {tab === "Pipeline" && <Pipeline run={r} />}
+        {tab === "Changes" && <ChangesTab runId={runId} status={r.status} />}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
         {tab === "Competitors" && <CompetitorsTab runId={runId} enabled={done("competitor_research")} />}
@@ -160,6 +165,37 @@ function Pipeline({ run }: { run: Run }) {
 
 function Pending() {
   return <Empty>Available once the corresponding agent has completed.</Empty>;
+}
+
+function ChangesTab({ runId, status }: { runId: string; status: string }) {
+  const res = useQuery({
+    queryKey: ["changes", runId, status],
+    queryFn: () => api.get<RunChanges>(`/api/runs/${runId}/changes`),
+  });
+  const d = res.data;
+  if (!d) return <ErrorText error={res.error} />;
+  if (!["completed", "completed_with_errors"].includes(d.status))
+    return <Empty>Changes are computed when the run completes.</Empty>;
+  if (!d.baseline_run_id) return <Empty>This is the first completed analysis of the project — nothing to compare with yet.</Empty>;
+  return (
+    <Card
+      title={
+        <span>
+          Changes since <Link className="text-indigo-600 underline" to={`/runs/${d.baseline_run_id}`}>the previous analysis</Link>
+          {d.baseline_created_at && <span className="text-sm font-normal text-slate-500"> ({new Date(d.baseline_created_at).toLocaleDateString()})</span>}
+        </span>
+      }
+      actions={(["critical", "warning", "info"] as const).filter((s) => d.summary.counts[s]).map((s) => (
+        <span key={s} className="text-sm"><SeverityBadge value={s} /> {d.summary.counts[s]}</span>
+      ))}
+    >
+      {d.changes.length ? <ChangeList changes={d.changes} /> : <Empty>No material changes detected.</Empty>}
+      <p className="mt-3 text-xs text-slate-500">
+        Categories are compared only when the same research step completed in both runs (a skipped step is never reported as a removal).
+        Competitors are matched by domain.
+      </p>
+    </Card>
+  );
 }
 
 function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {

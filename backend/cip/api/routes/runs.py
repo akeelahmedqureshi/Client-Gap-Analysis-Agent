@@ -74,6 +74,7 @@ class RunOut(BaseModel):
     agent_details: list[AgentStateOut]
     approvals: list[ApprovalOut]
     has_report: bool
+    monitor_id: str | None = None  # set for runs started by a monitoring schedule
 
 
 class DecisionIn(BaseModel):
@@ -110,7 +111,8 @@ async def _run_out(session: AsyncSession, run: AnalysisRun) -> RunOut:
     return RunOut(run_id=run.id, project_id=run.project_id, status=run.status, error=run.error,
                   created_at=run.created_at, updated_at=run.updated_at,
                   agents={d.agent: d.status for d in details}, agent_details=details,
-                  approvals=[_approval_out(a) for a in approvals], has_report=has_report)
+                  approvals=[_approval_out(a) for a in approvals], has_report=has_report,
+                  monitor_id=run.monitor_id)
 
 
 @router.get("/approval-preview", response_model=list[ApprovalPreview])

@@ -86,6 +86,22 @@ class Settings(BaseSettings):
     repo_max_file_bytes: int = 200_000
     large_repo_file_threshold: int = 5_000
 
+    # --- Monitoring & alerts ----------------------------------------------
+    # Scheduler loop inside each API process (safe with several processes: due monitors are claimed
+    # atomically). Disable on all but one deployment if you prefer, or set false to pause monitoring.
+    monitor_scheduler_enabled: bool = True
+    monitor_poll_seconds: int = 60
+    # Base URL of the web UI, used for links in alert notifications.
+    app_base_url: str = "http://localhost:5173"
+    # Email notifications (optional). Without smtp_host, email channels are skipped.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "alerts@localhost"
+    smtp_starttls: bool = True
+    notify_timeout_seconds: float = 10.0
+
     # --- Prioritization ---------------------------------------------------
     roadmap_top_n: int = 10
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])

@@ -49,7 +49,7 @@ reset, role change or deactivation invalidates existing sessions.
 | GET | `/api/runs/approval-preview?project_id=` | viewer | The gates this project will hit, with what, why, target and data analyzed |
 | POST | `/api/runs` | analyst | `{project_id, approve_gates?: string[], scoring_weights?: {factor: weight}}`. Starts a run in the background |
 | GET | `/api/runs?project_id=` | viewer | Runs list |
-| GET | `/api/runs/{id}` | viewer | State: `status`, `agents{}`, `agent_details[]`, `approvals[]`, `has_report` |
+| GET | `/api/runs/{id}` | viewer | State: `status`, `agents{}`, `agent_details[]`, `approvals[]`, `has_report`, `monitor_id` (set for scheduled runs) |
 | GET | `/api/runs/{id}/agents/{agent}` | viewer | The agent's full `AgentResult` |
 | POST | `/api/runs/{id}/approvals/{approval_id}` | analyst | `{approve: bool}`. Resumes the run once no approvals are pending |
 | POST | `/api/runs/{id}/resume` | analyst | Retry failed agents; completed agents are kept |
@@ -61,6 +61,21 @@ reset, role change or deactivation invalidates existing sessions.
 Run statuses: `queued`, `running`, `awaiting_approval`, `completed`, `completed_with_errors`, `failed`.
 
 Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`, `skipped`.
+
+## Monitoring and alerts
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/monitors` | viewer | Monitored projects the caller can see |
+| GET | `/api/projects/{id}/monitor` | viewer | The project's monitor (404 if none) |
+| PUT | `/api/projects/{id}/monitor` | analyst | `{enabled, frequency: daily\|weekly\|monthly, standing_approvals: [external_research, repository_access, client_report, large_repository_scan], min_severity: critical\|warning\|info, notify_emails: [...], webhook_url?: https URL ("" removes, omitted keeps), scoring_weights?, run_now?}`. The caller is recorded as the approver of the standing approvals. The webhook URL is stored encrypted and only returned masked |
+| DELETE | `/api/projects/{id}/monitor` | analyst | Stop monitoring (alerts are kept) |
+| POST | `/api/projects/{id}/monitor/run-now` | analyst | Start a scheduled-style run now. 409 while the previous monitored run is still in flight |
+| POST | `/api/projects/{id}/monitor/test` | analyst | Send a sample alert to the configured channels; returns per-channel results |
+| GET | `/api/alerts?unread_only=&project_id=&limit=` | viewer | Alerts (`changes`, `approval_needed`, `run_failed`) with their changes and delivery results |
+| GET | `/api/alerts/unread-count` | viewer | `{count}` |
+| POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
+| GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
 ## Source control connections
 

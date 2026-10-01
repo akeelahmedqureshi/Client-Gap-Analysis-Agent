@@ -2,11 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Project, User } from "../lib/types";
+import type { Monitor, Project, User } from "../lib/types";
 import { Badge, Button, Card, Empty } from "../components/ui";
 import StartRunDialog from "../components/StartRunDialog";
 import ProjectAccessDialog from "../components/ProjectAccessDialog";
 import RepositoriesDialog from "../components/RepositoriesDialog";
+import MonitorDialog from "../components/MonitorDialog";
 
 export default function ProjectsPage() {
   const [params] = useSearchParams();
@@ -18,6 +19,9 @@ export default function ProjectsPage() {
   const [starting, setStarting] = useState<Project | null>(null);
   const [editingAccess, setEditingAccess] = useState<Project | null>(null);
   const [editingRepos, setEditingRepos] = useState<Project | null>(null);
+  const [monitoring, setMonitoring] = useState<Project | null>(null);
+  const monitors = useQuery({ queryKey: ["monitors"], queryFn: () => api.get<Monitor[]>("/api/monitors") });
+  const monitorOf = new Map((monitors.data ?? []).map((m) => [m.project_id, m]));
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
   const isAdmin = me.data?.role === "admin";
 
@@ -49,10 +53,16 @@ export default function ProjectsPage() {
                       {p.latest_run ? (
                         <Link to={`/runs/${p.latest_run.id}`}><Badge value={p.latest_run.status} /></Link>
                       ) : "—"}
+                      {monitorOf.get(p.id)?.enabled && (
+                        <div className="text-xs text-slate-500 mt-1" title="Re-analyzed on a schedule with change alerts">
+                          ⟳ monitored {monitorOf.get(p.id)?.frequency}
+                        </div>
+                      )}
                     </td>
                     <td className="text-right space-x-1 whitespace-nowrap">
                       {me.data?.role !== "viewer" && <Button variant="secondary" onClick={() => setEditingRepos(p)}>Repos</Button>}
                       {isAdmin && <Button variant="secondary" onClick={() => setEditingAccess(p)}>Access</Button>}
+                      {me.data?.role !== "viewer" && <Button variant="secondary" onClick={() => setMonitoring(p)}>Monitor</Button>}
                       {me.data?.role !== "viewer" && <Button onClick={() => setStarting(p)}>Analyze</Button>}
                     </td>
                   </tr>
@@ -67,6 +77,7 @@ export default function ProjectsPage() {
       {starting && <StartRunDialog project={starting} onClose={() => setStarting(null)} />}
       {editingAccess && <ProjectAccessDialog project={editingAccess} onClose={() => setEditingAccess(null)} />}
       {editingRepos && <RepositoriesDialog project={editingRepos} onClose={() => setEditingRepos(null)} />}
+      {monitoring && <MonitorDialog project={monitoring} onClose={() => setMonitoring(null)} />}
     </div>
   );
 }

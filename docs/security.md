@@ -119,6 +119,22 @@ The `security_review` agent only does what a normal visitor or a public database
 There is **no** port scanning, fuzzing, credential testing or exploitation. Those need an explicit
 security-testing agreement with the client and are out of scope for this platform.
 
+## Monitoring and notifications
+
+- **Standing approvals** are explicit, per project and recorded in the audit log under the user who
+  saved them (`monitor.created` / `monitor.updated`; each scheduled run logs `monitor.run_started` with the
+  gates applied). They lapse automatically when that user is deactivated, loses the analyst role or
+  loses access to a restricted project. The run then pauses and raises an "approval needed" alert.
+- **Webhook URLs are credentials.** They are Fernet-encrypted at rest, returned only masked
+  (`https://host/…`), and never written to logs, audit entries or delivery results. Only `https://` URLs
+  without embedded credentials are accepted. Deliveries go through the same public-address check as the
+  crawler and don't follow redirects.
+- **Scraped text in alerts.** Competitor names and announcement titles come from third-party sites, so
+  `<`, `>` and `&` are escaped in webhook messages. Text such as `<!channel>` can't ping a Slack channel
+  or disguise a link.
+- **Alerts follow project visibility.** Alerts for a restricted project are visible only to admins and
+  its members. Other organizations get 404 for every monitor and alert endpoint.
+
 ## Report export
 
 PDFs are rendered from the report's HTML with JavaScript disabled and **every network request
