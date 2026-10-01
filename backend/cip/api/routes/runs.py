@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -18,6 +18,8 @@ from cip.core.schemas import NormalizedRecord
 from cip.core.scoring import ALL_FACTORS
 from cip.db.models import AgentExecution, AnalysisRun, Approval, EvidenceRecord, Project, Report, User
 from cip.db.session import get_session
+from cip.services import audit
+from cip.services.access import project_for, run_for, visible_projects
 from cip.services.runner import runner
 
 router = APIRouter(prefix="/api/runs", tags=["analysis runs"])
@@ -78,10 +80,7 @@ class DecisionIn(BaseModel):
 
 
 async def _run_for(session: AsyncSession, run_id: str, user: User) -> AnalysisRun:
-    run = await session.get(AnalysisRun, run_id)
-    if not run or run.org_id != user.org_id:
-        raise not_found("Run")
-    return run
+    return await run_for(session, user, run_id)
 
 
 def _approval_out(a: Approval) -> ApprovalOut:
@@ -117,9 +116,7 @@ async def _run_out(session: AsyncSession, run: AnalysisRun) -> RunOut:
 async def approval_preview(project_id: str, user: User = Depends(require_role("viewer")),
                            session: AsyncSession = Depends(get_session)) -> list[ApprovalPreview]:
     """What each gated step will access — shown before an analysis is started."""
-    project = await session.get(Project, project_id)
-    if not project or project.org_id != user.org_id:
-        raise not_found("Project")
+    project = await project_for(session, user, project_id)
     ctx = RunContext(run_id="preview", project_id=project.id,
                      record=NormalizedRecord.model_validate(project.record), ledger=EvidenceLedger())
     out = []
@@ -131,11 +128,9 @@ async def approval_preview(project_id: str, user: User = Depends(require_role("v
 
 
 @router.post("", response_model=RunOut, status_code=201)
-async def start_run(body: StartRunIn, user: User = Depends(require_role("analyst")),
+async def start_run(body: StartRunIn, request: Request, user: User = Depends(require_role("analyst")),
                     session: AsyncSession = Depends(get_session)) -> RunOut:
-    project = await session.get(Project, body.project_id)
-    if not project or project.org_id != user.org_id:
-        raise not_found("Project")
+    project = await project_for(session, user, body.project_id)
     unknown = set(body.scoring_weights) - set(ALL_FACTORS)
     if unknown:
         raise HTTPException(422, f"Unknown scoring factors: {sorted(unknown)}")
@@ -153,6 +148,8 @@ async def start_run(body: StartRunIn, user: User = Depends(require_role("analyst
             session.add(Approval(run_id=run.id, agent=agent.name, gate=req.gate, title=req.title, what=req.what,
                                  why=req.why, target=req.target, data_analyzed=req.data_analyzed,
                                  status="approved", decided_by=user.id, decided_at=now))
+    audit.record(session, request, user, "run.started", "run", run.id, project_id=project.id,
+                 pre_approved=body.approve_gates or None, scoring_weights=body.scoring_weights or None)
     await session.commit()
     runner.start(run.id)
     return await _run_out(session, run)
@@ -161,7 +158,7 @@ async def start_run(body: StartRunIn, user: User = Depends(require_role("analyst
 @router.get("", response_model=list[RunOut])
 async def list_runs(project_id: str | None = None, user: User = Depends(require_role("viewer")),
                     session: AsyncSession = Depends(get_session)) -> list[RunOut]:
-    q = select(AnalysisRun).where(AnalysisRun.org_id == user.org_id)
+    q = select(AnalysisRun).join(Project, Project.id == AnalysisRun.project_id).where(visible_projects(user))
     if project_id:
         q = q.where(AnalysisRun.project_id == project_id)
     runs = (await session.execute(q.order_by(AnalysisRun.created_at.desc()).limit(100))).scalars().all()
@@ -186,7 +183,7 @@ async def get_agent_result(run_id: str, agent: str, user: User = Depends(require
 
 
 @router.post("/{run_id}/approvals/{approval_id}", response_model=RunOut)
-async def decide(run_id: str, approval_id: str, body: DecisionIn, user: User = Depends(require_role("analyst")),
+async def decide(run_id: str, approval_id: str, body: DecisionIn, request: Request, user: User = Depends(require_role("analyst")),
                  session: AsyncSession = Depends(get_session)) -> RunOut:
     run = await _run_for(session, run_id, user)
     a = await session.get(Approval, approval_id)
@@ -197,6 +194,7 @@ async def decide(run_id: str, approval_id: str, body: DecisionIn, user: User = D
     a.status = "approved" if body.approve else "rejected"
     a.decided_by = user.id
     a.decided_at = datetime.now(timezone.utc)
+    audit.record(session, request, user, f"approval.{a.status}", "run", run.id, gate=a.gate)
     await session.commit()
     pending = (await session.execute(select(Approval).where(Approval.run_id == run.id,
                                                             Approval.status == "pending"))).first()
@@ -208,7 +206,7 @@ async def decide(run_id: str, approval_id: str, body: DecisionIn, user: User = D
 
 
 @router.post("/{run_id}/resume", response_model=RunOut)
-async def resume(run_id: str, user: User = Depends(require_role("analyst")),
+async def resume(run_id: str, request: Request, user: User = Depends(require_role("analyst")),
                  session: AsyncSession = Depends(get_session)) -> RunOut:
     run = await _run_for(session, run_id, user)
     if run.status in ("completed",):
@@ -219,6 +217,7 @@ async def resume(run_id: str, user: User = Depends(require_role("analyst")),
                 AgentExecution.run_id == run.id, AgentExecution.status.in_(["failed", "skipped"])))).scalars():
             e.status = "pending"
         run.status = "queued"
+        audit.record(session, request, user, "run.resumed", "run", run.id)
         await session.commit()
         runner.start(run.id)
     return await _run_out(session, run)
@@ -229,7 +228,7 @@ async def list_evidence(run_id: str, source_type: str | None = None, q: str | No
                         user: User = Depends(require_role("viewer")),
                         session: AsyncSession = Depends(get_session)) -> list[dict]:
     await _run_for(session, run_id, user)
-    stmt = select(EvidenceRecord).where(EvidenceRecord.run_id == run_id, EvidenceRecord.org_id == user.org_id)
+    stmt = select(EvidenceRecord).where(EvidenceRecord.run_id == run_id)
     if source_type:
         stmt = stmt.where(EvidenceRecord.source_type == source_type)
     if q:

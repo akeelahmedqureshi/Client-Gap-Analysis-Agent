@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from cip.api.deps import not_found, require_role
 from cip.core.schemas import NormalizedRecord
 from cip.db.models import Client, CsvUpload, Project, User
 from cip.db.session import get_session
+from cip.services import audit
 from cip.services.storage import LocalObjectStore
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -44,7 +45,7 @@ class ImportOut(BaseModel):
 
 
 @router.post("", response_model=UploadOut, status_code=201)
-async def upload_csv(file: UploadFile = File(...), user: User = Depends(require_role("analyst")),
+async def upload_csv(request: Request, file: UploadFile = File(...), user: User = Depends(require_role("analyst")),
                      session: AsyncSession = Depends(get_session)) -> UploadOut:
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
@@ -57,6 +58,8 @@ async def upload_csv(file: UploadFile = File(...), user: User = Depends(require_
     session.add(upload)
     await session.flush()
     upload.storage_key = LocalObjectStore().put(f"{user.org_id}/csv/{upload.id}.csv", data)
+    audit.record(session, request, user, "upload.created", "upload", upload.id, filename=filename,
+                 rows=len(parsed.records))
     await session.commit()
     return UploadOut(id=upload.id, filename=filename, valid=parsed.valid, column_mapping=parsed.column_mapping,
                      unmapped_columns=parsed.unmapped_columns, errors=parsed.errors, warnings=parsed.warnings,
@@ -80,7 +83,7 @@ def _client_key(rec: NormalizedRecord) -> str:
 
 
 @router.post("/{upload_id}/import", response_model=ImportOut)
-async def import_upload(upload_id: str, body: ImportIn, user: User = Depends(require_role("analyst")),
+async def import_upload(upload_id: str, body: ImportIn, request: Request, user: User = Depends(require_role("analyst")),
                         session: AsyncSession = Depends(get_session)) -> ImportOut:
     upload = await session.get(CsvUpload, upload_id)
     if not upload or upload.org_id != user.org_id:
@@ -109,10 +112,13 @@ async def import_upload(upload_id: str, body: ImportIn, user: User = Depends(req
         else:
             reused += 1
         project = Project(org_id=user.org_id, client_id=client.id, upload_id=upload.id, name=rec.project.name,
+                          created_by=user.id, restricted=False,
                           url=rec.project.url, description=rec.project.description, record=rec.model_dump())
         session.add(project)
         await session.flush()
         created.append(project.id)
+    audit.record(session, request, user, "upload.imported", "upload", upload.id, projects=len(created),
+                 skipped_rows=skipped or None)
     await session.commit()
     return ImportOut(created_projects=created, created_clients=new_clients, reused_clients=reused,
                      skipped_rows=skipped)

@@ -27,6 +27,9 @@ async def current_user(
     user = await session.get(User, payload.get("sub"))
     if user is None or user.org_id != payload.get("org"):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unknown user")
+    # Deactivated users and sessions issued before a password change/reset are rejected.
+    if not user.is_active or payload.get("ver", 0) != user.token_version:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid; please sign in again")
     return user
 
 

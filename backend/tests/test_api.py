@@ -26,6 +26,8 @@ async def client(tmp_path, monkeypatch):
         ctx.source_control_factory = lambda ref, token: FakeSourceControl(ref, token)
 
     runner.context_hook = hook
+    from cip.services.ratelimit import limiter
+    limiter.reset()
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -175,3 +177,31 @@ async def test_concurrent_evidence_saves_do_not_duplicate(client):
     ids = [e["id"] for e in (await client.get(f"/api/runs/{run_id}/evidence", headers=h)).json()]
     assert len(ids) == len(set(ids))
     assert {e.id for e in evs} <= set(ids)
+
+
+async def test_interrupted_runs_resume_on_startup(client):
+    """Simulate a crash mid-run: the run is 'running' with one agent caught 'running'."""
+    from sqlalchemy import select
+
+    from cip.db.models import AgentExecution, AnalysisRun
+
+    h = await register(client)
+    project_id = await upload_and_import(client, h)
+    run_id = (await client.post("/api/runs", headers=h, json={
+        "project_id": project_id,
+        "approve_gates": ["external_research", "repository_access", "client_report"]})).json()["run_id"]
+    await runner.wait(run_id)
+    async with db.sessionmaker()() as s:
+        run = await s.get(AnalysisRun, run_id)
+        run.status = "running"
+        for ex in (await s.execute(select(AgentExecution).where(AgentExecution.run_id == run_id))).scalars():
+            if ex.agent in ("gap_analysis", "opportunity_prioritization", "enhancement_planning", "report"):
+                ex.status = "running" if ex.agent == "gap_analysis" else "pending"
+                ex.result = None
+        await s.commit()
+
+    assert await runner.resume_interrupted() == [run_id]
+    await runner.wait(run_id)
+    run = (await client.get(f"/api/runs/{run_id}", headers=h)).json()
+    assert run["status"] == "completed" and run["has_report"]
+    assert all(s == "completed" for a, s in run["agents"].items())

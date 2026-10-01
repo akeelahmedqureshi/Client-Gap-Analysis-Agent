@@ -135,7 +135,7 @@ field.
 ## Tests
 
 ```bash
-cd backend && python -m pytest       # 60 tests, fully offline (fake web, repos, search, LLM)
+cd backend && python -m pytest       # fully offline (fake web, repos, search, LLM) (fake web, repos, search, LLM)
 cd frontend && npm run build         # type-check and build
 ```
 
@@ -146,3 +146,4 @@ cd frontend && npm run build         # type-check and build
 - [docs/connectors.md](docs/connectors.md): GitHub, GitLab, web, search and LinkedIn providers
 - [docs/security.md](docs/security.md): auth, isolation, secret handling, LLM safety
 - [docs/api.md](docs/api.md): REST endpoints
+- [docs/deployment.md](docs/deployment.md): server deployment, with or without Docker

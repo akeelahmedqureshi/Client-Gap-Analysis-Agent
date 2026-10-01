@@ -23,10 +23,10 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, org_id: str, role: str) -> str:
+def create_access_token(user_id: str, org_id: str, role: str, version: int = 0) -> str:
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {"sub": user_id, "org": org_id, "role": role, "iat": now,
+    payload = {"sub": user_id, "org": org_id, "role": role, "ver": version, "iat": now,
                "exp": now + timedelta(minutes=s.jwt_expiry_minutes)}
     return jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm)
 

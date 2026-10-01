@@ -10,6 +10,7 @@ import ClientsPage from "./pages/Clients";
 import RunsPage from "./pages/Runs";
 import RunDetailPage from "./pages/RunDetail";
 import SettingsPage from "./pages/Settings";
+import AuditPage from "./pages/Audit";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -31,7 +32,7 @@ function Shell() {
           <div className="text-xs font-normal text-slate-400">Gap analysis platform</div>
         </div>
         <nav className="flex-1 px-2 space-y-1">
-          {NAV.map(([to, label]) => (
+          {[...NAV, ...(me.data?.role === "admin" ? [["/audit", "Audit Log"] as const] : [])].map(([to, label]) => (
             <NavLink
               key={to}
               to={to}
@@ -67,6 +68,7 @@ function Shell() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:runId" element={<RunDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>

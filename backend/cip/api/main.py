@@ -7,11 +7,12 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cip.api.deps import require_role
-from cip.api.routes import auth, connections, projects, runs, uploads
+from cip.api.routes import auth, connections, projects, runs, uploads, users
 from cip.config import get_settings
 from cip.core.scoring import ScoringConfig
 from cip.core.taxonomy import load_taxonomy
 from cip.db import session as db
+from cip.services.runner import runner
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -24,13 +25,15 @@ async def lifespan(app: FastAPI):
     db.configure()
     if settings.environment != "production":
         await db.create_all()
+    if settings.resume_runs_on_startup:
+        await runner.resume_interrupted()
     yield
 
 
 app = FastAPI(title="Client Intelligence Platform", version="0.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
-for r in (auth.router, uploads.router, projects.router, runs.router, connections.router):
+for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router):
     app.include_router(r)
 
 

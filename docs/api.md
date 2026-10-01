@@ -11,6 +11,21 @@ OAuth callback requires `Authorization: Bearer <jwt>`.
 | POST | `/api/auth/login` | — | Returns `access_token` |
 | GET | `/api/auth/me` | any | Current user |
 | POST | `/api/auth/users` | admin | Add a user (`email`, `password`, `role`) |
+| POST | `/api/auth/change-password` | any | `{current_password, new_password}`. Signs out other sessions and returns a new token |
+
+Login protection: after 5 consecutive failures the account is locked for 15 minutes (429), and each IP
+gets 20 login/register attempts per 5 minutes (429). Tokens carry a version, so a password change,
+reset, role change or deactivation invalidates existing sessions.
+
+## Users and audit (admin)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/users` | Organization users (`is_active`, `locked`) |
+| PATCH | `/api/users/{id}` | `{name?, role?, is_active?}`. The last active admin can't be demoted or deactivated (409) |
+| POST | `/api/users/{id}/reset-password` | `{new_password}`. Sets a temporary password, signs the user out and unlocks the account |
+| POST | `/api/users/{id}/unlock` | Clear a lockout |
+| GET | `/api/audit?action=&limit=&offset=` | Audit log, newest first. `action` is a prefix filter, e.g. `auth.` |
 
 ## CSV → projects
 
@@ -22,6 +37,8 @@ OAuth callback requires `Authorization: Bearer <jwt>`.
 | GET | `/api/clients` | viewer | Clients with project counts |
 | GET | `/api/projects?client_id=` | viewer | Projects with their latest run |
 | GET | `/api/projects/{id}` | viewer | One project |
+| GET | `/api/projects/{id}/access` | admin | `{restricted, member_ids}` |
+| PUT | `/api/projects/{id}/access` | admin | `{restricted: bool, member_ids: [user ids]}`. Restricted projects, and their runs, evidence and reports, are visible only to admins and members; everyone else gets 404 |
 
 ## Analysis runs
 

@@ -15,11 +15,18 @@ class Settings(BaseSettings):
     storage_dir: str = "./storage"
     # Allow self-service sign-up (creates a new organization). Disable in production.
     allow_registration: bool = True
+    # Restart analyses that were interrupted (crash/deploy) when the API starts.
+    resume_runs_on_startup: bool = True
 
     # --- Auth -------------------------------------------------------------
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expiry_minutes: int = 60 * 8
+    # Brute-force protection
+    login_max_failures: int = 5            # consecutive failures before the account is locked
+    login_lockout_minutes: int = 15
+    login_ip_limit: int = 20               # login/register attempts per IP per window
+    login_ip_window_seconds: int = 300
 
     # Fernet key (urlsafe base64, 32 bytes) used to encrypt OAuth tokens at rest.
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

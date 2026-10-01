@@ -1,36 +1,41 @@
-# Local stack: PostgreSQL (with pgvector for the upcoming knowledge layer), API, web UI.
-#   cp .env.example .env   # add CIP_OPENROUTER_API_KEY etc.
-#   docker compose up --build
+# Local or single-server stack: PostgreSQL (with pgvector for the upcoming knowledge layer), API, web UI.
+#   cp .env.example .env   # set CIP_PUBLIC_URL, POSTGRES_PASSWORD, CIP_OPENROUTER_API_KEY, secrets …
+#   docker compose up -d --build
+# All deployment-specific values come from .env (see docs/deployment.md).
 services:
   db:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: cip
-      POSTGRES_PASSWORD: cip
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cip}
       POSTGRES_DB: cip
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cip"]
       interval: 5s
       retries: 10
+    restart: unless-stopped
 
   api:
     build: { context: ., dockerfile: docker/backend.Dockerfile }
     env_file: .env
     environment:
-      CIP_DATABASE_URL: postgresql+asyncpg://cip:cip@db:5432/cip
+      CIP_DATABASE_URL: postgresql+asyncpg://cip:${POSTGRES_PASSWORD:-cip}@db:5432/cip
       CIP_STORAGE_DIR: /app/storage
-      CIP_CORS_ORIGINS: '["http://localhost:8080"]'
-      CIP_OAUTH_REDIRECT_BASE: http://localhost:8080
+      CIP_CORS_ORIGINS: '["${CIP_PUBLIC_URL:-http://localhost:8080}"]'
+      CIP_OAUTH_REDIRECT_BASE: ${CIP_PUBLIC_URL:-http://localhost:8080}
     volumes: [storage:/app/storage]
     depends_on:
       db: { condition: service_healthy }
-    ports: ["8000:8000"]
+    # Not published: the web container proxies /api to it.
+    restart: unless-stopped
 
   web:
     build: { context: ., dockerfile: docker/frontend.Dockerfile }
     depends_on: [api]
-    ports: ["8080:80"]
+    # Default binds to localhost only (put Caddy/nginx with HTTPS in front). Use "8080" to expose directly.
+    ports: ["${WEB_BIND:-127.0.0.1:8080}:80"]
+    restart: unless-stopped
 
 volumes:
   pgdata:

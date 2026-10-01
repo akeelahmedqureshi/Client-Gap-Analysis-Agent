@@ -201,6 +201,29 @@ class AnalysisRunner:
                 await asyncio.gather(task, return_exceptions=True)
             await asyncio.sleep(0)
 
+    async def resume_interrupted(self) -> list[str]:
+        """Restart runs left 'queued'/'running' by a previous process (crash, deploy, restart).
+
+        Completed agents are kept; agents caught mid-execution are re-run from scratch. Runs waiting
+        for approval are left alone — they resume when a decision is made.
+        """
+        async with db.sessionmaker()() as s:
+            runs = (await s.execute(select(AnalysisRun).where(
+                AnalysisRun.status.in_(["queued", "running"])))).scalars().all()
+            ids = [r.id for r in runs]
+            if ids:
+                for ex in (await s.execute(select(AgentExecution).where(
+                        AgentExecution.run_id.in_(ids), AgentExecution.status == "running"))).scalars():
+                    ex.status = "pending"
+                    ex.error = "interrupted by restart; re-running"
+                for r in runs:
+                    r.status = "queued"
+                await s.commit()
+        for run_id in ids:
+            log.info("Resuming interrupted run %s", run_id)
+            self.start(run_id)
+        return ids
+
     async def execute(self, run_id: str) -> str:
         async with db.sessionmaker()() as s:
             run = await s.get(AnalysisRun, run_id)

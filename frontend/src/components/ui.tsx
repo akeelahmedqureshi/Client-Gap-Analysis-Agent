@@ -34,6 +34,11 @@ const STATUS_STYLES: Record<string, string> = {
   failed: "bg-rose-100 text-rose-800",
   rejected: "bg-rose-100 text-rose-800",
   unknown: "bg-slate-100 text-slate-400",
+  active: "bg-emerald-100 text-emerald-800",
+  locked: "bg-amber-100 text-amber-800",
+  deactivated: "bg-rose-100 text-rose-800",
+  enabled: "bg-emerald-100 text-emerald-800",
+  disabled: "bg-slate-100 text-slate-500",
 };
 
 export function Badge({ value, className = "" }: { value: string; className?: string }) {

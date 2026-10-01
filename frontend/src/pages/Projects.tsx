@@ -2,9 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Project } from "../lib/types";
+import type { Project, User } from "../lib/types";
 import { Badge, Button, Card, Empty } from "../components/ui";
 import StartRunDialog from "../components/StartRunDialog";
+import ProjectAccessDialog from "../components/ProjectAccessDialog";
 
 export default function ProjectsPage() {
   const [params] = useSearchParams();
@@ -14,6 +15,9 @@ export default function ProjectsPage() {
     queryFn: () => api.get<Project[]>(`/api/projects${clientId ? `?client_id=${clientId}` : ""}`),
   });
   const [starting, setStarting] = useState<Project | null>(null);
+  const [editingAccess, setEditingAccess] = useState<Project | null>(null);
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
+  const isAdmin = me.data?.role === "admin";
 
   return (
     <div className="space-y-6">
@@ -30,7 +34,7 @@ export default function ProjectsPage() {
                 return (
                   <tr key={p.id} className="border-t align-top">
                     <td className="py-2">
-                      <div className="font-medium">{p.name}</div>
+                      <div className="font-medium">{p.name}{p.restricted && <span className="ml-2 text-xs rounded bg-slate-200 px-1.5 py-0.5" title="Visible only to admins and members">🔒 restricted</span>}</div>
                       <div className="text-xs text-slate-500 max-w-md">{p.description}</div>
                     </td>
                     <td>{p.client_name}</td>
@@ -44,8 +48,9 @@ export default function ProjectsPage() {
                         <Link to={`/runs/${p.latest_run.id}`}><Badge value={p.latest_run.status} /></Link>
                       ) : "—"}
                     </td>
-                    <td className="text-right">
-                      <Button onClick={() => setStarting(p)}>Analyze</Button>
+                    <td className="text-right space-x-1 whitespace-nowrap">
+                      {isAdmin && <Button variant="secondary" onClick={() => setEditingAccess(p)}>Access</Button>}
+                      {me.data?.role !== "viewer" && <Button onClick={() => setStarting(p)}>Analyze</Button>}
                     </td>
                   </tr>
                 );
@@ -57,6 +62,7 @@ export default function ProjectsPage() {
         )}
       </Card>
       {starting && <StartRunDialog project={starting} onClose={() => setStarting(null)} />}
+      {editingAccess && <ProjectAccessDialog project={editingAccess} onClose={() => setEditingAccess(null)} />}
     </div>
   );
 }

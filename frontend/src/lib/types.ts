@@ -6,6 +6,21 @@ export interface User {
   name: string;
   role: "admin" | "analyst" | "viewer";
   org_id: string;
+  is_active: boolean;
+  locked: boolean;
+  created_at: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  created_at: string;
+  user_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  details: Record<string, any>;
+  ip: string | null;
 }
 
 export interface NormalizedRecord {
@@ -43,6 +58,7 @@ export interface Project {
   url: string | null;
   description: string | null;
   record: NormalizedRecord;
+  restricted: boolean;
   created_at: string;
   latest_run: { id: string; status: string; created_at: string } | null;
 }

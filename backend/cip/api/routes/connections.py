@@ -9,7 +9,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
@@ -21,6 +21,7 @@ from cip.connectors.source_control import GitHubProvider, GitLabProvider, Source
 from cip.core.security.crypto import TokenCipher
 from cip.db.models import OAuthState, SourceConnection, User
 from cip.db.session import get_session
+from cip.services import audit
 
 router = APIRouter(prefix="/api/connections", tags=["source control connections"])
 Provider = Literal["github", "gitlab"]
@@ -79,20 +80,24 @@ async def list_connections(user: User = Depends(require_role("viewer")),
 
 
 @router.post("/token", response_model=ConnectionOut, status_code=201)
-async def add_token(body: PatIn, user: User = Depends(require_role("admin")),
+async def add_token(body: PatIn, request: Request, user: User = Depends(require_role("admin")),
                     session: AsyncSession = Depends(get_session)) -> ConnectionOut:
     """Store a (preferably fine-grained, read-only) personal access token."""
     host = body.host or _default_host(body.provider)
+    audit.record(session, request, user, "connection.added", "connection", None, provider=body.provider,
+                 host=host, token_type="pat")
     con = await _upsert(session, user.org_id, user.id, body.provider, host, body.token, "pat")
     return _out(con)
 
 
 @router.delete("/{connection_id}", status_code=204)
-async def remove(connection_id: str, user: User = Depends(require_role("admin")),
+async def remove(connection_id: str, request: Request, user: User = Depends(require_role("admin")),
                  session: AsyncSession = Depends(get_session)) -> None:
     con = await session.get(SourceConnection, connection_id)
     if not con or con.org_id != user.org_id:
         raise not_found("Connection")
+    audit.record(session, request, user, "connection.removed", "connection", con.id, provider=con.provider,
+                 host=con.host)
     await session.delete(con)
     await session.commit()
 
@@ -113,7 +118,7 @@ async def authorize(provider: Provider, user: User = Depends(require_role("admin
 
 
 @router.get("/{provider}/callback")
-async def callback(provider: Provider, code: str, state: str,
+async def callback(provider: Provider, code: str, state: str, request: Request,
                    session: AsyncSession = Depends(get_session)) -> RedirectResponse:
     st = await session.get(OAuthState, state)
     if not st or st.provider != provider:
@@ -128,6 +133,8 @@ async def callback(provider: Provider, code: str, state: str,
         data = await PROVIDERS[provider].exchange_code(code, redirect_uri)
     except SourceControlError as exc:
         raise HTTPException(400, str(exc)) from exc
+    audit.record(session, request, None, "connection.added", "connection", None, org_id=st.org_id,
+                 provider=provider, token_type="oauth", by_user=st.user_id)
     await _upsert(session, st.org_id, st.user_id, provider, _default_host(provider), data["access_token"], "oauth",
                   scopes=data.get("scope", ""), expires_in=data.get("expires_in"))
     front = get_settings().cors_origins[0] if get_settings().cors_origins else ""

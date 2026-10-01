@@ -17,6 +17,40 @@
 endpoint checks it. A resource that belongs to another organization returns 404, the same response as
 a missing one, so its existence isn't leaked.
 
+Inside an organization, an admin can mark a project **restricted**. Only admins and the listed project
+members can then see it, its runs, evidence and reports, and its client. Everyone else gets 404. All
+checks go through `cip/services/access.py`.
+
+## Login protection and sessions
+
+- After `CIP_LOGIN_MAX_FAILURES` (default 5) consecutive failed sign-ins, the account is locked for
+  `CIP_LOGIN_LOCKOUT_MINUTES` (default 15).
+- Each IP gets `CIP_LOGIN_IP_LIMIT` attempts per `CIP_LOGIN_IP_WINDOW_SECONDS` (default 20 per 5
+  minutes).
+- Unknown emails are checked against a dummy password hash, so response timing doesn't reveal which
+  emails are registered.
+- JWTs carry a `ver` claim matching `users.token_version`. A password change or reset, a role change
+  or a deactivation bumps the version, which signs that user out everywhere.
+- An organization always keeps at least one active admin.
+- Client IPs come from proxy headers only when the request arrives from a trusted proxy: localhost
+  for a plain server, private networks in Docker. Clients therefore can't spoof the IP used for rate
+  limits and audit entries.
+
+## Audit log
+
+`audit_logs` is an append-only table. It records:
+
+- sign-ins, failed sign-ins and lockouts;
+- organization registration;
+- user creation, role and status changes, password changes and resets, unlocks;
+- uploads and imports;
+- analysis starts and resumes, and approval decisions;
+- source-control connection changes;
+- project access changes.
+
+Each entry stores the actor, target, details and IP. Admins can view it at `GET /api/audit` and on the
+Audit Log page.
+
 ## Repository credentials
 
 - OAuth and personal access tokens are encrypted at rest with Fernet (`CIP_TOKEN_ENCRYPTION_KEY`).
