@@ -91,6 +91,8 @@ run finishes   ─▶ services/changes.py diff vs previous completed run ─▶ 
   access to a restricted project, they are not applied and the run waits for a human.
 - **Change detection** runs after every completed run, scheduled or manual, and is stored on the run
   (`baseline_run_id`, `changes`). Competitors are matched by domain because their ids change per run.
+  App changes are included: client rating moves and releases, new complaint themes, competitor app
+  launches and rating moves.
   A category is compared only when its agent completed in both runs and inspected the same scope, so a
   skipped step never reads as "everything disappeared".
 - **Alerts** are raised for scheduled runs only: `changes`, `approval_needed` or `run_failed`. Every alert

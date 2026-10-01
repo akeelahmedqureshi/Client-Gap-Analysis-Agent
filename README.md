@@ -71,8 +71,8 @@ Platform features:
 - **Web UI** (React, TypeScript, Tailwind, React Query) with screens for Dashboard, Upload
   (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules) and Run
   detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
-  competitors, comparison, gaps, opportunity matrix, roadmap and patch plans, evidence explorer, and the
-  report. A Settings screen manages connections and users.
+  security, competitors, pricing, apps, comparison, gaps, opportunity matrix, roadmap and patch plans,
+  evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.
 - **Report export** as a client-ready PDF, plus Markdown and JSON.
 - **Pricing analysis:** plans, prices, pricing models and practices for the client and competitors;
@@ -83,6 +83,11 @@ Platform features:
   insecure code patterns, and a score and grade.
 - **Deeper research:** schema.org company facts, job-board hiring signals, announcements, and
   open-source and review-site competitor sources.
+- **App-store analysis:** the client's and competitors' iOS and Android apps.
+  - Ownership is verified before an app is attributed to a company.
+  - It reports ratings against competitors, release staleness, review themes with quotes, and
+    features customers request.
+  - These feed the app-quality gaps, the "Native mobile app" decision and prioritization.
 - **Monitoring and alerts:** per-project schedules (daily, weekly or monthly) with standing
   approvals. Each run is compared with the previous one: new or dropped competitors, competitor feature
   evidence, price moves, gaps opened or closed, new or resolved security issues, client announcements
@@ -98,7 +103,7 @@ Also built:
 - optional Celery + Redis workers for scaling.
 
 Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
-app-store analysis and a UX deep dive.
+and a UX deep dive.
 
 ## Quick start
 

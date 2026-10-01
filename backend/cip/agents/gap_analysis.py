@@ -28,7 +28,7 @@ TECH_GAP_RULES: list[tuple[str, str, str, str]] = [
 class GapAnalysisAgent(Agent):
     name = "gap_analysis"
     description = "Identify missing, partial, technology, UX and AI gaps"
-    after = ("feature_comparison", "code_analysis", "pricing_analysis", "security_review")
+    after = ("feature_comparison", "code_analysis", "pricing_analysis", "security_review", "app_store")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         ledger = ctx.ledger
@@ -131,6 +131,21 @@ class GapAnalysisAgent(Agent):
         gaps.extend(Gap.model_validate(g) for g in ctx.data("pricing_analysis").get("gaps", []))
         # Security gaps from the passive security review -------------------------
         gaps.extend(Gap.model_validate(g) for g in ctx.data("security_review").get("gaps", []))
+        # Mobile app gaps from the app-store analysis -----------------------------
+        apps = ctx.data("app_store")
+        for g in (Gap.model_validate(x) for x in apps.get("gaps", [])):
+            same = next((x for x in gaps if g.feature_id and x.feature_id == g.feature_id), None)
+            if same:  # e.g. "Native mobile app" already found by the comparison: merge the evidence
+                same.evidence_ids = list(dict.fromkeys(same.evidence_ids + g.evidence_ids))
+                same.competitors_with = list(dict.fromkeys(same.competitors_with + g.competitors_with))
+            else:
+                gaps.append(g)
+        if apps.get("client_has_app") and "ux.mobile_app" in ctx.taxonomy:
+            # A verified store listing proves the client has an app, whatever the website text says.
+            gaps = [g for g in gaps if g.feature_id != "ux.mobile_app"]
+            client_obs = {**client_obs, "ux.mobile_app": {
+                "status": FeatureStatus.AVAILABLE.value,
+                "evidence_ids": [a["evidence_id"] for a in apps["client_apps"]]}}
 
         by_type: dict[str, int] = {}
         for g in gaps:

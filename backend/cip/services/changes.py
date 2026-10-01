@@ -243,6 +243,54 @@ def _client_activity(prev: dict, cur: dict) -> list[Change]:
     return out
 
 
+def _apps(prev: dict, cur: dict, known_competitors: set[str]) -> list[Change]:
+    """``known_competitors``: lower-cased names of competitors already present in the previous run."""
+    out = []
+    before = {(a["platform"], a["app_id"]): a for a in prev.get("client_apps", [])}
+    for a in cur.get("client_apps", []):
+        b = before.get((a["platform"], a["app_id"]))
+        label = f"{a['name']} ({'iOS' if a['platform'] == 'ios' else 'Android'})"
+        if b is None:
+            out.append(Change("client_app_new", "info", f"Client app now listed: {label}",
+                              evidence_ids=[a["evidence_id"]], after=a.get("rating")))
+            continue
+        if a.get("rating") and b.get("rating") and abs(a["rating"] - b["rating"]) >= 0.1:
+            drop = a["rating"] < b["rating"]
+            out.append(Change("client_app_rating", "warning" if drop else "info",
+                              f"{label} rating {'fell' if drop else 'rose'}: {b['rating']:g}★ → {a['rating']:g}★",
+                              f"{a.get('rating_count') or 0:,} ratings.", evidence_ids=[a["evidence_id"]],
+                              before=b["rating"], after=a["rating"]))
+        if a.get("version") and b.get("version") and a["version"] != b["version"]:
+            out.append(Change("client_app_release", "info", f"Client released {label} {a['version']}",
+                              (a.get("release_notes") or "")[:200], evidence_ids=[a["evidence_id"]],
+                              before=b["version"], after=a["version"]))
+    old_themes = {t["theme"]: t for t in (prev.get("client_reviews") or {}).get("themes", [])}
+    for t in (cur.get("client_reviews") or {}).get("themes", []):
+        if t["negative"] >= 3 and old_themes.get(t["theme"], {}).get("negative", 0) < 3:
+            out.append(Change("client_app_theme", "warning",
+                              f"New complaint theme in app reviews: {t['label']} ({t['negative']} negative reviews)",
+                              t["examples"][0]["quote"] if t.get("examples") else "",
+                              evidence_ids=t.get("evidence_ids", [])[:3]))
+
+    def comp_apps(d: dict) -> dict[tuple[str, str], tuple[str, dict]]:
+        return {(a["platform"], a["app_id"]): (e["name"], a) for e in d.get("competitor_apps", []) for a in e["apps"]}
+
+    cb, ca = comp_apps(prev), comp_apps(cur)
+    for key, (name, a) in ca.items():
+        platform = "iOS" if a["platform"] == "ios" else "Android"
+        if key not in cb:
+            if name.lower() in known_competitors:  # a brand-new competitor is reported as such, not as an app launch
+                out.append(Change("competitor_app_new", "warning", f"{name} has a new {platform} app: {a['name']}",
+                                  subject=name, evidence_ids=[a["evidence_id"]]))
+            continue
+        b = cb[key][1]
+        if a.get("rating") and b.get("rating") and abs(a["rating"] - b["rating"]) >= 0.2:
+            out.append(Change("competitor_app_rating", "info",
+                              f"{name} {platform} app rating {b['rating']:g}★ → {a['rating']:g}★", subject=name,
+                              evidence_ids=[a["evidence_id"]], before=b["rating"], after=a["rating"]))
+    return out
+
+
 # --------------------------------------------------------------------------- entry point
 
 
@@ -269,6 +317,9 @@ def diff_outputs(prev: dict[str, dict], cur: dict[str, dict]) -> list[dict]:
         changes += _security(prev["security_review"], cur["security_review"])
     if both("client_research"):
         changes += _client_activity(prev["client_research"], cur["client_research"])
+    if both("app_store") and prev["app_store"].get("enabled") and cur["app_store"].get("enabled"):
+        known = {c["name"].lower() for c in prev.get("competitor_research", {}).get("competitors", [])}
+        changes += _apps(prev["app_store"], cur["app_store"], known)
     changes.sort(key=lambda c: (severity_rank(c.severity), c.kind, c.title))
     return [c.to_dict() for c in changes]
 

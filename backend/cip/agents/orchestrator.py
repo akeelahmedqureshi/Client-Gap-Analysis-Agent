@@ -23,6 +23,7 @@ import asyncio
 import logging
 from typing import Protocol
 
+from cip.agents.app_store import AppStoreAgent
 from cip.agents.base import Agent, ApprovalRequest, AwaitingApproval, RunContext
 from cip.agents.client_research import ClientResearchAgent
 from cip.agents.code_analysis import CodeAnalysisAgent
@@ -55,6 +56,7 @@ def default_agents() -> list[Agent]:
         ProductFeatureAgent(),
         CompetitorResearchAgent(),
         PricingAnalysisAgent(),
+        AppStoreAgent(),
         FeatureComparisonAgent(),
         GapAnalysisAgent(),
         PrioritizationAgent(),

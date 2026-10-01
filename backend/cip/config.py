@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # database; only package names/versions are sent). Set false to keep dependency lists in-house.
     security_review_enabled: bool = True
     osv_enabled: bool = True
+    # App-store analysis: public App Store / Google Play listings and Apple customer reviews
+    # (review authors are never stored). Storefront country for Apple lookups.
+    app_store_enabled: bool = True
+    app_store_country: str = "us"
+    app_store_competitor_reviews: int = 3   # competitors whose App Store reviews are analysed
     # Headless-browser rendering for JavaScript-heavy sites (needs `pip install .[browser]` + a Chromium):
     #   auto   – render only pages that look script-rendered (default)
     #   always – render every HTML page (slower, most complete)

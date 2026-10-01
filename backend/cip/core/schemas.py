@@ -34,6 +34,7 @@ SourceType = Literal[
     "search",
     "csv",
     "advisory",  # public vulnerability databases (OSV.dev)
+    "app_store",  # Apple App Store / Google Play listings and reviews
 ]
 
 

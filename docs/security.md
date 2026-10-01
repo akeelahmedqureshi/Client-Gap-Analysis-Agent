@@ -119,6 +119,13 @@ The `security_review` agent only does what a normal visitor or a public database
 There is **no** port scanning, fuzzing, credential testing or exploitation. Those need an explicit
 security-testing agreement with the client and are out of scope for this platform.
 
+## App-store data
+
+Only public listings and reviews are read, and only after external research was approved. The
+approval text says so. Reviewer names are never stored. E-mail addresses and phone numbers in review
+text are masked before the text becomes evidence. Turn the feature off with
+`CIP_APP_STORE_ENABLED=false`.
+
 ## Monitoring and notifications
 
 - **Standing approvals** are explicit, per project and recorded in the audit log under the user who

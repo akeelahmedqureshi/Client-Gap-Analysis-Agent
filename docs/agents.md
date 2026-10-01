@@ -21,8 +21,9 @@ Each `Finding` has a `basis`:
 | `product_features` | after client_research, code_analysis | — | `observations{feature_id: FeatureObservation}`, `inventory[]`, `coverage` |
 | `competitor_research` | after client_research, product_features | (covered by `external_research`) | `competitors[]` (verified, classified, feature observations), `rejected[]` |
 | `pricing_analysis` | after client_research, competitor_research | — | `client` and per-competitor pricing (plans, monthly prices, models, trial, free tier, annual discount, enterprise tier), `market` statistics, client `position`, pricing `gaps` |
+| `app_store` | after client_research, competitor_research | (covered by `external_research`) | `client_apps[]` / `competitor_apps[]` (verified store listings: rating, ratings count, version, last release), `client_reviews` (sentiment, themes with quotes), `requests[]` (features asked for in reviews), `competitor_review_themes[]`, `market`, app `gaps` |
 | `feature_comparison` | after product_features, competitor_research | — | `rows[]` (client status and each competitor's status per taxonomy feature, coverage) |
-| `gap_analysis` | after feature_comparison, code_analysis | — | `gaps[]` (missing / partial / technology / ux / ai), `existing[]` |
+| `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security), `existing[]` |
 | `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown), `recommendations[]` (top N with phase), `roadmap` |
 | `enhancement_planning` | after opportunity_prioritization | — | `plans[]` (ImplementationPlan) |
 | `report` | after enhancement_planning | `client_report` | `report` (structured JSON), `markdown` |
@@ -128,6 +129,30 @@ only; see docs/security.md. It checks the live site's posture, looks up dependen
 scans reviewed files for insecure patterns. Output: a score and grade, issues with severity and
 recommendations, and security gaps (HTTPS enforcement, header and cookie hardening, dependency
 remediation, secure-coding fixes, disclosure policy). High and critical gaps get +1 business value.
+
+**App Store** (`app_store`, after client research and competitor research). It runs only when external
+research was approved.
+
+- **Finding apps.** It follows App Store and Google Play links on each company's own website, then
+  searches the App Store by name. A search hit is kept only when ownership is verified: the developer's
+  website is on the company's domain, or the developer name matches the company name. "ABC Kids
+  Learning" is not attributed to "ABC Healthcare".
+- **Listings.** iOS listings come from Apple's public lookup and search API. Android listings come
+  from the public Google Play page (schema.org data), which is crawled with robots.txt respected.
+- **Reviews.** Up to 50 recent Apple customer reviews per app. Author names are dropped, and e-mail
+  addresses and phone numbers are masked.
+  - Each review is sorted into fixed themes: crashes and bugs, performance, login, notifications,
+    sync, usability, support, and pricing.
+  - Reviews that ask for something ("please add …", "would be nice …") are matched to the taxonomy.
+  - Every quoted review is evidence.
+- **Gaps.** No client app while competitors have one → "Native mobile app" (merged with the
+  comparison's gap). A rating 0.3★ or more below the competitor median → "App store rating below
+  competitors". A theme in at least 3 negative reviews and 20% of them → for example "Mobile app
+  stability (crashes & bugs)". No release in 180 days → "Mobile app release cadence".
+- **Effects elsewhere.**
+  - A verified client listing removes a false "Native mobile app" gap.
+  - Features requested in 2 or more reviews get +1 market demand in prioritization.
+  - App-quality gaps get a mobile patch plan (crash reporting, staged rollouts, device tests).
 
 **Architecture diagrams** (built by `enhancement_planning`, in `core/architecture.py`).
 

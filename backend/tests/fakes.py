@@ -78,7 +78,9 @@ SITES: dict[str, str] = {
     "https://medibook.io/": html(
         "MediBook", "<h1>MediBook</h1><p>Online booking and scheduling for clinics. AI assistant answers "
         "patient questions 24/7. SMS reminders and email reminders. Telehealth video consultation. "
-        "Single sign-on (SSO) with Okta. HIPAA compliant. iOS app and Android app on Google Play.</p>",
+        "Single sign-on (SSO) with Okta. HIPAA compliant. iOS app and Android app on Google Play.</p>"
+        "<a href='https://apps.apple.com/us/app/medibook/id2222222222'>Download on the App Store</a>"
+        "<a href='https://play.google.com/store/apps/details?id=com.medibook.app'>Get it on Google Play</a>",
         "Clinic scheduling with an AI assistant"),
     "https://clinicflow.com/pricing": html(
         "Pricing | ClinicFlow", "<h1>Plans</h1><p>Start a 14-day free trial. Save 20% with annual billing.</p>"
@@ -92,7 +94,81 @@ SITES: dict[str, str] = {
         "analytics dashboard, patient portal and a public REST API. Pricing from $49/month. HIPAA compliant.</p>",
         "Clinic workflow and scheduling"),
     "https://randomnews.com/": html("News", "<p>Celebrity gossip and sports scores.</p>"),
+    # --- app stores (prefix keys, most specific first) --------------------
+    "https://itunes.apple.com/lookup?id=1111111111*": {"results": [{
+        "trackId": 1111111111, "trackName": "ABC Patient Scheduler", "sellerName": "ABC Healthcare Holdings Inc.",
+        "sellerUrl": "https://abc-healthcare.com", "averageUserRating": 3.1, "userRatingCount": 412,
+        "version": "2.3.0", "currentVersionReleaseDate": "2025-09-01T10:00:00Z", "releaseNotes": "Bug fixes.",
+        "price": 0.0, "currency": "USD", "primaryGenreName": "Medical",
+        "trackViewUrl": "https://apps.apple.com/us/app/abc-patient-scheduler/id1111111111?uo=4"}]},
+    "https://itunes.apple.com/lookup?id=2222222222*": {"results": [{
+        "trackId": 2222222222, "trackName": "MediBook", "sellerName": "MediBook Ltd",
+        "sellerUrl": "https://medibook.io", "averageUserRating": 4.6, "userRatingCount": 2310, "version": "5.1",
+        "currentVersionReleaseDate": "2026-09-20T10:00:00Z", "price": 0.0, "currency": "USD",
+        "trackViewUrl": "https://apps.apple.com/us/app/medibook/id2222222222"}]},
+    "https://itunes.apple.com/search?term=ClinicFlow*": {"results": [{
+        "kind": "software", "trackId": 3333333333, "trackName": "ClinicFlow Mobile", "sellerName": "ClinicFlow Inc.",
+        "sellerUrl": "https://www.clinicflow.com", "averageUserRating": 4.2, "userRatingCount": 88, "version": "1.9",
+        "currentVersionReleaseDate": "2026-08-01T10:00:00Z",
+        "trackViewUrl": "https://apps.apple.com/us/app/clinicflow-mobile/id3333333333"}]},
+    "https://itunes.apple.com/search?term=*": {"results": [{
+        # Name collision: must NOT be attributed to "ABC Healthcare" (different developer and domain).
+        "kind": "software", "trackId": 9999999999, "trackName": "ABC Kids Learning", "sellerName": "ABC Learning LLC",
+        "sellerUrl": "https://abckids.example", "averageUserRating": 4.9, "userRatingCount": 50000,
+        "trackViewUrl": "https://apps.apple.com/us/app/abc-kids/id9999999999"}]},
+    "https://itunes.apple.com/us/rss/customerreviews/page=1/id=2222222222*": {"feed": {"entry": [
+        {"author": {"name": {"label": "Dr. Smith"}}, "im:rating": {"label": "5"}, "title": {"label": "Great"},
+         "content": {"label": "Booking is fast and the AI assistant is handy."}, "im:version": {"label": "5.1"}},
+        {"author": {"name": {"label": "Pat"}}, "im:rating": {"label": "2"}, "title": {"label": "Pricey"},
+         "content": {"label": "Too expensive for a small practice since the subscription went up."},
+         "im:version": {"label": "5.1"}},
+        {"author": {"name": {"label": "Lee"}}, "im:rating": {"label": "1"}, "title": {"label": "Charged twice"},
+         "content": {"label": "I was charged twice for my subscription."}, "im:version": {"label": "5.1"}},
+    ]}},
+    "https://itunes.apple.com/us/rss/customerreviews/*": {"feed": {}},
 }
+
+APP_STORE_PAGES = {
+    "https://play.google.com/store/apps/details?id=com.medibook.app&hl=en_US&gl=US": html(
+        "MediBook - Apps on Google Play", "<h1>MediBook</h1>",
+        head='<script type="application/ld+json">' + json.dumps({
+            "@context": "https://schema.org", "@type": "SoftwareApplication", "name": "MediBook",
+            "applicationCategory": "MEDICAL", "author": {"@type": "Person", "name": "MediBook Ltd",
+                                                          "url": "https://medibook.io"},
+            "aggregateRating": {"@type": "AggregateRating", "ratingValue": "4.4", "ratingCount": "1520"},
+            "offers": [{"@type": "Offer", "price": "0", "priceCurrency": "USD"}]}) + "</script>"),
+}
+SITES.update(APP_STORE_PAGES)
+
+# A client that does have an app (with crash-heavy reviews) — used by the app-store tests.
+CLIENT_APP_REVIEWS = {"feed": {"entry": [
+    {"author": {"name": {"label": "jane_doe_88"}}, "im:rating": {"label": str(r)}, "title": {"label": t},
+     "content": {"label": c}, "im:version": {"label": "2.3.0"}}
+    for r, t, c in [
+        (1, "Keeps crashing", "The app crashes every time I open my appointments. Useless."),
+        (1, "Crash on booking", "Crashing when I try to book. Call me at +1 512 555 0199 if you need details."),
+        (2, "Buggy", "So buggy since the last update, the calendar is broken."),
+        (1, "Freezes", "App freezes on the login screen and then crashes."),
+        (2, "Can't sign in", "Cannot sign in, password reset email never arrives (me@example.com)."),
+        (3, "Please add SMS", "Works ok but please add SMS reminders, my patients don't read email."),
+        (3, "Missing texts", "Would be nice to get SMS reminders instead of email."),
+        (5, "Love it", "Easy online booking for my clinic."),
+        (4, "Good", "Nice and simple."),
+    ]]}}
+CLIENT_APP_SITES = {
+    "https://abc-healthcare.com/products/patient-scheduler": html(
+        "Patient Scheduler", "<h1>Patient Scheduler</h1><p>Online booking for clinics with a patient portal "
+        "and dashboard.</p><a href='https://apps.apple.com/us/app/abc-patient-scheduler/id1111111111'>"
+        "Download on the App Store</a>", "Patient Scheduler: online booking for clinics"),
+    "https://itunes.apple.com/us/rss/customerreviews/page=1/id=1111111111*": CLIENT_APP_REVIEWS,
+}
+
+
+def sites_with_client_app() -> dict:
+    """SITES plus a client iOS app; prefix keys are placed before the generic fallbacks."""
+    out = {k: v for k, v in CLIENT_APP_SITES.items()}
+    out.update({k: v for k, v in SITES.items() if k not in out})
+    return out
 
 
 # Responses that need specific methods/headers (security review, OSV.dev).

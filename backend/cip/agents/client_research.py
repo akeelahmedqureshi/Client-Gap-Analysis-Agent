@@ -148,7 +148,8 @@ class ClientResearchAgent(Agent):
         return ApprovalRequest(
             gate="external_research",
             title="Start external research",
-            what="Public web pages of the client (and later, competitor websites and web search results).",
+            what="Public web pages of the client (and later, competitor websites, web search results and public "
+                 "App Store / Google Play listings and reviews).",
             why="To identify the client's products, services and contacts and to discover comparable products.",
             target=", ".join(targets) or rec.client.name,
             data_analyzed="Publicly available website content only; role-based contact details, no personal data.",

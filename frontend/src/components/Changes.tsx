@@ -28,6 +28,12 @@ const KIND_LABEL: Record<string, string> = {
   client_announcement: "Announcement",
   client_hiring: "Hiring",
   client_hiring_volume: "Hiring",
+  client_app_new: "Client app",
+  client_app_rating: "Client app",
+  client_app_release: "Client app",
+  client_app_theme: "App reviews",
+  competitor_app_new: "Competitor app",
+  competitor_app_rating: "Competitor app",
 };
 
 /** List of run-to-run changes. Evidence citations resolve when an EvidenceContext for the run is provided. */

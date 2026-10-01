@@ -128,6 +128,19 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "client": {**client_pricing, "cite": cite(client_pricing.get("evidence_ids"))} if client_pricing else None,
         "competitors": [{**r, "cite": cite(r.get("evidence_ids"))} for r in pricing.get("competitors", [])],
     }
+    apps = ctx.data("app_store")
+    sections["app_store"] = None if not apps.get("enabled") or not (apps.get("client_apps") or
+                                                                    apps.get("competitor_apps")) else {
+        "client_apps": [{**a, "cite": cite([a["evidence_id"]])} for a in apps.get("client_apps", [])],
+        "competitor_apps": [{"name": e["name"], "apps": [{**a, "cite": cite([a["evidence_id"]])} for a in e["apps"]]}
+                            for e in apps.get("competitor_apps", [])],
+        "market": apps.get("market", {}),
+        "reviews": {**(apps.get("client_reviews") or {}),
+                    "themes": [{**t, "cite": cite(t.get("evidence_ids"))}
+                               for t in (apps.get("client_reviews") or {}).get("themes", [])]},
+        "requests": [{**r, "cite": cite(r.get("evidence_ids"))} for r in apps.get("requests", [])],
+        "notes": apps.get("notes", []), "method": apps.get("method"),
+    }
     sections["feature_comparison"] = comparison
     sections["gap_analysis"] = [{**g, "cite": cite(g.get("evidence_ids"))} for g in gaps]
     sections["opportunities"] = prio.get("opportunities", [])
@@ -284,6 +297,47 @@ def render_markdown(report: dict) -> str:
                     + (f" {m['excluded_other_currency']} competitor(s) priced in another currency were excluded."
                        if m.get("excluded_other_currency") else "")]
         out.append("")
+
+    ap = s.get("app_store")
+    if ap:
+        def cell(text) -> str:
+            return str(text).replace("|", "/").replace("\n", " ")
+
+        def app_row(owner: str, a: dict) -> str:
+            age = a.get("days_since_update")
+            return (f"| {cell(owner)} | [{cell(a['name'])}]({a['url']}) | {'iOS' if a['platform'] == 'ios' else 'Android'}"
+                    f" | {a['rating']:g}★ | {a.get('rating_count') or 0:,} | "
+                    f"{(a.get('updated') or '')[:10] or '—'}{' ⚠ stale' if age and age > 180 else ''} | "
+                    f"{a['cite'].strip() or '—'} |" if a.get("rating") else
+                    f"| {cell(owner)} | [{cell(a['name'])}]({a['url']}) | "
+                    f"{'iOS' if a['platform'] == 'ios' else 'Android'} | — | — | — | {a['cite'].strip() or '—'} |")
+
+        out += ["### Mobile apps (app stores)", "",
+                "| Company | App | Platform | Rating | Ratings | Last release | Evidence |",
+                "|---|---|---|---|---|---|---|"]
+        out += [app_row("**Client**", a) for a in ap["client_apps"]]
+        if not ap["client_apps"]:
+            out.append("| **Client** | _no app found_ | — | — | — | — | — |")
+        out += [app_row(e["name"], a) for e in ap["competitor_apps"] for a in e["apps"]]
+        m = ap.get("market") or {}
+        if m.get("competitor_median_rating"):
+            out += ["", f"Competitor median rating **{m['competitor_median_rating']:g}★**"
+                        + (f"; client **{m['client_rating']:g}★** ({m['client_rating_count']:,} ratings)."
+                           if m.get("client_rating") else ".")]
+        rv = ap.get("reviews") or {}
+        if rv.get("total"):
+            sen = rv.get("sentiment", {})
+            out += ["", f"**Recent client reviews ({rv['total']}, average {rv['average']:g}★):** "
+                        f"{sen.get('negative', 0)} negative, {sen.get('neutral', 0)} neutral, "
+                        f"{sen.get('positive', 0)} positive.", ""]
+            for t in rv.get("themes", [])[:5]:
+                quote = t["examples"][0]["quote"].replace("\n", " ") if t.get("examples") else ""
+                out.append(f"- **{t['label']}**: {t['negative']} negative / {t['count']} mentions — "
+                           f"_\"{quote}\"_{t['cite']}")
+        if ap.get("requests"):
+            out += ["", "**Customer feature requests:** " + "; ".join(
+                f"{r['name']} ({r['count']} review(s)){r['cite']}" for r in ap["requests"])]
+        out += ["", f"_{ap['method']}_"] + [f"_{n}_" for n in ap.get("notes", [])] + [""]
 
     fc = s["feature_comparison"]
     comps = fc.get("competitors", [])

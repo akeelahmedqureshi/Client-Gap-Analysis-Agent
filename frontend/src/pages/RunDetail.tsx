@@ -11,7 +11,7 @@ import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 import { ChangeList, SeverityBadge } from "../components/Changes";
 
-const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "Competitors", "Pricing", "Comparison", "Gaps", "Opportunities",
+const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
   "Roadmap", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
@@ -125,6 +125,7 @@ export default function RunDetailPage() {
         {tab === "Competitors" && <CompetitorsTab runId={runId} enabled={done("competitor_research")} />}
         {tab === "Security" && <SecurityTab runId={runId} enabled={done("security_review")} />}
         {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
+        {tab === "Apps" && <AppsTab runId={runId} enabled={["completed", "skipped"].includes(r.agents["app_store"])} />}
         {tab === "Comparison" && <ComparisonTab runId={runId} enabled={done("feature_comparison")} />}
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
@@ -442,6 +443,114 @@ function PricingTab({ runId, enabled }: { runId: string; enabled: boolean }) {
             ))}
           </ul>
         ) : <Empty>No pricing gaps — the client's pricing practices match the market.</Empty>}
+      </Card>
+    </div>
+  );
+}
+
+function Stars({ value }: { value: number | null | undefined }) {
+  if (value == null) return <span className="text-slate-400">—</span>;
+  return <span className="font-medium" title={`${value} out of 5`}>{value.toFixed(1)}★</span>;
+}
+
+function AppsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+  const res = useAgent(runId, "app_store", enabled);
+  if (!enabled) return <Pending />;
+  const d = res.data?.data;
+  if (!d) return null;
+  if (!d.enabled || d.reason) return <Empty>App-store analysis did not run ({d.reason ?? "disabled with CIP_APP_STORE_ENABLED"}).</Empty>;
+  const m = d.market ?? {};
+  const rv = d.client_reviews ?? {};
+  const row = (owner: React.ReactNode, a: any) => (
+    <tr key={`${a.platform}-${a.app_id}`} className="border-t align-top">
+      <td className="py-1.5 font-medium">{owner}</td>
+      <td><a className="text-indigo-600 underline" href={a.url} target="_blank" rel="noreferrer">{a.name}</a>
+        <div className="text-xs text-slate-500">{a.developer} · {a.found_via}</div></td>
+      <td>{a.platform === "ios" ? "iOS" : "Android"}</td>
+      <td><Stars value={a.rating} /></td>
+      <td>{a.rating_count?.toLocaleString() ?? "—"}</td>
+      <td className="text-xs">{a.version ?? ""} {a.updated ? new Date(a.updated).toLocaleDateString() : "—"}
+        {a.days_since_update > 180 && <span className="ml-1 rounded bg-amber-100 text-amber-800 px-1">stale</span>}</td>
+      <td><EvidenceRefs ids={[a.evidence_id]} /></td>
+    </tr>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[["Client rating", m.client_rating ? `${m.client_rating}★ (${m.client_rating_count.toLocaleString()})` : "no app found"],
+          ["Competitor median", m.competitor_median_rating ? `${m.competitor_median_rating}★` : "—"],
+          ["Competitors with apps", `${m.competitors_with_apps ?? 0} of ${m.competitors_checked ?? 0}`],
+          ["Recent client reviews", rv.total ? `${rv.total} · avg ${rv.average}★` : "—"]].map(([k, v]) => (
+          <div key={k} className="bg-white border rounded-xl p-3">
+            <div className="text-xs text-slate-500">{k}</div>
+            <div className="text-lg font-semibold">{v}</div>
+          </div>
+        ))}
+      </div>
+      <Card title="Apps in the stores">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-500">
+              <tr><th className="py-1">Company</th><th>App</th><th>Platform</th><th>Rating</th><th>Ratings</th><th>Last release</th><th /></tr>
+            </thead>
+            <tbody>
+              {d.client_apps.length ? d.client_apps.map((a: any) => row("Client", a)) :
+                <tr className="border-t"><td className="py-1.5 font-medium">Client</td><td colSpan={6} className="text-slate-500 italic">No app found in the App Store or on Google Play</td></tr>}
+              {d.competitor_apps.map((e: any) => e.apps.map((a: any) => row(e.name, a)))}
+            </tbody>
+          </table>
+        </div>
+        {d.notes.map((n: string) => <p key={n} className="text-xs text-slate-500 mt-2">{n}</p>)}
+      </Card>
+      {rv.total > 0 && (
+        <Card title={`What the client's users say (${rv.sentiment.negative} negative · ${rv.sentiment.neutral} neutral · ${rv.sentiment.positive} positive)`}>
+          <ul className="space-y-3 text-sm">
+            {rv.themes.map((t: any) => (
+              <li key={t.theme}>
+                <div><span className="font-medium">{t.label}</span>
+                  <span className="text-slate-500"> — {t.negative} negative / {t.count} mentions</span> <EvidenceRefs ids={t.evidence_ids} /></div>
+                {t.examples.slice(0, 2).map((ex: any, i: number) => (
+                  <blockquote key={i} className="mt-1 border-l-2 border-slate-200 pl-2 text-slate-600 italic">
+                    {"★".repeat(ex.rating)} “{ex.quote}”
+                  </blockquote>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {(d.requests.length > 0 || d.competitor_review_themes.length > 0) && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <Card title="Feature requests in reviews">
+            {d.requests.length ? (
+              <ul className="text-sm space-y-1">
+                {d.requests.map((r: any) => <li key={r.feature_id}><span className="font-medium">{r.name}</span> — {r.count} review(s) <EvidenceRefs ids={r.evidence_ids} /></li>)}
+              </ul>
+            ) : <Empty>No feature requests detected.</Empty>}
+            <p className="text-xs text-slate-500 mt-2">Requests raise the market-demand factor of the matching gap by +1.</p>
+          </Card>
+          <Card title="Competitor review complaints">
+            {d.competitor_review_themes.length ? (
+              <ul className="text-sm space-y-1">
+                {d.competitor_review_themes.map((c: any) => (
+                  <li key={c.competitor_id}><span className="font-medium">{c.name}</span> ({c.reviews} recent reviews, avg {c.average}★):{" "}
+                    {c.themes.map((t: any) => `${t.label} (${t.negative})`).join(", ")}</li>
+                ))}
+              </ul>
+            ) : <Empty>No recurring complaints found.</Empty>}
+          </Card>
+        </div>
+      )}
+      <Card title="App gaps">
+        {d.gaps.length ? (
+          <ul className="space-y-2 text-sm">
+            {d.gaps.map((g: any) => (
+              <li key={g.id}><span className="font-medium">{g.name}</span><BasisTag basis={g.basis} /> <Confidence value={g.confidence} /> <EvidenceRefs ids={g.evidence_ids} />
+                <div className="text-slate-600">{g.description}</div></li>
+            ))}
+          </ul>
+        ) : <Empty>No app-related gaps.</Empty>}
+        <p className="text-xs text-slate-500 mt-2">{d.method}</p>
       </Card>
     </div>
   );

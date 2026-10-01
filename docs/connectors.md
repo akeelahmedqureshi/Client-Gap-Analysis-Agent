@@ -74,6 +74,19 @@ HTTP.
 Implementations: `TavilySearchProvider`, `BraveSearchProvider` and `NullSearchProvider`. Select one
 with `CIP_SEARCH_PROVIDER`.
 
+## App stores: `connectors/research/appstore.py`
+
+- `apple_lookup`, `apple_search`, `apple_reviews`: the public iTunes Search/Lookup API and the App
+  Store customer-review feed.
+- `play_listing`: the public Google Play page, fetched by `WebFetcher` (robots.txt respected). Its
+  schema.org `SoftwareApplication` data supplies the name, developer, rating and rating count. Play
+  reviews have no public API and are not collected.
+- `ownership()` decides whether a listing belongs to a company.
+- `analyze_reviews()` produces the deterministic themes and feature requests.
+
+Settings: `CIP_APP_STORE_ENABLED`, `CIP_APP_STORE_COUNTRY` (storefront, default `us`) and
+`CIP_APP_STORE_COMPETITOR_REVIEWS` (how many competitors' reviews are analysed).
+
 ## Company research: `CompanyResearchProvider`
 
 ```python

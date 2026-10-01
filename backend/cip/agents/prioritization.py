@@ -70,6 +70,28 @@ SECURITY_GAP_FACTORS: dict[str, dict[str, float]] = {
     "Vulnerability disclosure policy": dict(business_value=2, user_impact=0, revenue_potential=0,
                                             strategic_alignment=3, ai_opportunity=0, complexity=1, risk=0),
 }
+APP_GAP_FACTORS: dict[str, dict[str, float]] = {
+    "Mobile app stability (crashes & bugs)": dict(market_demand=4, competitive_gap=3, business_value=4, user_impact=5, revenue_potential=2,
+                                                  strategic_alignment=4, ai_opportunity=0, complexity=2, risk=1),
+    "Mobile app performance": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=4, revenue_potential=1, strategic_alignment=3,
+                                   ai_opportunity=0, complexity=3, risk=1),
+    "Mobile login & account access": dict(market_demand=4, competitive_gap=3, business_value=4, user_impact=5, revenue_potential=2,
+                                          strategic_alignment=4, ai_opportunity=0, complexity=2, risk=2),
+    "Reliable notifications & reminders": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=4, revenue_potential=2,
+                                               strategic_alignment=3, ai_opportunity=0, complexity=2, risk=1),
+    "Mobile data sync reliability": dict(market_demand=3, competitive_gap=2, business_value=4, user_impact=4, revenue_potential=1,
+                                         strategic_alignment=4, ai_opportunity=0, complexity=3, risk=2),
+    "Mobile app usability": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=4, revenue_potential=2, strategic_alignment=3,
+                                 ai_opportunity=1, complexity=3, risk=1),
+    "Customer support responsiveness": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=3, revenue_potential=2,
+                                            strategic_alignment=3, ai_opportunity=2, complexity=2, risk=1),
+    "In-app pricing & subscription experience": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=3, revenue_potential=3,
+                                                     strategic_alignment=3, ai_opportunity=0, complexity=2, risk=2),
+    "App store rating below competitors": dict(market_demand=4, competitive_gap=4, business_value=4, user_impact=4, revenue_potential=3,
+                                               strategic_alignment=4, ai_opportunity=0, complexity=3, risk=1),
+    "Mobile app release cadence": dict(market_demand=2, competitive_gap=2, business_value=2, user_impact=2, revenue_potential=1, strategic_alignment=3,
+                                       ai_opportunity=0, complexity=2, risk=1),
+}
 GENERIC_FACTORS = dict(business_value=3, user_impact=3, revenue_potential=2, strategic_alignment=3,
                        ai_opportunity=1, complexity=3, risk=2)
 
@@ -100,7 +122,8 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
     tf = ctx.taxonomy.get(gap["feature_id"]) if gap.get("feature_id") else None
     base = dict(tf.defaults) if tf else dict(TECH_GAP_FACTORS.get(gap["name"])
                                               or PRICING_GAP_FACTORS.get(gap["name"])
-                                              or SECURITY_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
+                                              or SECURITY_GAP_FACTORS.get(gap["name"])
+                                              or APP_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
     n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
     coverage = len(gap.get("competitors_with", [])) / n_comp
     base["market_demand"] = round(1 + 4 * coverage, 2) if gap["gap_type"] not in ("technology", "security") else 2.0
@@ -116,6 +139,10 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
     if not stack:
         feasibility -= 0.5  # stack unknown => more uncertainty
     base["technical_feasibility"] = feasibility
+    if gap["name"] in APP_GAP_FACTORS:
+        # Quality gaps evidenced by customer reviews: demand comes from the reviews, not competitor coverage.
+        base["market_demand"] = APP_GAP_FACTORS[gap["name"]]["market_demand"]
+        base["competitive_gap"] = APP_GAP_FACTORS[gap["name"]]["competitive_gap"]
     return {k: clamp_factor(v) for k, v in base.items()}
 
 
@@ -159,6 +186,12 @@ def default_narrative(gap: dict) -> dict[str, str]:
                 "potential_users": "Prospects evaluating the product; sales and marketing teams",
                 "revenue_opportunity": "Higher trial-to-paid conversion and win-rate against priced competitors.",
                 "user_impact_text": "Easier evaluation and purchase decisions for prospects."}
+    if gap["name"] in APP_GAP_FACTORS:
+        return {"business_opportunity": f"Win back app users and ratings: {gap['name']}.",
+                "potential_users": "Mobile app users (patients/customers) and support teams",
+                "revenue_opportunity": "Better store ratings lift installs and conversion; fewer churned users "
+                                       "and support tickets.",
+                "user_impact_text": "A more reliable, pleasant mobile experience."}
     if t == "ai":
         return {"business_opportunity": f"Differentiate with {gap['name']} to automate work and increase engagement.",
                 "potential_users": "End users and internal operations teams",
@@ -202,6 +235,8 @@ class PrioritizationAgent(Agent):
             errors.append(f"LLM opportunity analysis failed: {exc}")
 
         signals = ctx.data("client_research").get("hiring", {}).get("signals", [])
+        # Features customers ask for in app-store reviews (2+ reviews): evidence of demand.
+        requested = {r["feature_id"]: r for r in ctx.data("app_store").get("requests", []) if r["count"] >= 2}
         scored: list[tuple[float, dict, Opportunity, Recommendation]] = []
         for g in gaps:
             factors = baseline_factors(ctx, g, stack)
@@ -211,6 +246,9 @@ class PrioritizationAgent(Agent):
             if hiring:
                 # The client is staffing up in this area: evidence of strategic intent.
                 factors["strategic_alignment"] = clamp_factor(factors.get("strategic_alignment", 0) + 1)
+            request = requested.get(g.get("feature_id") or "")
+            if request:
+                factors["market_demand"] = clamp_factor(factors.get("market_demand", 0) + 1)
             narrative = default_narrative(g)
             approach = ""
             llm = llm_by_gap.get(g["id"])
@@ -227,6 +265,9 @@ class PrioritizationAgent(Agent):
                 narrative["business_opportunity"] += (
                     f" The client is currently hiring {hiring['count']} {hiring['area']} role(s), "
                     "signalling strategic intent.")
+            if request:
+                narrative["business_opportunity"] += (
+                    f" {request['count']} recent App Store reviews of the client's app ask for it.")
             score = score_opportunity(factors, ctx.scoring)
             opp = Opportunity(gap_id=g["id"], name=g["name"], business_opportunity=narrative["business_opportunity"],
                               potential_users=narrative["potential_users"],
@@ -250,7 +291,8 @@ class PrioritizationAgent(Agent):
                                   f"{len(g.get('competitors_with', []))} competitor(s)."
                                   if g.get("competitors_with") else
                                   f"{g['name']} available to users as a differentiator."),
-                evidence_ids=g.get("evidence_ids", []) + ([hiring["evidence_id"]] if hiring else []), score=score,
+                evidence_ids=g.get("evidence_ids", []) + ([hiring["evidence_id"]] if hiring else [])
+                + (request["evidence_ids"] if request else []), score=score,
             )
             scored.append((normalized(score, ctx.scoring), g, opp, rec))
 

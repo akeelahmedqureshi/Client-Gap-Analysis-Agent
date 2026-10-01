@@ -7,6 +7,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.agents.prioritization import APP_GAP_FACTORS
 from cip.core.architecture import build_architecture
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import AgentResult, Basis, Finding, ImplementationPlan
@@ -103,6 +104,28 @@ def template_plan(rec: dict, ctx: RunContext, stack: dict[str, list[str]]) -> Im
             estimated_effort=EFFORT_BY_COMPLEXITY.get(rec["complexity"], "TBD"),
             recommended_team=["Product manager", "Backend engineer", "Frontend engineer", "Finance / RevOps"],
             acceptance_criteria=[f"{feature} live and measurable", "Conversion and ARPA tracked before/after"],
+            basis=Basis.ESTIMATE,
+        )
+    if feature in APP_GAP_FACTORS:
+        crash = "stability" in feature.lower() or "rating" in feature.lower()
+        return ImplementationPlan(
+            recommendation_id=rec["id"], feature=feature,
+            objective=f"Improve the mobile app: {rec['problem']}",
+            architecture_impact="Quality work in the existing mobile apps and the APIs they call; no new product surface.",
+            frontend_changes=["Fix the issues quoted in recent app-store reviews (see evidence)",
+                              "In-app feedback prompt that routes unhappy users to support before the store"],
+            backend_changes=["Harden the API endpoints used by the failing flows (timeouts, retries, idempotency)"],
+            infrastructure_changes=(["Crash reporting (e.g. Sentry / Firebase Crashlytics) with release health"]
+                                    if crash else []) + ["Automated mobile builds and staged store rollouts (CI/CD)"],
+            security_changes=["Keep authentication tokens in the platform keychain / keystore"]
+            if "login" in feature.lower() else [],
+            testing_requirements=["UI tests for the flows named in reviews", "Device-matrix smoke tests before release"],
+            dependencies=rec.get("dependencies", []),
+            estimated_effort=EFFORT_BY_COMPLEXITY.get(rec["complexity"], "TBD"),
+            recommended_team=["Mobile engineer", "QA engineer", "Backend engineer"],
+            acceptance_criteria=["Crash-free sessions ≥ 99.5%" if crash else f"{feature} issues resolved",
+                                 "Theme no longer prominent in negative reviews at the next analysis",
+                                 "Store rating trend improving"],
             basis=Basis.ESTIMATE,
         )
     slug = feature.lower().split("(")[0].strip().replace(" / ", "_").replace(" ", "_").replace("-", "_")[:30]
