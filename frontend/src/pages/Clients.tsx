@@ -18,7 +18,7 @@ export default function ClientsPage() {
             <tbody>
               {clients.data.map((c) => (
                 <tr key={c.id} className="border-t">
-                  <td className="py-2 font-medium">{c.name}</td>
+                  <td className="py-2 font-medium"><Link className="text-indigo-600 underline" to={`/clients/${c.id}`}>{c.name}</Link></td>
                   <td>{c.domain ?? "—"}</td>
                   <td>{c.industry ?? "—"}</td>
                   <td><Link className="text-indigo-600 underline" to={`/projects?client_id=${c.id}`}>{c.project_count}</Link></td>

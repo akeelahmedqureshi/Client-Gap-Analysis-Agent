@@ -11,6 +11,7 @@ import RunsPage from "./pages/Runs";
 import RunDetailPage from "./pages/RunDetail";
 import SettingsPage from "./pages/Settings";
 import AuditPage from "./pages/Audit";
+import ClientDetailPage from "./pages/ClientDetail";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -65,6 +66,7 @@ function Shell() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/clients/:clientId" element={<ClientDetailPage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:runId" element={<RunDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />

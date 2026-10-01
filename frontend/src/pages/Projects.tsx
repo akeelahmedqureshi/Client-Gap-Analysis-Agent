@@ -6,6 +6,7 @@ import type { Project, User } from "../lib/types";
 import { Badge, Button, Card, Empty } from "../components/ui";
 import StartRunDialog from "../components/StartRunDialog";
 import ProjectAccessDialog from "../components/ProjectAccessDialog";
+import RepositoriesDialog from "../components/RepositoriesDialog";
 
 export default function ProjectsPage() {
   const [params] = useSearchParams();
@@ -16,6 +17,7 @@ export default function ProjectsPage() {
   });
   const [starting, setStarting] = useState<Project | null>(null);
   const [editingAccess, setEditingAccess] = useState<Project | null>(null);
+  const [editingRepos, setEditingRepos] = useState<Project | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
   const isAdmin = me.data?.role === "admin";
 
@@ -37,7 +39,7 @@ export default function ProjectsPage() {
                       <div className="font-medium">{p.name}{p.restricted && <span className="ml-2 text-xs rounded bg-slate-200 px-1.5 py-0.5" title="Visible only to admins and members">🔒 restricted</span>}</div>
                       <div className="text-xs text-slate-500 max-w-md">{p.description}</div>
                     </td>
-                    <td>{p.client_name}</td>
+                    <td><Link className="text-indigo-600 underline" to={`/clients/${p.client_id}`}>{p.client_name}</Link></td>
                     <td className="text-xs">{p.record.project.technology.join(", ") || "—"}</td>
                     <td className="text-xs">
                       {p.url && <div>🌐 {p.url}</div>}
@@ -49,6 +51,7 @@ export default function ProjectsPage() {
                       ) : "—"}
                     </td>
                     <td className="text-right space-x-1 whitespace-nowrap">
+                      {me.data?.role !== "viewer" && <Button variant="secondary" onClick={() => setEditingRepos(p)}>Repos</Button>}
                       {isAdmin && <Button variant="secondary" onClick={() => setEditingAccess(p)}>Access</Button>}
                       {me.data?.role !== "viewer" && <Button onClick={() => setStarting(p)}>Analyze</Button>}
                     </td>
@@ -63,6 +66,7 @@ export default function ProjectsPage() {
       </Card>
       {starting && <StartRunDialog project={starting} onClose={() => setStarting(null)} />}
       {editingAccess && <ProjectAccessDialog project={editingAccess} onClose={() => setEditingAccess(null)} />}
+      {editingRepos && <RepositoriesDialog project={editingRepos} onClose={() => setEditingRepos(null)} />}
     </div>
   );
 }

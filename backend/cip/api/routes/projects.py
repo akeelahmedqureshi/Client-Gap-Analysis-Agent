@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cip.api.deps import require_role
-from cip.db.models import AnalysisRun, Client, Project, ProjectMember, User
+from cip.api.deps import not_found, require_role
+from cip.connectors.source_control import parse_repo_url
+from cip.db.models import AgentExecution, AnalysisRun, Client, Project, ProjectMember, User
 from cip.db.session import get_session
 from cip.services import audit
 from cip.services.access import project_for, visible_projects
@@ -36,6 +37,19 @@ class ClientOut(BaseModel):
     industry: str | None
     project_count: int
     created_at: datetime
+
+
+class RepositoriesIn(BaseModel):
+    urls: list[str] = Field(default_factory=list, max_length=10)
+
+
+class ClientDetailOut(BaseModel):
+    client: ClientOut
+    projects: list[ProjectOut]
+    # From the most recent completed run (visible to the caller) that researched this client.
+    profile: dict | None = None
+    profile_run_id: str | None = None
+    recommendations: list[dict] = Field(default_factory=list)
 
 
 class AccessOut(BaseModel):
@@ -74,6 +88,74 @@ async def list_clients(user: User = Depends(require_role("viewer")),
     # Non-admins only see clients that have at least one project visible to them.
     return [ClientOut(id=c.id, name=c.name, domain=c.domain, industry=c.industry, project_count=counts.get(c.id, 0),
                       created_at=c.created_at) for c in clients if user.role == "admin" or c.id in counts]
+
+
+@router.get("/clients/{client_id}", response_model=ClientDetailOut)
+async def get_client(client_id: str, user: User = Depends(require_role("viewer")),
+                     session: AsyncSession = Depends(get_session)) -> ClientDetailOut:
+    client = await session.get(Client, client_id)
+    if not client or client.org_id != user.org_id:
+        raise not_found("Client")
+    rows = (await session.execute(select(Project).where(Project.client_id == client.id, visible_projects(user))
+                                  .order_by(Project.created_at.desc()))).scalars().all()
+    if not rows and user.role != "admin":
+        raise not_found("Client")  # nothing visible to this user
+    latest = await _latest_runs(session, [p.id for p in rows])
+    detail = ClientDetailOut(
+        client=ClientOut(id=client.id, name=client.name, domain=client.domain, industry=client.industry,
+                         project_count=len(rows), created_at=client.created_at),
+        projects=[_out(p, client, latest) for p in rows],
+    )
+    if rows:
+        names = {p.id: p.name for p in rows}
+        execs = (await session.execute(
+            select(AgentExecution, AnalysisRun).join(AnalysisRun, AnalysisRun.id == AgentExecution.run_id)
+            .where(AnalysisRun.project_id.in_(names), AgentExecution.status == "completed",
+                   AgentExecution.agent.in_(["client_research", "opportunity_prioritization"]))
+            .order_by(AnalysisRun.created_at.desc()))).all()
+        seen_projects: set[str] = set()
+        for ex, run in execs:
+            data = (ex.result or {}).get("data", {})
+            if ex.agent == "client_research" and detail.profile is None and data.get("profile"):
+                detail.profile, detail.profile_run_id = data["profile"], run.id
+            elif ex.agent == "opportunity_prioritization" and run.project_id not in seen_projects:
+                seen_projects.add(run.project_id)  # latest run per project only
+                for rec in data.get("recommendations", [])[:3]:
+                    detail.recommendations.append({
+                        "project_id": run.project_id, "project": names[run.project_id], "run_id": run.id,
+                        "feature": rec["feature"], "phase": rec["phase"], "complexity": rec["complexity"],
+                        "score": rec["score"]["total"], "opportunity": rec["opportunity"]})
+    return detail
+
+
+@router.put("/projects/{project_id}/repositories", response_model=ProjectOut)
+async def set_repositories(project_id: str, body: RepositoriesIn, request: Request,
+                           user: User = Depends(require_role("analyst")),
+                           session: AsyncSession = Depends(get_session)) -> ProjectOut:
+    """Replace the GitHub/GitLab repositories analysed for a project (applies to future runs)."""
+    p = await project_for(session, user, project_id)
+    github: list[str] = []
+    gitlab: list[str] = []
+    invalid = []
+    for url in body.urls:
+        ref = parse_repo_url(url.strip())
+        if ref is None:
+            invalid.append(url)
+        elif ref.url not in github + gitlab:
+            (github if ref.provider == "github" else gitlab).append(ref.url)
+    if invalid:
+        raise HTTPException(422, f"Not a GitHub/GitLab repository URL: {invalid}")
+    record = dict(p.record)
+    sources = dict(record.get("sources") or {})
+    before = sources.get("github", []) + sources.get("gitlab", [])
+    sources["github"], sources["gitlab"] = github, gitlab
+    record["sources"] = sources
+    p.record = record  # reassign so the JSON column change is persisted
+    audit.record(session, request, user, "project.repositories_changed", "project", p.id,
+                 before=before, after=github + gitlab)
+    await session.commit()
+    c = await session.get(Client, p.client_id)
+    return _out(p, c, await _latest_runs(session, [p.id]))
 
 
 @router.get("/projects", response_model=list[ProjectOut])

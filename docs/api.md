@@ -35,8 +35,10 @@ reset, role change or deactivation invalidates existing sessions.
 | GET | `/api/uploads/{id}` | viewer | Preview again |
 | POST | `/api/uploads/{id}/import` | analyst | `{rows?: int[], include_duplicates?: bool}`. Creates clients (de-duplicated by domain or name) and projects |
 | GET | `/api/clients` | viewer | Clients with project counts |
+| GET | `/api/clients/{id}` | viewer | Client detail: visible projects, the latest researched company profile, and the top 3 recommendations from the latest run of each project |
 | GET | `/api/projects?client_id=` | viewer | Projects with their latest run |
 | GET | `/api/projects/{id}` | viewer | One project |
+| PUT | `/api/projects/{id}/repositories` | analyst | `{urls: [...]}`. Replaces the GitHub/GitLab repositories analysed in future runs; URLs are validated and normalized |
 | GET | `/api/projects/{id}/access` | admin | `{restricted, member_ids}` |
 | PUT | `/api/projects/{id}/access` | admin | `{restricted: bool, member_ids: [user ids]}`. Restricted projects, and their runs, evidence and reports, are visible only to admins and members; everyone else gets 404 |
 
@@ -67,6 +69,7 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | GET | `/api/connections` | viewer | Connections (tokens are never returned) |
 | POST | `/api/connections/token` | admin | `{provider: github|gitlab, host?, token}` |
 | DELETE | `/api/connections/{id}` | admin | Remove a connection |
+| GET | `/api/connections/{id}/repositories?q=` | analyst | Repositories the connected account can read (most recently pushed first), for the repository picker |
 | GET | `/api/connections/{provider}/authorize` | admin | Returns `{authorize_url}` |
 | GET | `/api/connections/{provider}/callback` | — | OAuth redirect target |
 

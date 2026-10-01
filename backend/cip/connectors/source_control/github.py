@@ -76,7 +76,8 @@ class GitHubProvider(SourceControlProvider):
         resp = await self._get("/user/repos", params={"per_page": min(limit, 100), "sort": "pushed"})
         out = []
         for d in resp.json():
-            ref = RepoRef("github", "github.com", d["full_name"])
+            host = (d.get("html_url") or "https://github.com/").split("/")[2]
+            ref = RepoRef("github", host, d["full_name"])
             out.append(self._meta(ref, d))
         return out
 

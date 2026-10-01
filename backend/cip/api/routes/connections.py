@@ -17,11 +17,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cip.api.deps import not_found, require_role
 from cip.config import get_settings
-from cip.connectors.source_control import GitHubProvider, GitLabProvider, SourceControlError
+from cip.connectors.source_control import (
+    GitHubProvider,
+    GitLabProvider,
+    RepoRef,
+    SourceControlError,
+    provider_for,
+)
 from cip.core.security.crypto import TokenCipher
 from cip.db.models import OAuthState, SourceConnection, User
 from cip.db.session import get_session
 from cip.services import audit
+from cip.services.tokens import make_token_resolver
 
 router = APIRouter(prefix="/api/connections", tags=["source control connections"])
 Provider = Literal["github", "gitlab"]
@@ -91,6 +98,37 @@ async def add_token(body: PatIn, request: Request, user: User = Depends(require_
                  host=host, token_type="pat")
     con = await _upsert(session, user.org_id, user.id, body.provider, host, body.token, "pat")
     return _out(con)
+
+
+class RepoOut(BaseModel):
+    url: str
+    full_name: str
+    private: bool | None
+    description: str | None
+    default_branch: str | None
+    pushed_at: str | None
+    archived: bool
+
+
+@router.get("/{connection_id}/repositories", response_model=list[RepoOut])
+async def list_repositories(connection_id: str, q: str | None = None, user: User = Depends(require_role("analyst")),
+                            session: AsyncSession = Depends(get_session)) -> list[RepoOut]:
+    """Repositories the connected account can read (most recently pushed first), for attaching to projects."""
+    con = await session.get(SourceConnection, connection_id)
+    if not con or con.org_id != user.org_id:
+        raise not_found("Connection")
+    token = await make_token_resolver(user.org_id)(con.provider, con.host)
+    if not token:
+        raise HTTPException(409, "This connection's token has expired; reconnect it in Settings")
+    provider = provider_for(RepoRef(con.provider, con.host, "_/_"), token)
+    try:
+        repos = await provider.list_repositories(limit=100)
+    except SourceControlError as exc:
+        raise HTTPException(502, f"{con.provider} API error: {exc}") from exc
+    needle = (q or "").lower()
+    return [RepoOut(url=r.ref.url, full_name=r.ref.full_name, private=r.private, description=r.description,
+                    default_branch=r.default_branch, pushed_at=r.pushed_at, archived=r.archived)
+            for r in repos if not needle or needle in r.ref.full_name.lower()]
 
 
 @router.delete("/{connection_id}", status_code=204)
