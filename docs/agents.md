@@ -123,6 +123,17 @@ low-confidence evidence.
 4. Phases: complexity ≤ 2 → Phase 1; ≤ 3 → Phase 2; ≤ 4 and not a large AI bet → Phase 3; otherwise
    Phase 4.
 
+**Architecture diagrams** (built by `enhancement_planning`, in `core/architecture.py`).
+
+- **Current:** a layered model of users, client apps, application, data, external services and the
+  platform band, built from the technologies code analysis detected. Without repository access it
+  uses the technologies declared in the CSV.
+- **Target:** the current model plus the components the roadmap introduces, highlighted. A component
+  is skipped when an existing technology already fills that role; for example, Stripe already covers
+  "Payments provider".
+- **Rendering:** SVG for the UI and PDF (no JavaScript needed), and Mermaid blocks in the Markdown
+  report. All labels are escaped.
+
 ## Adding an agent
 
 1. Subclass `Agent` and set `name`, `description`, `requires` / `after`, and optionally

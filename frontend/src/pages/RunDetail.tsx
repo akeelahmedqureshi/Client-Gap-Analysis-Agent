@@ -473,6 +473,32 @@ const PHASES: [string, string][] = [
   ["phase_4_strategic", "Phase 4 — Strategic / AI (6-12 months)"],
 ];
 
+function ArchitectureCard({ arch }: { arch: any }) {
+  const [view, setView] = useState<"current" | "target">("target");
+  return (
+    <Card
+      title="Architecture"
+      actions={
+        <div className="flex rounded-lg border overflow-hidden text-sm">
+          {(["current", "target"] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-3 py-1 ${view === v ? "bg-indigo-600 text-white" : "bg-white text-slate-700"}`}>
+              {v === "current" ? "Current" : "Target (after roadmap)"}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {/* SVG is rendered server-side with every label escaped (cip/core/architecture.py). */}
+      <div className="w-full overflow-x-auto" dangerouslySetInnerHTML={{ __html: arch[`svg_${view}`] }} />
+      <p className="text-xs text-slate-500 mt-2">
+        Derived from {arch.based_on}.{view === "target" && arch.new_components?.length
+          ? ` ${arch.new_components.length} new component(s) from the roadmap are highlighted in green.` : ""}
+      </p>
+    </Card>
+  );
+}
+
 function RoadmapTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const prio = useAgent(runId, "opportunity_prioritization", enabled);
   const plans = useAgent(runId, "enhancement_planning", enabled);
@@ -480,7 +506,10 @@ function RoadmapTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   if (!enabled) return <Pending />;
   const recs: any[] = prio.data?.data.recommendations ?? [];
   const planBy = new Map((plans.data?.data.plans ?? []).map((p: any) => [p.recommendation_id, p]));
+  const arch = plans.data?.data.architecture;
   return (
+    <div className="space-y-4">
+    {arch && <ArchitectureCard arch={arch} />}
     <div className="grid lg:grid-cols-2 gap-4">
       {PHASES.map(([key, label]) => (
         <Card key={key} title={label}>
@@ -520,6 +549,7 @@ function RoadmapTab({ runId, enabled }: { runId: string; enabled: boolean }) {
           {!recs.some((r) => r.phase === key) && <Empty>No items.</Empty>}
         </Card>
       ))}
+    </div>
     </div>
   );
 }

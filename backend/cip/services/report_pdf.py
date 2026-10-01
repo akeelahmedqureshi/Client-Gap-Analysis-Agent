@@ -40,10 +40,21 @@ em { color: #475569; }
 .dot { font-size: 11pt; }
 .dot.ok { color: #059669; } .dot.partial { color: #d97706; } .dot.missing { color: #dc2626; }
 details > summary { font-weight: bold; }
+.diagram { margin: 6pt 0 12pt; page-break-inside: avoid; }
+.diagram svg { width: 100%; height: auto; }
 """
 
 
-def report_html(markdown_text: str, title: str) -> str:
+_DIAGRAM_BLOCK = re.compile(r"<!-- architecture-diagram:(\w+) -->.*?<!-- /architecture-diagram -->", re.S)
+
+
+def report_html(markdown_text: str, title: str, architecture: dict | None = None) -> str:
+    # Mermaid needs JavaScript (disabled for PDFs): swap each diagram block for the server-rendered SVG.
+    def swap(m: re.Match[str]) -> str:
+        svg = (architecture or {}).get(f"svg_{m.group(1)}")
+        return f'\n<div class="diagram">{svg}</div>\n' if svg else ""
+
+    markdown_text = _DIAGRAM_BLOCK.sub(swap, markdown_text)
     body = md_lib.markdown(markdown_text, extensions=["tables", "sane_lists"])
     for icon, span in _ICONS.items():
         body = body.replace(icon, span)

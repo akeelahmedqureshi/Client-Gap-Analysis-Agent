@@ -76,6 +76,8 @@ Platform features:
 - **Report export** as a client-ready PDF, plus Markdown and JSON.
 - **Pricing analysis:** plans, prices, pricing models and practices for the client and competitors;
   market positioning; pricing gaps.
+- **Architecture diagrams:** current vs. target (after the roadmap), in the UI, PDF and Markdown
+  (Mermaid).
 - **Deeper research:** schema.org company facts, job-board hiring signals, announcements, and
   open-source and review-site competitor sources.
 

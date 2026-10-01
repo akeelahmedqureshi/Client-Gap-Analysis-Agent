@@ -260,7 +260,8 @@ async def get_report_pdf(run_id: str, request: Request, user: User = Depends(req
     if not r:
         raise not_found("Report")
     try:
-        pdf = await render_pdf(report_html(r.markdown, r.title), r.title)
+        architecture = (r.content or {}).get("sections", {}).get("architecture")
+        pdf = await render_pdf(report_html(r.markdown, r.title, architecture), r.title)
     except PdfUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
     audit.record(session, request, user, "report.exported", "run", run_id, format="pdf")

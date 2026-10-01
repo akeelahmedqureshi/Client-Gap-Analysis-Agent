@@ -131,6 +131,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
                 if r["phase"] == phase] for phase in PHASE_LABELS
     }
     sections["patch_plans"] = plans
+    sections["architecture"] = ctx.data("enhancement_planning").get("architecture")
     sections["evidence_appendix"] = cite.appendix()
     return {
         "title": f"Client Intelligence Report — {rec.client.name}: {rec.project.name}",
@@ -309,6 +310,16 @@ def render_markdown(report: dict) -> str:
         out.append("")
 
     out += ["## 9. Technical Patch Plan _(estimates)_"]
+    arch = s.get("architecture")
+    if arch:
+        out += ["### Architecture: current vs. target",
+                f"Derived from {arch['based_on']}. Components added by the roadmap are highlighted.", ""]
+        for key, label in (("current", "Current architecture"), ("target", "Target architecture (after roadmap)")):
+            out += [f"**{label}**", "", f"<!-- architecture-diagram:{key} -->", "```mermaid",
+                    arch[f"mermaid_{key}"], "```", "<!-- /architecture-diagram -->", ""]
+        if arch.get("new_components"):
+            out += ["**New components**",
+                    _md_list([f"{c['label']} ({c['layer']}) — for {c['for']}" for c in arch["new_components"]]), ""]
     for p in s["patch_plans"]:
         out += [f"### {p['feature']}", f"**Objective:** {p['objective']}  ",
                 f"**Architecture impact:** {p['architecture_impact']}  ",

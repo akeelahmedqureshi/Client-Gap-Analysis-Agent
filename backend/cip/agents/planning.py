@@ -7,6 +7,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.core.architecture import build_architecture
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import AgentResult, Basis, Finding, ImplementationPlan
 
@@ -150,9 +151,12 @@ class EnhancementPlanningAgent(Agent):
                     return template_plan(rec, ctx, stack)
 
         plans = await asyncio.gather(*(plan_for(i, r) for i, r in enumerate(recs)))
+        architecture = build_architecture(ctx.data("code_analysis").get("profiles", []),
+                                          ctx.record.project.technology, recs,
+                                          ctx.data("gap_analysis").get("gaps", []))
         return AgentResult(
             findings=[Finding(category="plan", title=f"Plan: {p.feature}", detail=p.estimated_effort,
                               confidence=0.6, basis=Basis.ESTIMATE) for p in plans],
             confidence=0.6, errors=errors,
-            data={"plans": [p.model_dump() for p in plans], "stack": stack},
+            data={"plans": [p.model_dump() for p in plans], "stack": stack, "architecture": architecture},
         )
