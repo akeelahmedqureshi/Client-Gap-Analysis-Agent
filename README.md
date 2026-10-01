@@ -71,7 +71,7 @@ Platform features:
 - **Web UI** (React, TypeScript, Tailwind, React Query) with screens for Dashboard, Upload
   (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules) and Run
   detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
-  security, competitors, pricing, apps, comparison, gaps, opportunity matrix, roadmap and patch plans,
+  security, UX, competitors, pricing, apps, comparison, gaps, opportunity matrix, roadmap and patch plans,
   evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.
 - **Report export** as a client-ready PDF, plus Markdown and JSON.
@@ -83,6 +83,11 @@ Platform features:
   insecure code patterns, and a score and grade.
 - **Deeper research:** schema.org company facts, job-board hiring signals, announcements, and
   open-source and review-site competitor sources.
+- **UX deep dive:** the client's key pages and competitors' homepages.
+  - Accessibility (WCAG), mobile layout and page speed, with markup evidence and WCAG references.
+  - Conversion practices (calls to action, help, live chat, trust signals) compared with
+    competitors.
+  - Per-category scores, plus UX gaps with front-end patch plans.
 - **App-store analysis:** the client's and competitors' iOS and Android apps.
   - Ownership is verified before an app is attributed to a company.
   - It reports ratings against competitors, release staleness, review themes with quotes, and
@@ -103,7 +108,7 @@ Also built:
 - optional Celery + Redis workers for scaling.
 
 Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
-and a UX deep dive.
+and a deeper LLM evaluation set.
 
 ## Quick start
 

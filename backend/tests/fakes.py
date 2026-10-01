@@ -20,11 +20,14 @@ from cip.connectors.source_control.base import (
 from cip.core.llm import LLMUnavailable
 
 
-def html(title: str, body: str, desc: str = "", links: list[str] = (), head: str = "") -> str:
+def html(title: str, body: str, desc: str = "", links: list[str] = (), head: str = "", lang: str | None = None) -> str:
     anchors = "".join(f'<a href="{u}">{u}</a>' for u in links)
-    return (f"<html><head><title>{title}</title><meta name='description' content='{desc}'>{head}</head>"
+    lang_attr = f' lang="{lang}"' if lang else ""
+    return (f"<html{lang_attr}><head><title>{title}</title><meta name='description' content='{desc}'>{head}</head>"
             f"<body><nav>{anchors}</nav>{body}</body></html>")
 
+
+VIEWPORT = "<meta name='viewport' content='width=device-width, initial-scale=1'>"
 
 ABC_JSONLD = json.dumps({
     "@context": "https://schema.org", "@type": "Organization", "name": "ABC Healthcare",
@@ -40,7 +43,8 @@ SITES: dict[str, str] = {
     # --- client ---------------------------------------------------------
     "https://abc-healthcare.com/": html(
         "ABC Healthcare", "<h1>ABC Healthcare</h1><p>Book an appointment online with our clinics. "
-        "Email reminders keep patients on time. Founded in 2012 in Austin, Texas.</p>",
+        "Email reminders keep patients on time. Founded in 2012 in Austin, Texas.</p>"
+        "<img src='/hero.jpg'><img src='/team.jpg'><form><input type='email' placeholder='Newsletter'></form>",
         "ABC Healthcare runs patient scheduling software for clinics.",
         ["/about", "/products/patient-scheduler", "/contact", "https://www.linkedin.com/company/abc-healthcare",
          "https://twitter.com/abchealth"],
@@ -80,8 +84,10 @@ SITES: dict[str, str] = {
         "patient questions 24/7. SMS reminders and email reminders. Telehealth video consultation. "
         "Single sign-on (SSO) with Okta. HIPAA compliant. iOS app and Android app on Google Play.</p>"
         "<a href='https://apps.apple.com/us/app/medibook/id2222222222'>Download on the App Store</a>"
-        "<a href='https://play.google.com/store/apps/details?id=com.medibook.app'>Get it on Google Play</a>",
-        "Clinic scheduling with an AI assistant"),
+        "<a href='https://play.google.com/store/apps/details?id=com.medibook.app'>Get it on Google Play</a>"
+        "<a href='/signup'>Start free trial</a><a href='/login'>Log in</a><a href='/help'>Help center</a>"
+        "<p>Trusted by 3,000 clinics.</p><script src='https://widget.intercom.io/widget/mb1'></script>",
+        "Clinic scheduling with an AI assistant", head=VIEWPORT, lang="en"),
     "https://clinicflow.com/pricing": html(
         "Pricing | ClinicFlow", "<h1>Plans</h1><p>Start a 14-day free trial. Save 20% with annual billing.</p>"
         "<h2>Starter</h2><p>$49 /month per provider</p><h2>Growth</h2><p>$99 /month per provider</p>"
@@ -91,8 +97,9 @@ SITES: dict[str, str] = {
         "<h2>Pro</h2><p>$29 /month per practitioner. 30-day free trial.</p>"),
     "https://clinicflow.com/": html(
         "ClinicFlow", "<h1>ClinicFlow</h1><p>Scheduling software for clinics with online booking, SMS reminders, "
-        "analytics dashboard, patient portal and a public REST API. Pricing from $49/month. HIPAA compliant.</p>",
-        "Clinic workflow and scheduling"),
+        "analytics dashboard, patient portal and a public REST API. Pricing from $49/month. HIPAA compliant.</p>"
+        "<a href='/demo'>Book a demo</a><a href='/signup'>Get started</a><a href='/support'>Support</a>",
+        "Clinic workflow and scheduling", head=VIEWPORT, lang="en"),
     "https://randomnews.com/": html("News", "<p>Celebrity gossip and sports scores.</p>"),
     # --- app stores (prefix keys, most specific first) --------------------
     "https://itunes.apple.com/lookup?id=1111111111*": {"results": [{

@@ -11,7 +11,7 @@ import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 import { ChangeList, SeverityBadge } from "../components/Changes";
 
-const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
+const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
   "Roadmap", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
@@ -125,6 +125,7 @@ export default function RunDetailPage() {
         {tab === "Competitors" && <CompetitorsTab runId={runId} enabled={done("competitor_research")} />}
         {tab === "Security" && <SecurityTab runId={runId} enabled={done("security_review")} />}
         {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
+        {tab === "UX" && <UxTab runId={runId} enabled={["completed", "skipped"].includes(r.agents["ux_review"])} />}
         {tab === "Apps" && <AppsTab runId={runId} enabled={["completed", "skipped"].includes(r.agents["app_store"])} />}
         {tab === "Comparison" && <ComparisonTab runId={runId} enabled={done("feature_comparison")} />}
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
@@ -443,6 +444,109 @@ function PricingTab({ runId, enabled }: { runId: string; enabled: boolean }) {
             ))}
           </ul>
         ) : <Empty>No pricing gaps — the client's pricing practices match the market.</Empty>}
+      </Card>
+    </div>
+  );
+}
+
+const UX_PRACTICES: Record<string, string> = {
+  self_serve_cta: "Self-serve sign-up CTA", sales_cta: "Book-a-demo CTA", sign_in: "Sign-in link", help: "Help center / FAQ",
+  live_chat: "Live chat", trust: "Trust signals", search: "Site search",
+};
+
+function UxTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+  const res = useAgent(runId, "ux_review", enabled);
+  if (!enabled) return <Pending />;
+  const d = res.data?.data;
+  if (!d) return null;
+  if (!d.client) return <Empty>UX review did not run ({d.reason ?? "disabled with CIP_UX_REVIEW_ENABLED"}).</Empty>;
+  const companies: any[] = d.companies;
+  const cats = ["accessibility", "mobile", "performance", "conversion"].filter((c) => companies.some((x) => x.score?.categories?.[c] != null));
+  const scoreCell = (v: number | undefined) => (
+    <td className={`text-center font-medium ${v == null ? "text-slate-400" : v >= 90 ? "text-emerald-700" : v >= 70 ? "text-amber-700" : "text-rose-700"}`}>{v ?? "—"}</td>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[["Client UX score", d.market.client_score != null ? `${d.market.client_score}/100` : "—"],
+          ["Competitor median", d.market.competitor_median_score != null ? `${d.market.competitor_median_score}/100` : "—"],
+          ["Pages audited", String(d.client.pages.length)],
+          ["Browser checks", d.client.browser ? "contrast · phone · speed" : "static only"]].map(([k, v]) => (
+          <div key={k} className="bg-white border rounded-xl p-3">
+            <div className="text-xs text-slate-500">{k}</div>
+            <div className="text-lg font-semibold">{v}</div>
+          </div>
+        ))}
+      </div>
+      <Card title="Scores (0–100)">
+        <table className="w-full text-sm">
+          <thead className="text-left text-slate-500">
+            <tr><th className="py-1">Company</th><th className="text-center">Overall</th>{cats.map((c) => <th key={c} className="text-center capitalize">{c}</th>)}</tr>
+          </thead>
+          <tbody>
+            {companies.map((x) => (
+              <tr key={x.name} className="border-t">
+                <td className="py-1.5 font-medium">{x.name}{x.is_client && <span className="ml-1 text-xs text-slate-500">(client)</span>}</td>
+                {scoreCell(x.score?.overall)}
+                {cats.map((c) => <Fragment key={c}>{scoreCell(x.score?.categories?.[c])}</Fragment>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-xs text-slate-500 mt-2">{d.method} {d.disclaimer}</p>
+        {d.notes.map((n: string) => <p key={n} className="text-xs text-amber-700 mt-1">{n}</p>)}
+      </Card>
+      <Card title="Website practices">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-500">
+              <tr><th className="py-1">Practice</th>{companies.map((x) => <th key={x.name} className="text-center">{x.name}</th>)}</tr>
+            </thead>
+            <tbody>
+              {Object.entries(UX_PRACTICES).map(([key, label]) => (
+                <tr key={key} className="border-t">
+                  <td className="py-1.5">{label}</td>
+                  {companies.map((x) => (
+                    <td key={x.name} className="text-center">
+                      {x.practices?.[key] ? <span title="found"><EvidenceRefs ids={[x.practices[key]]} /></span> : <span className="text-slate-400">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card title={`Client issues (${d.issues.length})`}>
+        {d.issues.length ? (
+          <ul className="divide-y">
+            {d.issues.map((i: any) => (
+              <li key={i.key} className="py-2 text-sm flex gap-3 items-start">
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEV_STYLE[i.severity]}`}>{i.severity}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{i.title}
+                    {i.wcag && <span className="ml-2 text-xs rounded bg-indigo-50 text-indigo-700 px-1.5 py-0.5">WCAG {i.wcag}</span>}
+                    <span className="ml-2 text-xs text-slate-400 capitalize">{i.category}</span></div>
+                  <div className="text-slate-600">{i.recommendation}</div>
+                  {i.detail && <div className="text-xs text-slate-500">{i.detail}</div>}
+                  <div className="text-xs text-slate-500">Pages: {i.pages.map((p: string) => new URL(p).pathname || "/").join(", ")}</div>
+                  {i.examples.length > 0 && <code className="block mt-1 text-xs bg-slate-50 rounded p-1 break-all">{i.examples[0]}</code>}
+                </div>
+                <EvidenceRefs ids={[i.evidence_id]} />
+              </li>
+            ))}
+          </ul>
+        ) : <Empty>No issues found by the automated checks.</Empty>}
+      </Card>
+      <Card title="UX gaps">
+        {d.gaps.length ? (
+          <ul className="space-y-2 text-sm">
+            {d.gaps.map((g: any) => (
+              <li key={g.id}><span className="font-medium">{g.name}</span><BasisTag basis={g.basis} /> <Confidence value={g.confidence} /> <EvidenceRefs ids={g.evidence_ids} />
+                <div className="text-slate-600">{g.description}</div></li>
+            ))}
+          </ul>
+        ) : <Empty>No UX gaps.</Empty>}
       </Card>
     </div>
   );

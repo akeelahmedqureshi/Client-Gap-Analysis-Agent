@@ -8,6 +8,7 @@ estimates are explicitly labelled.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -16,6 +17,7 @@ from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import AgentResult
 from cip.agents.pricing_analysis import MODEL_LABELS
 from cip.core.scoring import PHASE_LABELS
+from cip.connectors.research.ux import PRACTICES
 
 STATUS_ICON = {"available": "✅", "partial": "🟡", "missing": "❌", "unknown": "·"}
 
@@ -111,6 +113,15 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "score": sec.get("score"), "grade": sec.get("grade"), "counts": sec.get("counts", {}),
         "method": sec.get("method"), "scope": sec.get("scope", []), "note": sec.get("note"),
         "issues": [{**i, "cite": cite([i["evidence_id"]])} for i in sec.get("issues", [])],
+    }
+    ux = ctx.data("ux_review")
+    sections["ux"] = None if not ux.get("client") else {
+        "companies": [{k: c.get(k) for k in ("name", "is_client", "pages", "score", "browser", "issue_counts")}
+                      | {"practices": {p: bool(v) for p, v in (c.get("practices") or {}).items()}}
+                      for c in ux.get("companies", [])],
+        "issues": [{**i, "cite": cite([i["evidence_id"]])} for i in ux.get("issues", [])],
+        "market": ux.get("market", {}), "notes": ux.get("notes", []), "method": ux.get("method"),
+        "disclaimer": ux.get("disclaimer"),
     }
     sections["market_analysis"] = {
         "competitors": [{"name": c["name"], "url": c.get("url"), "classification": c["classification"],
@@ -248,6 +259,36 @@ def render_markdown(report: dict) -> str:
                 out.append(f"| {i['severity']} | {title} | {i['recommendation'].replace('|', '/')} | "
                            f"{i['cite'].strip() or '—'} |")
             out.append("")
+
+    ux = s.get("ux")
+    if ux:
+        def esc(text) -> str:  # table cell: no pipes, newlines or live HTML (recommendations quote markup)
+            return str(text).replace("|", "/").replace("\n", " ").replace("<", "&lt;").replace(">", "&gt;")
+
+        comps = ux["companies"]
+        cats = ["accessibility", "mobile", "performance", "conversion"]
+        cats = [c for c in cats if any(c in ((x.get("score") or {}).get("categories") or {}) for x in comps)]
+        out += ["### UX review", "", f"_{ux['disclaimer']}_", "",
+                "| Company | Overall | " + " | ".join(c.title() for c in cats) + " |",
+                "|---|---|" + "---|" * len(cats)]
+        for x in comps:
+            sc = x.get("score") or {}
+            name = f"**{esc(x['name'])} (client)**" if x["is_client"] else esc(x["name"])
+            out.append(f"| {name} | {sc.get('overall', '—')} | "
+                       + " | ".join(str((sc.get('categories') or {}).get(c, '—')) for c in cats) + " |")
+        out += ["", "| Practice | " + " | ".join(esc(x["name"]) for x in comps) + " |",
+                "|---|" + "---|" * len(comps)]
+        for key, label in PRACTICES.items():
+            out.append(f"| {label} | " + " | ".join("✅" if x["practices"].get(key) else "❌" for x in comps) + " |")
+        if ux["issues"]:
+            out += ["", "| Severity | Issue | WCAG | Pages | Recommendation | Evidence |", "|---|---|---|---|---|---|"]
+            for i in ux["issues"]:
+                if i["severity"] == "info":
+                    continue
+                pages = ", ".join(urlparse(p).path or "/" for p in i.get("pages", [])[:4])
+                out.append(f"| {i['severity']} | {esc(i['title'])} | {i.get('wcag') or '—'} | {pages} | "
+                           f"{esc(i['recommendation'])} | {i['cite'].strip() or '—'} |")
+        out += [""] + [f"_{n}_" for n in ux.get("notes", [])] + [f"_Scoring: {ux['method']}_", ""]
 
     out += ["## 4. Market Analysis"]
     for comp in ma["competitors"]:

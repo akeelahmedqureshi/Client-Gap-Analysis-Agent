@@ -291,6 +291,43 @@ def _apps(prev: dict, cur: dict, known_competitors: set[str]) -> list[Change]:
     return out
 
 
+UX_PRACTICE_LABELS = {"self_serve_cta": "a self-serve sign-up call to action", "sales_cta": "a book-a-demo call to action",
+                      "live_chat": "live chat", "help": "a help center / FAQ", "trust": "trust signals",
+                      "search": "site search", "sign_in": "a sign-in link"}
+
+
+def _ux(prev: dict, cur: dict) -> list[Change]:
+    out = []
+    pc, cc = prev.get("client") or {}, cur.get("client") or {}
+    comparable = pc.get("browser") == cc.get("browser")  # same set of checks in both runs
+    po, co = (pc.get("score") or {}).get("overall"), (cc.get("score") or {}).get("overall")
+    if comparable and po is not None and co is not None and abs(co - po) >= 10:
+        out.append(Change("ux_score", "warning" if co < po else "info", f"Website UX score {po} → {co}",
+                          before=po, after=co))
+    if comparable:
+        before = {i["key"]: i for i in prev.get("issues", []) if i["severity"] in ("high", "medium")}
+        after = {i["key"]: i for i in cur.get("issues", []) if i["severity"] in ("high", "medium")}
+        for key in after.keys() - before.keys():
+            i = after[key]
+            out.append(Change("ux_issue_new", "warning" if i["severity"] == "high" else "info",
+                              f"New {i['severity']} UX issue: {i['title']}", i.get("recommendation", ""),
+                              subject=i["category"], evidence_ids=[i["evidence_id"]]))
+        for key in before.keys() - after.keys():
+            out.append(Change("ux_issue_resolved", "info", f"UX issue resolved: {before[key]['title']}",
+                              subject=before[key]["category"]))
+    rivals_before = {c["name"].lower(): c for c in prev.get("companies", []) if not c.get("is_client")}
+    for c in cur.get("companies", []):
+        b = rivals_before.get(c["name"].lower())
+        if c.get("is_client") or b is None:
+            continue
+        for key, ev in (c.get("practices") or {}).items():
+            if ev and not (b.get("practices") or {}).get(key) and key in UX_PRACTICE_LABELS:
+                out.append(Change("competitor_ux_practice", "info",
+                                  f"{c['name']} added {UX_PRACTICE_LABELS[key]} to its website", subject=c["name"],
+                                  evidence_ids=[ev]))
+    return out
+
+
 # --------------------------------------------------------------------------- entry point
 
 
@@ -320,6 +357,8 @@ def diff_outputs(prev: dict[str, dict], cur: dict[str, dict]) -> list[dict]:
     if both("app_store") and prev["app_store"].get("enabled") and cur["app_store"].get("enabled"):
         known = {c["name"].lower() for c in prev.get("competitor_research", {}).get("competitors", [])}
         changes += _apps(prev["app_store"], cur["app_store"], known)
+    if both("ux_review") and prev["ux_review"].get("client") and cur["ux_review"].get("client"):
+        changes += _ux(prev["ux_review"], cur["ux_review"])
     changes.sort(key=lambda c: (severity_rank(c.severity), c.kind, c.title))
     return [c.to_dict() for c in changes]
 

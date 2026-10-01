@@ -92,6 +92,36 @@ APP_GAP_FACTORS: dict[str, dict[str, float]] = {
     "Mobile app release cadence": dict(market_demand=2, competitive_gap=2, business_value=2, user_impact=2, revenue_potential=1, strategic_alignment=3,
                                        ai_opportunity=0, complexity=2, risk=1),
 }
+UX_GAP_FACTORS: dict[str, dict[str, float]] = {
+    # Quality gaps found by auditing the client's own site: demand is explicit, not competitor coverage.
+    "Accessibility (WCAG 2.2 AA) fixes": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=4,
+                                              revenue_potential=2, strategic_alignment=4, ai_opportunity=0,
+                                              complexity=2, risk=1),
+    "Mobile-friendly responsive layout": dict(market_demand=4, competitive_gap=3, business_value=4, user_impact=4,
+                                              revenue_potential=3, strategic_alignment=4, ai_opportunity=0,
+                                              complexity=3, risk=1),
+    "Page speed (Core Web Vitals)": dict(market_demand=3, competitive_gap=2, business_value=3, user_impact=4,
+                                         revenue_potential=3, strategic_alignment=3, ai_opportunity=0,
+                                         complexity=2, risk=1),
+    "Clear primary call to action": dict(market_demand=4, competitive_gap=3, business_value=4, user_impact=3,
+                                         revenue_potential=4, strategic_alignment=4, ai_opportunity=0,
+                                         complexity=1, risk=1),
+    "UX quality below competitors": dict(market_demand=3, competitive_gap=4, business_value=3, user_impact=4,
+                                         revenue_potential=3, strategic_alignment=3, ai_opportunity=0,
+                                         complexity=3, risk=1),
+    # Practice gaps (coverage-based demand from the competitors that have them).
+    "Self-serve sign-up entry point": dict(business_value=4, user_impact=3, revenue_potential=4,
+                                           strategic_alignment=3, ai_opportunity=0, complexity=2, risk=1),
+    "Live chat support on the website": dict(business_value=3, user_impact=3, revenue_potential=3,
+                                             strategic_alignment=3, ai_opportunity=3, complexity=1, risk=1),
+    "Help center / FAQ": dict(business_value=3, user_impact=3, revenue_potential=1, strategic_alignment=3,
+                              ai_opportunity=3, complexity=1, risk=0),
+    "Trust signals (customers, reviews, compliance)": dict(business_value=3, user_impact=1, revenue_potential=3,
+                                                           strategic_alignment=3, ai_opportunity=0, complexity=1,
+                                                           risk=0),
+    "Site search": dict(business_value=2, user_impact=3, revenue_potential=1, strategic_alignment=2,
+                        ai_opportunity=3, complexity=2, risk=1),
+}
 GENERIC_FACTORS = dict(business_value=3, user_impact=3, revenue_potential=2, strategic_alignment=3,
                        ai_opportunity=1, complexity=3, risk=2)
 
@@ -123,7 +153,8 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
     base = dict(tf.defaults) if tf else dict(TECH_GAP_FACTORS.get(gap["name"])
                                               or PRICING_GAP_FACTORS.get(gap["name"])
                                               or SECURITY_GAP_FACTORS.get(gap["name"])
-                                              or APP_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
+                                              or APP_GAP_FACTORS.get(gap["name"])
+                                              or UX_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
     n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
     coverage = len(gap.get("competitors_with", [])) / n_comp
     base["market_demand"] = round(1 + 4 * coverage, 2) if gap["gap_type"] not in ("technology", "security") else 2.0
@@ -139,10 +170,11 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
     if not stack:
         feasibility -= 0.5  # stack unknown => more uncertainty
     base["technical_feasibility"] = feasibility
-    if gap["name"] in APP_GAP_FACTORS:
-        # Quality gaps evidenced by customer reviews: demand comes from the reviews, not competitor coverage.
-        base["market_demand"] = APP_GAP_FACTORS[gap["name"]]["market_demand"]
-        base["competitive_gap"] = APP_GAP_FACTORS[gap["name"]]["competitive_gap"]
+    explicit = APP_GAP_FACTORS.get(gap["name"]) or UX_GAP_FACTORS.get(gap["name"]) or {}
+    if "market_demand" in explicit:
+        # Quality gaps evidenced by reviews or audits: demand comes from that evidence, not competitor coverage.
+        base["market_demand"] = explicit["market_demand"]
+        base["competitive_gap"] = explicit["competitive_gap"]
     return {k: clamp_factor(v) for k, v in base.items()}
 
 
@@ -186,6 +218,13 @@ def default_narrative(gap: dict) -> dict[str, str]:
                 "potential_users": "Prospects evaluating the product; sales and marketing teams",
                 "revenue_opportunity": "Higher trial-to-paid conversion and win-rate against priced competitors.",
                 "user_impact_text": "Easier evaluation and purchase decisions for prospects."}
+    if gap["name"] in UX_GAP_FACTORS:
+        legal = " Also reduces legal exposure (ADA, European Accessibility Act)." if "Accessib" in gap["name"] else ""
+        return {"business_opportunity": f"Convert and retain more visitors: {gap['name']}.{legal}",
+                "potential_users": "Website visitors and prospects, including people using assistive technology "
+                                   "and phones",
+                "revenue_opportunity": "Higher visitor-to-lead conversion; fewer drop-offs on mobile and slow pages.",
+                "user_impact_text": "Easier, faster and more inclusive website experience."}
     if gap["name"] in APP_GAP_FACTORS:
         return {"business_opportunity": f"Win back app users and ratings: {gap['name']}.",
                 "potential_users": "Mobile app users (patients/customers) and support teams",

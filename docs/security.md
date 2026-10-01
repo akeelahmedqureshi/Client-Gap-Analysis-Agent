@@ -119,6 +119,15 @@ The `security_review` agent only does what a normal visitor or a public database
 There is **no** port scanning, fuzzing, credential testing or exploitation. Those need an explicit
 security-testing agreement with the client and are out of scope for this platform.
 
+## UX review
+
+The UX review loads public pages exactly as a visitor would, after external research was approved.
+Browser checks use the same request guard as the crawler: non-public addresses are blocked, and each
+page gets a fresh context with no downloads or service workers. Results are labelled as indicative.
+Automated checks find only part of WCAG, and page speed is measured from the analysis server. Turn
+it off with `CIP_UX_REVIEW_ENABLED=false`, or keep only the static checks with
+`CIP_UX_BROWSER_CHECKS=false`.
+
 ## App-store data
 
 Only public listings and reviews are read, and only after external research was approved. The

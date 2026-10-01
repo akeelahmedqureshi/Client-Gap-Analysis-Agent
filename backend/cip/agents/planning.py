@@ -7,7 +7,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
-from cip.agents.prioritization import APP_GAP_FACTORS
+from cip.agents.prioritization import APP_GAP_FACTORS, UX_GAP_FACTORS
 from cip.core.architecture import build_architecture
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import AgentResult, Basis, Finding, ImplementationPlan
@@ -105,6 +105,38 @@ def template_plan(rec: dict, ctx: RunContext, stack: dict[str, list[str]]) -> Im
             recommended_team=["Product manager", "Backend engineer", "Frontend engineer", "Finance / RevOps"],
             acceptance_criteria=[f"{feature} live and measurable", "Conversion and ARPA tracked before/after"],
             basis=Basis.ESTIMATE,
+        )
+    if feature in UX_GAP_FACTORS and "market_demand" in UX_GAP_FACTORS[feature]:
+        kind = ("a11y" if "Accessib" in feature else "mobile" if "Mobile" in feature else
+                "speed" if "speed" in feature else "cta" if "call to action" in feature else "overall")
+        steps = {
+            "a11y": (["Fix the issues listed in the UX review (alt text, labels, names, contrast, headings)",
+                      "Visible focus styles and full keyboard navigation"],
+                     ["Automated accessibility checks (axe) in CI", "Manual screen-reader pass (NVDA/VoiceOver)"],
+                     ["No automated WCAG 2.2 AA failures on key pages", "Accessibility statement published"]),
+            "mobile": (["Responsive layout (fluid grid, wrapping tables/images)", "Touch targets ≥ 44×44px",
+                        "Mobile viewport meta"],
+                       ["Visual regression at 390px and 768px widths"],
+                       ["No horizontal scrolling at 390px", "No tap targets under 24×24px"]),
+            "speed": (["Optimise hero media (WebP/AVIF, sizes), defer non-critical scripts, preload fonts"],
+                      ["Lighthouse CI budget on key pages"],
+                      ["LCP ≤ 2.5s (field data, p75)", "Page weight under 2 MB"]),
+            "cta": (["One primary call to action above the fold on the homepage and pricing page",
+                     "Sign-up / demo request flow with analytics"],
+                    ["A/B test of CTA copy and placement"],
+                    ["Visitor-to-lead conversion tracked and improved"]),
+            "overall": (["Address the high-severity items of the UX review first"],
+                        ["Re-run the UX review after each release"],
+                        ["UX score at or above the competitor median"]),
+        }[kind]
+        return ImplementationPlan(
+            recommendation_id=rec["id"], feature=feature, objective=f"Improve the website experience: {rec['problem']}",
+            architecture_impact="Front-end changes to the public website / web app; no new backend services.",
+            frontend_changes=steps[0], infrastructure_changes=["CDN / image optimisation"] if kind == "speed" else [],
+            testing_requirements=steps[1], dependencies=rec.get("dependencies", []),
+            estimated_effort=EFFORT_BY_COMPLEXITY.get(rec["complexity"], "TBD"),
+            recommended_team=["Frontend engineer", "UX designer"] + (["Accessibility specialist"] if kind == "a11y" else []),
+            acceptance_criteria=steps[2], basis=Basis.ESTIMATE,
         )
     if feature in APP_GAP_FACTORS:
         crash = "stability" in feature.lower() or "rating" in feature.lower()

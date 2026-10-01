@@ -34,6 +34,10 @@ const KIND_LABEL: Record<string, string> = {
   client_app_theme: "App reviews",
   competitor_app_new: "Competitor app",
   competitor_app_rating: "Competitor app",
+  ux_score: "Website UX",
+  ux_issue_new: "Website UX",
+  ux_issue_resolved: "Website UX",
+  competitor_ux_practice: "Competitor website",
 };
 
 /** List of run-to-run changes. Evidence citations resolve when an EvidenceContext for the run is provided. */

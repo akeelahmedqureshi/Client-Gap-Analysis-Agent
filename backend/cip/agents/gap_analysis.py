@@ -28,7 +28,8 @@ TECH_GAP_RULES: list[tuple[str, str, str, str]] = [
 class GapAnalysisAgent(Agent):
     name = "gap_analysis"
     description = "Identify missing, partial, technology, UX and AI gaps"
-    after = ("feature_comparison", "code_analysis", "pricing_analysis", "security_review", "app_store")
+    after = ("feature_comparison", "code_analysis", "pricing_analysis", "security_review", "app_store",
+             "ux_review")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         ledger = ctx.ledger
@@ -131,11 +132,14 @@ class GapAnalysisAgent(Agent):
         gaps.extend(Gap.model_validate(g) for g in ctx.data("pricing_analysis").get("gaps", []))
         # Security gaps from the passive security review -------------------------
         gaps.extend(Gap.model_validate(g) for g in ctx.data("security_review").get("gaps", []))
-        # Mobile app gaps from the app-store analysis -----------------------------
+        # Mobile-app and website UX gaps ------------------------------------------
         apps = ctx.data("app_store")
-        for g in (Gap.model_validate(x) for x in apps.get("gaps", [])):
+        extra = apps.get("gaps", []) + ctx.data("ux_review").get("gaps", [])
+        for g in (Gap.model_validate(x) for x in extra):
             same = next((x for x in gaps if g.feature_id and x.feature_id == g.feature_id), None)
             if same:  # e.g. "Native mobile app" already found by the comparison: merge the evidence
+                if same.basis != Basis.EVIDENCE and g.basis == Basis.EVIDENCE:
+                    same.description = f"{same.description} {g.description}"
                 same.evidence_ids = list(dict.fromkeys(same.evidence_ids + g.evidence_ids))
                 same.competitors_with = list(dict.fromkeys(same.competitors_with + g.competitors_with))
             else:

@@ -22,8 +22,9 @@ Each `Finding` has a `basis`:
 | `competitor_research` | after client_research, product_features | (covered by `external_research`) | `competitors[]` (verified, classified, feature observations), `rejected[]` |
 | `pricing_analysis` | after client_research, competitor_research | — | `client` and per-competitor pricing (plans, monthly prices, models, trial, free tier, annual discount, enterprise tier), `market` statistics, client `position`, pricing `gaps` |
 | `app_store` | after client_research, competitor_research | (covered by `external_research`) | `client_apps[]` / `competitor_apps[]` (verified store listings: rating, ratings count, version, last release), `client_reviews` (sentiment, themes with quotes), `requests[]` (features asked for in reviews), `competitor_review_themes[]`, `market`, app `gaps` |
+| `ux_review` | after client_research, competitor_research | (covered by `external_research`) | `client` and `companies[]` (pages audited, scores per category, website practices), `issues[]` (merged across pages, WCAG reference, pages, markup evidence), `market`, UX `gaps`, `notes` |
 | `feature_comparison` | after product_features, competitor_research | — | `rows[]` (client status and each competitor's status per taxonomy feature, coverage) |
-| `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security), `existing[]` |
+| `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store, ux_review | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security), `existing[]` |
 | `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown), `recommendations[]` (top N with phase), `roadmap` |
 | `enhancement_planning` | after opportunity_prioritization | — | `plans[]` (ImplementationPlan) |
 | `report` | after enhancement_planning | `client_report` | `report` (structured JSON), `markdown` |
@@ -153,6 +154,37 @@ research was approved.
   - A verified client listing removes a false "Native mobile app" gap.
   - Features requested in 2 or more reviews get +1 market demand in prioritization.
   - App-quality gaps get a mobile patch plan (crash reporting, staged rollouts, device tests).
+
+**UX Review** (`ux_review`, after client research and competitor research). It is passive (it only
+does what a visitor's browser does) and runs only when external research was approved.
+
+- **Pages.** The client's homepage plus up to three key pages it found: pricing, sign-up or demo,
+  product, and contact. For competitors, the homepage only.
+- **Static checks** (always):
+  - WCAG basics: page language (3.1.1), title (2.4.2), image alt text (1.1.1), form labels (1.3.1 /
+    4.1.2), link and button names, vague link text, heading order, main landmark, and zoom not
+    disabled (1.4.4);
+  - mobile: the viewport (1.4.10);
+  - conversion practices: self-serve or demo call to action, sign-in, help/FAQ, live chat, trust
+    signals and site search.
+- **Browser checks** (headless Chromium; `CIP_UX_BROWSER_CHECKS`):
+  - colour contrast (1.4.3);
+  - sideways scrolling, tap targets under 24×24px (2.5.8) and small text, in a 390px phone viewport;
+  - lab page speed: LCP, page weight and request count.
+  - Same in-browser SSRF guard as the crawler. Images and fonts load so the measurements are
+    realistic.
+- **Issues and scores.** The same check on several pages becomes one issue listing the pages. Each
+  category scores 100 minus penalties, and the overall score is their average. Competitors are
+  scored on the same checks.
+- **Gaps.**
+  - Quality gaps from the client's own issues: "Accessibility (WCAG 2.2 AA) fixes" (merged with
+    `ux.accessibility`), "Mobile-friendly responsive layout", "Page speed (Core Web Vitals)" and
+    "Clear primary call to action".
+  - Practice gaps when at least half of the audited competitors show a practice the client lacks:
+    live chat, help center, trust signals, site search, self-serve sign-up. Self-serve sign-up is
+    skipped when the pricing "Free trial" gap or the call-to-action gap already covers it.
+  - "UX quality below competitors" (10 or more points under the median) is reported as a finding,
+    not a roadmap item.
 
 **Architecture diagrams** (built by `enhancement_planning`, in `core/architecture.py`).
 

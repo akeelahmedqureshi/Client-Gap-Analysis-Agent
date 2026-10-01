@@ -202,6 +202,11 @@ class WebFetcher:
         self.rendering = rendering or ("never" if transport is not None else s.browser_rendering)
         self.renderer = renderer or (BrowserRenderer(s, self._check_public) if self.rendering != "never" else None)
 
+    @property
+    def live(self) -> bool:
+        """True when requests go to the real network (no injected transport) — a real browser can follow."""
+        return self._transport is None
+
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self._timeout, follow_redirects=True, transport=self._transport,
                                  headers={"User-Agent": self._ua, "Accept": "text/html,application/xhtml+xml"})
@@ -224,6 +229,11 @@ class WebFetcher:
         return True if rp is None else rp.can_fetch(self._ua, url)
 
     async def fetch(self, url: str, client: httpx.AsyncClient | None = None) -> Page | None:
+        got = await self.fetch_with_html(url, client)
+        return got[0] if got else None
+
+    async def fetch_with_html(self, url: str, client: httpx.AsyncClient | None = None) -> tuple[Page, str] | None:
+        """Like ``fetch`` but also returns the HTML the page was parsed from (rendered HTML if rendered)."""
         url = normalize_url(url)
         own = client is None
         client = client or self._client()
@@ -304,18 +314,19 @@ class WebFetcher:
             log.info("text fetch failed for %s: %s", url, exc)
             return None
 
-    async def _maybe_render(self, page: Page, raw_html: str) -> Page:
+    async def _maybe_render(self, page: Page, raw_html: str) -> tuple[Page, str]:
         if self.renderer is None or not (
                 self.rendering == "always" or looks_script_rendered(raw_html, page.text)):
-            return page
+            return page, raw_html
         rendered = await self.renderer.render(page.url)
         if rendered is None or rendered.status >= 400:
-            return page
+            return page, raw_html
         if registrable_domain(rendered.url) != registrable_domain(page.url):
-            return page  # client-side redirect off-site: keep the original
-        better = parse_html(rendered.url, rendered.status, rendered.html[:MAX_BODY_BYTES])
+            return page, raw_html  # client-side redirect off-site: keep the original
+        html = rendered.html[:MAX_BODY_BYTES]
+        better = parse_html(rendered.url, rendered.status, html)
         better.rendered = True
-        return better if len(better.text) >= len(page.text) else page
+        return (better, html) if len(better.text) >= len(page.text) else (page, raw_html)
 
     def _render_session(self):
         return self.renderer.session() if self.renderer is not None else nullcontext()

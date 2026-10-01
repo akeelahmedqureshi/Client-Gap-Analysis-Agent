@@ -38,6 +38,7 @@ from cip.agents.product_features import ProductFeatureAgent
 from cip.agents.reporting import ReportAgent
 from cip.agents.repository import RepositoryAgent
 from cip.agents.security_review import SecurityReviewAgent
+from cip.agents.ux_review import UxReviewAgent
 from cip.core.schemas import AgentResult, AgentStatus, Evidence
 
 log = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ def default_agents() -> list[Agent]:
         CompetitorResearchAgent(),
         PricingAnalysisAgent(),
         AppStoreAgent(),
+        UxReviewAgent(),
         FeatureComparisonAgent(),
         GapAnalysisAgent(),
         PrioritizationAgent(),

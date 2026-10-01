@@ -53,6 +53,8 @@ class RunContext:
     token_resolver: TokenResolver = _no_token
     # Injectable source-control factory (tests use fakes).
     source_control_factory: Callable[..., Any] | None = None
+    # Injectable in-browser UX auditor (see connectors/research/ux.py); built from settings when None.
+    ux_auditor: Any = None
 
     def data(self, agent: str) -> dict[str, Any]:
         result = self.outputs.get(agent)

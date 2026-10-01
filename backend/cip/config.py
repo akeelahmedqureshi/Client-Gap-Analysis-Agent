@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     app_store_enabled: bool = True
     app_store_country: str = "us"
     app_store_competitor_reviews: int = 3   # competitors whose App Store reviews are analysed
+    # UX deep dive: passive accessibility / mobile / speed / conversion checks of public pages.
+    # Browser checks (contrast, phone layout, page speed) need the [browser] extra; static checks always run.
+    ux_review_enabled: bool = True
+    ux_browser_checks: bool = True
+    ux_max_pages: int = 4                  # client pages audited (home + key pages); competitors: homepage
     # Headless-browser rendering for JavaScript-heavy sites (needs `pip install .[browser]` + a Chromium):
     #   auto   – render only pages that look script-rendered (default)
     #   always – render every HTML page (slower, most complete)
