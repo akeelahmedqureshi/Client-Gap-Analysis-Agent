@@ -73,6 +73,15 @@ Platform features:
   pipeline, client, project, competitors, comparison, gaps, opportunity matrix, roadmap and patch plans,
   evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.
+- **Report export** as a client-ready PDF, plus Markdown and JSON.
+
+Also built:
+
+- headless-browser rendering for JavaScript-heavy sites;
+- automatic OAuth token refresh;
+- auto-resume of interrupted runs;
+- login protection, user management, per-project access control and an audit log;
+- a CI pipeline.
 
 Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
 app-store and pricing analysis, UX/security deep dives, continuous monitoring and alerts, and a

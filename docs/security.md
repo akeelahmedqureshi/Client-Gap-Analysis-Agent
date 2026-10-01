@@ -99,6 +99,13 @@ target, and what data is analyzed:
 Decisions, including pre-approvals given when a run starts, are stored with the deciding user and a
 timestamp.
 
+## Report export
+
+PDFs are rendered from the report's HTML with JavaScript disabled and **every network request
+blocked**. Markup that reached the report through scraped website text can't execute or fetch
+anything; a test covers an injected `<script>`, an image beacon and a stylesheet link. Every export is
+written to the audit log.
+
 ## Uploads
 
 CSV files are limited to 10 MB and 5,000 rows. Filenames are sanitized, and the storage-key path is

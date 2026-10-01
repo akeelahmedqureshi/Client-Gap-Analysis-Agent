@@ -123,7 +123,8 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
 
 
 def _md_list(items: list[str]) -> str:
-    return "\n".join(f"- {i}" for i in items if i) or "- _None identified_"
+    # Leading blank line: strict Markdown (and the PDF renderer) needs one between a paragraph and a list.
+    return "\n" + ("\n".join(f"- {i}" for i in items if i) or "- _None identified_")
 
 
 def render_markdown(report: dict) -> str:

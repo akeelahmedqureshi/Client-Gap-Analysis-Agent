@@ -54,6 +54,7 @@ reset, role change or deactivation invalidates existing sessions.
 | GET | `/api/runs/{id}/evidence?source_type=&q=` | viewer | Evidence records |
 | GET | `/api/runs/{id}/report` | viewer | `{title, content (structured), markdown}` |
 | GET | `/api/runs/{id}/report.md` | viewer | Markdown download |
+| GET | `/api/runs/{id}/report.pdf` | viewer | Client-ready PDF (A4, page numbers), rendered offline in headless Chromium. Returns 503 if no browser is installed. Each export is audited |
 
 Run statuses: `queued`, `running`, `awaiting_approval`, `completed`, `completed_with_errors`, `failed`.
 

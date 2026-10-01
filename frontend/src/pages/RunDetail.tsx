@@ -75,19 +75,14 @@ export default function RunDetailPage() {
             <Badge value={r.status} />
             {["failed", "completed_with_errors"].includes(r.status) && <Button variant="secondary" onClick={resume}>Retry failed agents</Button>}
             {r.has_report && (
-              <a className="text-sm text-indigo-600 underline" href={`/api/runs/${runId}/report.md`}
-                 onClick={async (e) => {
-                   e.preventDefault();
-                   const md = await api.get<string>(`/api/runs/${runId}/report.md`);
-                   const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
-                   const a = document.createElement("a");
-                   a.href = url;
-                   a.download = `report-${runId}.md`;
-                   a.click();
-                   URL.revokeObjectURL(url);
-                 }}>
-                Download report (.md)
-              </a>
+              <>
+                <Button onClick={() => api.download(`/api/runs/${runId}/report.pdf`, `report-${runId}.pdf`).catch(setError)}>
+                  Download PDF
+                </Button>
+                <Button variant="secondary" onClick={() => api.download(`/api/runs/${runId}/report.md`, `report-${runId}.md`).catch(setError)}>
+                  Markdown
+                </Button>
+              </>
             )}
           </div>
         </div>

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from cip.db.models import AgentExecution, AnalysisRun, Approval, EvidenceRecord,
 from cip.db.session import get_session
 from cip.services import audit
 from cip.services.access import project_for, run_for, visible_projects
+from cip.services.report_pdf import PdfUnavailable, render_pdf, report_html
 from cip.services.runner import runner
 
 router = APIRouter(prefix="/api/runs", tags=["analysis runs"])
@@ -248,6 +249,24 @@ async def get_report(run_id: str, user: User = Depends(require_role("viewer")),
         raise not_found("Report")
     return {"id": r.id, "title": r.title, "created_at": r.created_at.isoformat(), "content": r.content,
             "markdown": r.markdown}
+
+
+@router.get("/{run_id}/report.pdf")
+async def get_report_pdf(run_id: str, request: Request, user: User = Depends(require_role("viewer")),
+                         session: AsyncSession = Depends(get_session)) -> Response:
+    """Client-ready PDF of the report (rendered offline in headless Chromium)."""
+    await _run_for(session, run_id, user)
+    r = (await session.execute(select(Report).where(Report.run_id == run_id))).scalar_one_or_none()
+    if not r:
+        raise not_found("Report")
+    try:
+        pdf = await render_pdf(report_html(r.markdown, r.title), r.title)
+    except PdfUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    audit.record(session, request, user, "report.exported", "run", run_id, format="pdf")
+    await session.commit()
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="report-{run_id}.pdf"'})
 
 
 @router.get("/{run_id}/report.md", response_class=PlainTextResponse)

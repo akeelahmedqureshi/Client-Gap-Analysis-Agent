@@ -53,7 +53,29 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return (ct.includes("application/json") ? res.json() : res.text()) as Promise<T>;
 }
 
+/** Authenticated file download (the API requires a bearer token, so a plain link can't be used). */
+async function download(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      msg = (await res.json()).detail ?? msg;
+    } catch {
+      /* not json */
+    }
+    throw new ApiError(res.status, msg);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
+  download,
   get: <T>(p: string) => request<T>("GET", p),
   post: <T>(p: string, b?: unknown) => request<T>("POST", p, b),
   put: <T>(p: string, b?: unknown) => request<T>("PUT", p, b),
