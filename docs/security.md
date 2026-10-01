@@ -58,7 +58,12 @@ Audit Log page.
 - They are decrypted only inside `token_resolver` at call time and never stored in agent results,
   evidence or prompts.
 - OAuth `state` is single-use, expires after 10 minutes, and is bound to the organization and user.
-- GitLab expiry (`expires_in`) is recorded, and expired tokens are not used.
+- Token expiry (`expires_in`) and the OAuth **refresh token** are stored, the refresh token encrypted
+  too. Within 2 minutes of expiry, the token is refreshed automatically just before use
+  (`cip/services/tokens.py`).
+- Refreshes are serialized per connection, because GitLab refresh tokens are single-use.
+- Refreshes and refresh failures are written to the audit log. If a refresh fails, the connection
+  stops being used until it is reconnected.
 
 ## Source code and LLM safety
 

@@ -117,8 +117,15 @@ git clone https://github.com/akeelahmedqureshi/Client-Gap-Analysis-Agent.git app
 mkdir -p /opt/cip/storage
 python3 -m venv /opt/cip/venv
 /opt/cip/venv/bin/pip install --upgrade pip
-/opt/cip/venv/bin/pip install /opt/cip/app/backend
+/opt/cip/venv/bin/pip install "/opt/cip/app/backend[browser]"
+/opt/cip/venv/bin/playwright install chromium        # headless browser for JavaScript-heavy sites
+exit
+sudo /opt/cip/venv/bin/playwright install-deps chromium   # system libraries Chromium needs
+sudo -iu cip
 ```
+
+The browser is optional. Without it, set `CIP_BROWSER_RENDERING=never` and the crawler uses plain
+HTTP only, which misses content on sites that render with JavaScript.
 
 ### 4. Configure `/opt/cip/app/backend/.env`
 
@@ -216,7 +223,7 @@ sudo certbot --nginx -d intel.yourdomain.com
 ```bash
 sudo -iu cip
 cd /opt/cip/app && git pull
-/opt/cip/venv/bin/pip install ./backend
+/opt/cip/venv/bin/pip install "./backend[browser]"
 cd backend && /opt/cip/venv/bin/alembic upgrade head
 cd ../frontend && npm ci && npm run build
 exit

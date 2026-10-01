@@ -14,6 +14,7 @@ import ipaddress
 import logging
 import re
 import socket
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urldefrag, urlparse
 from urllib.robotparser import RobotFileParser
@@ -22,6 +23,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from cip.config import get_settings
+from cip.connectors.research.browser import BrowserRenderer, looks_script_rendered
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ class Page:
     headings: list[str] = field(default_factory=list)
     scripts: list[str] = field(default_factory=list)
     generator: str | None = None
+    rendered: bool = False  # True when the content came from the headless browser
 
 
 def normalize_url(url: str) -> str:
@@ -150,13 +153,17 @@ def parse_html(url: str, status: int, html: str) -> Page:
 
 
 class WebFetcher:
-    def __init__(self, transport: httpx.AsyncBaseTransport | None = None, check_public: bool = True) -> None:
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None, check_public: bool = True,
+                 rendering: str | None = None, renderer: BrowserRenderer | None = None) -> None:
         s = get_settings()
         self._transport = transport
         self._check_public = check_public and transport is None
         self._timeout = s.crawler_timeout_seconds
         self._ua = s.crawler_user_agent
         self._robots: dict[str, RobotFileParser | None] = {}
+        # A mocked transport can't be seen by a real browser, so rendering defaults off for it.
+        self.rendering = rendering or ("never" if transport is not None else s.browser_rendering)
+        self.renderer = renderer or (BrowserRenderer(s, self._check_public) if self.rendering != "never" else None)
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self._timeout, follow_redirects=True, transport=self._transport,
@@ -196,7 +203,8 @@ class WebFetcher:
             if self._check_public and str(resp.url) != url:
                 await assert_public_url(str(resp.url))
             body = resp.text[:MAX_BODY_BYTES]
-            return parse_html(str(resp.url), resp.status_code, body)
+            page = parse_html(str(resp.url), resp.status_code, body)
+            return await self._maybe_render(page, body)
         except (httpx.HTTPError, UnsafeURL) as exc:
             log.info("fetch failed for %s: %s", url, exc)
             return None
@@ -204,8 +212,28 @@ class WebFetcher:
             if own:
                 await client.aclose()
 
+    async def _maybe_render(self, page: Page, raw_html: str) -> Page:
+        if self.renderer is None or not (
+                self.rendering == "always" or looks_script_rendered(raw_html, page.text)):
+            return page
+        rendered = await self.renderer.render(page.url)
+        if rendered is None or rendered.status >= 400:
+            return page
+        if registrable_domain(rendered.url) != registrable_domain(page.url):
+            return page  # client-side redirect off-site: keep the original
+        better = parse_html(rendered.url, rendered.status, rendered.html[:MAX_BODY_BYTES])
+        better.rendered = True
+        return better if len(better.text) >= len(page.text) else page
+
+    def _render_session(self):
+        return self.renderer.session() if self.renderer is not None else nullcontext()
+
     async def crawl(self, start_url: str, max_pages: int | None = None) -> list[Page]:
         """Breadth-first same-site crawl, priority pages first."""
+        async with self._render_session():
+            return await self._crawl(start_url, max_pages)
+
+    async def _crawl(self, start_url: str, max_pages: int | None = None) -> list[Page]:
         max_pages = max_pages or get_settings().crawler_max_pages
         start_url = normalize_url(start_url)
         p = urlparse(start_url)

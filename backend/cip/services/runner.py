@@ -17,7 +17,6 @@ from cip.core.evidence import EvidenceLedger
 from cip.core.llm import get_llm
 from cip.core.schemas import AgentResult, AgentStatus, Evidence, NormalizedRecord
 from cip.core.scoring import ScoringConfig
-from cip.core.security.crypto import TokenCipher
 from cip.db import session as db
 from cip.db.models import (
     AgentExecution,
@@ -26,8 +25,8 @@ from cip.db.models import (
     EvidenceRecord,
     Project,
     Report,
-    SourceConnection,
 )
+from cip.services.tokens import make_token_resolver
 
 log = logging.getLogger(__name__)
 
@@ -110,21 +109,6 @@ class DbRunStore:
             elif row.status == "rejected":
                 pass  # stays rejected; the agent will be skipped by the runner
             await s.commit()
-
-
-def make_token_resolver(org_id: str):
-    async def resolve(provider: str, host: str) -> str | None:
-        async with db.sessionmaker()() as s:
-            con = (await s.execute(select(SourceConnection).where(
-                SourceConnection.org_id == org_id, SourceConnection.provider == provider,
-                SourceConnection.host == host))).scalar_one_or_none()
-            if not con:
-                return None
-            if con.expires_at and con.expires_at.replace(tzinfo=con.expires_at.tzinfo or timezone.utc) < _now():
-                log.warning("Stored %s token for %s has expired", provider, host)
-                return None
-            return TokenCipher().decrypt(con.encrypted_token)
-    return resolve
 
 
 async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext, dict[str, AgentStatus], set[str]]:

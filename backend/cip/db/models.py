@@ -59,6 +59,8 @@ class SourceConnection(Base):
     host: Mapped[str] = mapped_column(String(200))
     token_type: Mapped[str] = mapped_column(String(20), default="oauth")  # oauth | pat
     encrypted_token: Mapped[str] = mapped_column(Text)
+    # OAuth refresh token (encrypted); used to renew expiring access tokens automatically.
+    encrypted_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     scopes: Mapped[str] = mapped_column(String(500), default="")
     account_login: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)

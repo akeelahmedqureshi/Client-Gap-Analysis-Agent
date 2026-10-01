@@ -3,7 +3,14 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY backend/pyproject.toml ./
 COPY backend/cip ./cip
-RUN pip install --no-cache-dir .
+# Headless Chromium for JavaScript-heavy sites (CIP_BROWSER_RENDERING). Build with
+# --build-arg WITH_BROWSER=0 for a smaller image that crawls with plain HTTP only.
+ARG WITH_BROWSER=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN if [ "$WITH_BROWSER" = "1" ]; then \
+      pip install --no-cache-dir ".[browser]" && python -m playwright install --with-deps chromium \
+      && chmod -R a+rx /ms-playwright; \
+    else pip install --no-cache-dir .; fi
 COPY backend/alembic.ini ./
 COPY backend/migrations ./migrations
 RUN useradd --create-home app && mkdir -p /app/storage && chown app /app/storage

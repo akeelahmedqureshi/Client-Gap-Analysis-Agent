@@ -30,6 +30,8 @@ subgroups. GitHub Pages hosts are rejected.
 - **Personal access token.** `POST /api/connections/token`. Prefer fine-grained, read-only tokens.
 - Tokens are resolved lazily per API call through `RunContext.token_resolver` and never placed in
   agent state, evidence or prompts.
+- Expiring OAuth tokens (GitLab's last about 2 hours) are renewed automatically with the stored
+  refresh token, once per connection even when several agents need the token at the same time.
 
 A private repository without a connection doesn't fail the run. The repository agent records "private
 or missing — connect GitHub", code analysis is skipped, and the rest of the analysis continues.
@@ -42,6 +44,30 @@ redirects.
 
 `crawl()` fetches priority paths first, then follows same-site links. Discovered links that look like
 priority pages are moved to the front of the queue.
+
+### JavaScript rendering: `BrowserRenderer`
+
+Many product sites are single-page apps whose HTML is an empty shell until scripts run. The fetcher
+always does a plain HTTP fetch first, and `CIP_BROWSER_RENDERING` decides when headless Chromium
+(Playwright) is used:
+
+- `auto` (default): render only pages that look script-rendered, meaning little visible text plus
+  scripts or a known SPA mount point (`#root`, `#__next`, `ng-app`, "enable JavaScript").
+- `always`: render every HTML page.
+- `never`: plain HTTP only.
+
+Links that only exist after rendering are followed. Rendered pages are marked `rendered=True`.
+
+Safety inside the browser:
+
+- Every request the page makes is intercepted: navigations, scripts, XHR/fetch and frames.
+- Non-http(s) schemes and hosts that resolve to private or internal addresses are aborted (SSRF
+  guard).
+- Images, fonts and media aren't downloaded.
+- Downloads and service workers are disabled, and each page gets a fresh browser context.
+
+If Playwright isn't installed, or the browser can't start, the crawler logs it and falls back to plain
+HTTP.
 
 ## Search: `SearchProvider`
 

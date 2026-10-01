@@ -56,14 +56,17 @@ def _default_host(provider: str) -> str:
 
 
 async def _upsert(session: AsyncSession, org_id: str, user_id: str, provider: str, host: str, token: str,
-                  token_type: str, scopes: str = "", expires_in: int | None = None) -> SourceConnection:
+                  token_type: str, scopes: str = "", expires_in: int | None = None,
+                  refresh_token: str | None = None) -> SourceConnection:
     con = (await session.execute(select(SourceConnection).where(
         SourceConnection.org_id == org_id, SourceConnection.provider == provider,
         SourceConnection.host == host))).scalar_one_or_none()
     if con is None:
         con = SourceConnection(org_id=org_id, provider=provider, host=host)
         session.add(con)
-    con.encrypted_token = TokenCipher().encrypt(token)
+    cipher = TokenCipher()
+    con.encrypted_token = cipher.encrypt(token)
+    con.encrypted_refresh_token = cipher.encrypt(refresh_token) if refresh_token else None
     con.token_type = token_type
     con.scopes = scopes
     con.created_by = user_id
@@ -136,6 +139,7 @@ async def callback(provider: Provider, code: str, state: str, request: Request,
     audit.record(session, request, None, "connection.added", "connection", None, org_id=st.org_id,
                  provider=provider, token_type="oauth", by_user=st.user_id)
     await _upsert(session, st.org_id, st.user_id, provider, _default_host(provider), data["access_token"], "oauth",
-                  scopes=data.get("scope", ""), expires_in=data.get("expires_in"))
+                  scopes=data.get("scope", ""), expires_in=data.get("expires_in"),
+                  refresh_token=data.get("refresh_token"))
     front = get_settings().cors_origins[0] if get_settings().cors_origins else ""
     return RedirectResponse(f"{front}/settings?connected={provider}")

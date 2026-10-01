@@ -17,7 +17,9 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,browser]"
+      - name: Install headless Chromium (for JavaScript-rendering tests)
+        run: python -m playwright install --with-deps chromium
       - name: Lint
         run: ruff check cip tests --select F,E9
       - name: Tests

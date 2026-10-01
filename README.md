@@ -84,7 +84,7 @@ Celery or workflow-engine worker in place of the in-process runner.
 
 ```bash
 cd backend
-pip install -e ".[dev]"
+pip install -e ".[dev,browser]" && python -m playwright install chromium   # browser is optional
 cp ../.env.example .env            # set CIP_OPENROUTER_API_KEY, CIP_JWT_SECRET, …
 uvicorn cip.api.main:app --reload  # http://localhost:8000/docs
 ```

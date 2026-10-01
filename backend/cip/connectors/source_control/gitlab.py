@@ -138,6 +138,20 @@ class GitLabProvider(SourceControlProvider):
         return f"{s.gitlab_url.rstrip('/')}/oauth/authorize?{q}"
 
     @staticmethod
+    async def refresh_token(refresh_token: str) -> dict:
+        """Exchange a (single-use) refresh token for a new access + refresh token pair."""
+        s = get_settings()
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            resp = await c.post(f"{s.gitlab_url.rstrip('/')}/oauth/token", data={
+                "client_id": s.gitlab_client_id, "client_secret": s.gitlab_client_secret,
+                "refresh_token": refresh_token, "grant_type": "refresh_token",
+            })
+        data = resp.json()
+        if "access_token" not in data:
+            raise SourceControlError(f"GitLab token refresh failed: {data.get('error_description') or data}")
+        return data
+
+    @staticmethod
     async def exchange_code(code: str, redirect_uri: str) -> dict:
         s = get_settings()
         async with httpx.AsyncClient(timeout=30.0) as c:

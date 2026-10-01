@@ -141,6 +141,20 @@ class GitHubProvider(SourceControlProvider):
         return f"{GITHUB_OAUTH_AUTHORIZE}?{q}"
 
     @staticmethod
+    async def refresh_token(refresh_token: str) -> dict:
+        """Only used when the OAuth app has expiring user tokens enabled."""
+        s = get_settings()
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            resp = await c.post(GITHUB_OAUTH_TOKEN, headers={"Accept": "application/json"}, data={
+                "client_id": s.github_client_id, "client_secret": s.github_client_secret,
+                "refresh_token": refresh_token, "grant_type": "refresh_token",
+            })
+        data = resp.json()
+        if "access_token" not in data:
+            raise SourceControlError(f"GitHub token refresh failed: {data.get('error_description') or data}")
+        return data
+
+    @staticmethod
     async def exchange_code(code: str, redirect_uri: str) -> dict:
         s = get_settings()
         async with httpx.AsyncClient(timeout=30.0) as c:

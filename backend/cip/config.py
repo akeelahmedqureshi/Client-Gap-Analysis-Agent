@@ -1,6 +1,7 @@
 """Application settings, loaded from environment variables (prefix ``CIP_``)."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -51,6 +52,13 @@ class Settings(BaseSettings):
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"
     max_competitors: int = 5
+    # Headless-browser rendering for JavaScript-heavy sites (needs `pip install .[browser]` + a Chromium):
+    #   auto   – render only pages that look script-rendered (default)
+    #   always – render every HTML page (slower, most complete)
+    #   never  – plain HTTP only
+    browser_rendering: Literal["auto", "always", "never"] = "auto"
+    browser_executable: str | None = None   # path to a Chromium binary; default: Playwright's own
+    browser_max_pages: int = 3              # concurrent browser pages
 
     # --- Source control OAuth --------------------------------------------
     github_client_id: str | None = None
