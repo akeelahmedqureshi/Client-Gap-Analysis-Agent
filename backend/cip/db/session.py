@@ -24,6 +24,15 @@ def sessionmaker() -> async_sessionmaker[AsyncSession]:
     return _sessionmaker or configure()
 
 
+async def dispose() -> None:
+    """Close pooled connections (app shutdown / test teardown)."""
+    global _engine, _sessionmaker
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
+    _sessionmaker = None
+
+
 async def create_all() -> None:
     """Development convenience; production uses Alembic migrations."""
     sessionmaker()

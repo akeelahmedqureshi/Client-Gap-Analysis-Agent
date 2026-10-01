@@ -32,6 +32,9 @@ async def client(tmp_path, monkeypatch):
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     runner.context_hook = None
+    for run_id in list(runner._tasks):
+        await runner.wait(run_id)
+    await db.dispose()
     get_settings.cache_clear()
 
 

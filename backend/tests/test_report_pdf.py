@@ -78,6 +78,7 @@ async def test_injected_markup_cannot_execute_or_fetch(pdf_settings):
         pytest.skip(str(exc))
     finally:
         server.shutdown()
+        server.server_close()
     assert _Beacon.hits == 0
 
 

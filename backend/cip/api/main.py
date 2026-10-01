@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     if settings.resume_runs_on_startup:
         await runner.resume_interrupted()
     yield
+    await db.dispose()
 
 
 app = FastAPI(title="Client Intelligence Platform", version="0.1.0", lifespan=lifespan)
