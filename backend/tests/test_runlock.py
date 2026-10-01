@@ -147,3 +147,37 @@ async def test_celery_mode_dispatches_to_workers(monkeypatch):
         assert sent == ["run_x", "run_x"] and not r.is_running("run_x")  # nothing executes in-process
     finally:
         get_settings.cache_clear()
+
+
+async def test_api_starts_even_if_redis_is_down(monkeypatch, tmp_path):
+    from cip.api.main import app, lifespan
+    from cip.config import get_settings
+    from cip.db import session as db
+
+    monkeypatch.setenv("CIP_RUN_EXECUTOR", "celery")
+    monkeypatch.setenv("CIP_REDIS_URL", "redis://127.0.0.1:1/0")  # nothing listening
+    monkeypatch.setenv("CIP_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'x.db'}")
+    get_settings.cache_clear()
+    from cip.db.models import AnalysisRun, Client, Organization, Project
+
+    db.configure()
+    await db.create_all()
+    async with db.sessionmaker()() as s:  # an interrupted run forces the start-up resume to query Redis
+        org = Organization(name="o")
+        s.add(org)
+        await s.flush()
+        cl = Client(org_id=org.id, key="c", name="c")
+        s.add(cl)
+        await s.flush()
+        pr = Project(org_id=org.id, client_id=cl.id, name="p", record={})
+        s.add(pr)
+        await s.flush()
+        s.add(AnalysisRun(org_id=org.id, project_id=pr.id, status="running"))
+        await s.commit()
+    await db.dispose()
+    try:
+        async with lifespan(app):
+            pass  # reached: start-up survived the Redis outage
+    finally:
+        await db.dispose()
+        get_settings.cache_clear()

@@ -27,7 +27,10 @@ async def lifespan(app: FastAPI):
     if settings.environment != "production":
         await db.create_all()
     if settings.resume_runs_on_startup:
-        await runner.resume_interrupted()
+        try:
+            await runner.resume_interrupted()
+        except Exception:  # noqa: BLE001 - e.g. Redis briefly unavailable; never block API start-up
+            logging.getLogger(__name__).exception("Could not resume interrupted runs at start-up")
     yield
     await limiter.aclose()
     await db.dispose()
