@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
+from dataclasses import asdict
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +24,7 @@ from cip.core.code_scanner import (
     detect_from_paths,
     find_line,
     parse_dependencies,
+    parse_dependency_versions,
 )
 from cip.core.grounding import Grounder, SourceDoc, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
@@ -102,7 +104,9 @@ class CodeAnalysisAgent(Agent):
 
             # Dependencies -> technologies and feature signals
             all_deps: list[tuple[str, str]] = []
+            versioned = []
             for path, content in files.items():
+                versioned += parse_dependency_versions(path, content)
                 deps = parse_dependencies(path, content)
                 all_deps += [(path, d) for d in deps]
                 for hit in detect_from_dependencies(path, deps):
@@ -179,6 +183,8 @@ class CodeAnalysisAgent(Agent):
                 technical_debt_indicators=debt, skipped_sensitive_files=repo.get("skipped_sensitive_files", []),
             )
             profiles.append(profile.model_dump())
+            profiles[-1]["dependencies"] = [asdict(d) for d in versioned]
+            profiles[-1]["blob_base"] = repo.get("blob_base")
             for t in techs.values():
                 findings.append(Finding(category=f"technology.{t.category}", title=t.name,
                                         evidence_ids=t.evidence_ids, confidence=t.confidence))

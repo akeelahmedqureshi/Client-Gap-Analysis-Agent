@@ -28,7 +28,7 @@ TECH_GAP_RULES: list[tuple[str, str, str, str]] = [
 class GapAnalysisAgent(Agent):
     name = "gap_analysis"
     description = "Identify missing, partial, technology, UX and AI gaps"
-    after = ("feature_comparison", "code_analysis", "pricing_analysis")
+    after = ("feature_comparison", "code_analysis", "pricing_analysis", "security_review")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         ledger = ctx.ledger
@@ -129,6 +129,8 @@ class GapAnalysisAgent(Agent):
 
         # Pricing & packaging gaps from the pricing analysis --------------------
         gaps.extend(Gap.model_validate(g) for g in ctx.data("pricing_analysis").get("gaps", []))
+        # Security gaps from the passive security review -------------------------
+        gaps.extend(Gap.model_validate(g) for g in ctx.data("security_review").get("gaps", []))
 
         by_type: dict[str, int] = {}
         for g in gaps:

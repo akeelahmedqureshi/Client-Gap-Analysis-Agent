@@ -205,6 +205,87 @@ def parse_dependencies(path: str, content: str) -> list[str]:
     return [d.strip().lower() for d in deps if d and d.strip()]
 
 
+# ------------------------------------------------------------------ versioned dependencies (for OSV)
+
+_VERSION = re.compile(r"\d+(?:\.\d+){0,3}(?:[-.]?(?:alpha|beta|rc|post|dev)\.?\d*)?", re.I)
+
+
+@dataclass(frozen=True)
+class Dependency:
+    name: str
+    version: str | None       # best-effort concrete version (lower bound of a range)
+    ecosystem: str            # OSV ecosystem: npm, PyPI, RubyGems, Go, Packagist, crates.io, Maven, NuGet, Pub
+    manifest: str
+    exact: bool               # True when pinned exactly; otherwise the lower bound of a range
+
+
+def _version(spec: str | None) -> tuple[str | None, bool]:
+    if not spec or not isinstance(spec, str):
+        return None, False
+    spec = spec.strip()
+    exact = bool(re.match(r"^(==|=)?\s*v?\d", spec)) and not re.search(r"[\^~<>*,|x]", spec)
+    m = _VERSION.search(spec)
+    return (m.group(0) if m else None), exact
+
+
+def parse_dependency_versions(path: str, content: str) -> list[Dependency]:
+    name = PurePosixPath(path).name.lower()
+    out: list[Dependency] = []
+
+    def add(dep: str, spec: str | None, eco: str) -> None:
+        version, exact = _version(spec)
+        if dep and version:
+            out.append(Dependency(dep.strip(), version, eco, path, exact))
+
+    try:
+        if name == "package.json":
+            data = json.loads(content)
+            for key in ("dependencies", "devDependencies"):
+                for dep, spec in (data.get(key) or {}).items():
+                    if isinstance(spec, str) and not spec.startswith(("file:", "link:", "git", "http", "workspace:")):
+                        add(dep, spec, "npm")
+        elif name == "composer.json":
+            data = json.loads(content)
+            for key in ("require", "require-dev"):
+                for dep, spec in (data.get(key) or {}).items():
+                    if "/" in dep:
+                        add(dep, spec, "Packagist")
+        elif name.startswith("requirements") and name.endswith(".txt"):
+            for line in content.splitlines():
+                line = line.split("#")[0].strip()
+                m = re.match(r"^([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*((?:==|>=|~=|>)\s*[^;\s]+)", line)
+                if m:
+                    add(m.group(1), m.group(2), "PyPI")
+        elif name == "pyproject.toml":
+            data = tomllib.loads(content)
+            for d in data.get("project", {}).get("dependencies", []) or []:
+                m = re.match(r"^([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*((?:==|>=|~=|>)\s*[^;,\s]+)", d)
+                if m:
+                    add(m.group(1), m.group(2), "PyPI")
+            for dep, spec in (data.get("tool", {}).get("poetry", {}).get("dependencies") or {}).items():
+                if dep.lower() != "python":
+                    add(dep, spec if isinstance(spec, str) else (spec or {}).get("version"), "PyPI")
+        elif name == "gemfile":
+            for m in re.finditer(r"^\s*gem\s+['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]", content, re.M):
+                add(m.group(1), m.group(2), "RubyGems")
+        elif name == "go.mod":
+            for m in re.finditer(r"^\s*(?:require\s+)?([a-z0-9.\-]+\.[a-z]+/[^\s]+)\s+v([\d.]+[^\s]*)", content, re.M):
+                out.append(Dependency(m.group(1), m.group(2).split("+")[0], "Go", path, True))
+        elif name == "cargo.toml":
+            data = tomllib.loads(content)
+            for dep, spec in (data.get("dependencies") or {}).items():
+                add(dep, spec if isinstance(spec, str) else (spec or {}).get("version"), "crates.io")
+        elif name in ("build.gradle", "build.gradle.kts"):
+            for m in re.finditer(r"['\"]([\w.\-]+):([\w.\-]+):([\w.\-]+)['\"]", content):
+                add(f"{m.group(1)}:{m.group(2)}", m.group(3), "Maven")
+        elif name.endswith(".csproj"):
+            for m in re.finditer(r'PackageReference\s+Include="([^"]+)"\s+Version="([^"]+)"', content):
+                add(m.group(1), m.group(2), "NuGet")
+    except (ValueError, tomllib.TOMLDecodeError):
+        return []
+    return out
+
+
 def find_line(content: str, token: str) -> str | None:
     for i, line in enumerate(content.splitlines(), start=1):
         if token.lower() in line.lower():

@@ -62,6 +62,26 @@ def template_plan(rec: dict, ctx: RunContext, stack: dict[str, list[str]]) -> Im
     feature = rec["feature"]
     is_ai = gap.get("gap_type") == "ai"
     is_tech = gap.get("gap_type") == "technology"
+    if gap.get("gap_type") == "security":
+        return ImplementationPlan(
+            recommendation_id=rec["id"], feature=feature,
+            objective=f"Remediate: {rec['problem']}",
+            architecture_impact="Hardening of existing components; no new product surface.",
+            frontend_changes=["Adapt to a Content-Security-Policy (remove inline scripts where needed)"]
+            if "header" in feature.lower() else [],
+            backend_changes=["Apply fixes listed in the security findings (see evidence)",
+                             "Add security middleware / configuration (headers, cookie flags, CORS allow-list)"],
+            infrastructure_changes=["HTTPS redirect + HSTS at the load balancer / reverse proxy",
+                                    "Automated dependency updates (Dependabot/Renovate) and CI vulnerability scanning"],
+            security_changes=["Re-test with the same passive checks after release", "Add security.txt and a disclosure policy"],
+            testing_requirements=["Regression tests for changed configuration", "CI gate on high/critical advisories"],
+            dependencies=rec.get("dependencies", []),
+            migration_requirements=["Roll out CSP in report-only mode first"] if "header" in feature.lower() else [],
+            estimated_effort=EFFORT_BY_COMPLEXITY.get(rec["complexity"], "TBD"),
+            recommended_team=["Backend engineer", "DevOps / platform engineer", "Security reviewer"],
+            acceptance_criteria=["No high/critical findings on re-check", "Security grade improved in the next analysis"],
+            basis=Basis.ESTIMATE,
+        )
     if gap.get("gap_type") == "pricing":
         return ImplementationPlan(
             recommendation_id=rec["id"], feature=feature,

@@ -99,6 +99,26 @@ target, and what data is analyzed:
 Decisions, including pre-approvals given when a run starts, are stored with the deciding user and a
 timestamp.
 
+## Passive security review of client projects
+
+The `security_review` agent only does what a normal visitor or a public database query does.
+
+- **Live site.** It checks response headers (HSTS, CSP, clickjacking protection, `nosniff`,
+  Referrer-Policy and Permissions-Policy), cookie flags, the HTTP→HTTPS redirect, server version
+  disclosure, and `/.well-known/security.txt`. These checks run only when external research was
+  approved for the run.
+- **Dependencies.** Declared package names and versions are sent to **OSV.dev**, a public
+  vulnerability database; code is never sent. Versions taken from version ranges are lower bounds and
+  are marked "confirm with the lockfile". The repository-access approval mentions this. Turn it off
+  with `CIP_OSV_ENABLED=false`, or disable the whole review with `CIP_SECURITY_REVIEW_ENABLED=false`.
+- **Code.** The files already selected for review are scanned for insecure patterns: disabled TLS or
+  JWT verification, wildcard CORS, debug mode, MD5/SHA-1, `eval`, and SQL built from strings.
+- **Score.** 100 minus per-issue penalties (critical 25, high 12, medium 5, low 2), mapped to grades
+  A–F. The same advisory found in several repositories counts once.
+
+There is **no** port scanning, fuzzing, credential testing or exploitation. Those need an explicit
+security-testing agreement with the client and are out of scope for this platform.
+
 ## Report export
 
 PDFs are rendered from the report's HTML with JavaScript disabled and **every network request

@@ -33,6 +33,7 @@ SourceType = Literal[
     "marketplace",
     "search",
     "csv",
+    "advisory",  # public vulnerability databases (OSV.dev)
 ]
 
 
@@ -261,6 +262,7 @@ class GapType(str, Enum):
     UX = "ux"
     AI = "ai"
     PRICING = "pricing"
+    SECURITY = "security"
 
 
 class Gap(BaseModel):

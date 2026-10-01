@@ -78,6 +78,8 @@ Platform features:
   market positioning; pricing gaps.
 - **Architecture diagrams:** current vs. target (after the roadmap), in the UI, PDF and Markdown
   (Mermaid).
+- **Passive security review:** site headers and HTTPS, cookie flags, OSV.dev dependency advisories,
+  insecure code patterns, and a score and grade.
 - **Deeper research:** schema.org company facts, job-board hiring signals, announcements, and
   open-source and review-site competitor sources.
 
@@ -91,7 +93,7 @@ Also built:
 - optional Celery + Redis workers for scaling.
 
 Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
-app-store analysis, UX/security deep dives, and continuous monitoring and alerts.
+app-store analysis, a UX deep dive, and continuous monitoring and alerts.
 
 ## Quick start
 

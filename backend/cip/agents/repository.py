@@ -55,7 +55,9 @@ class RepositoryAgent(Agent):
             target=", ".join(r.url for r in refs),
             data_analyzed="Selected files only. Secret-bearing files (.env, keys, credentials) are never fetched; "
                           "remaining content is secret-scanned and redacted before any LLM analysis. "
-                          "Private repositories use the organization's connected, encrypted OAuth token.",
+                          "Private repositories use the organization's connected, encrypted OAuth token."
+                          + (" Declared dependency names and versions (no code) are checked against the public "
+                             "OSV.dev vulnerability database." if ctx.settings.osv_enabled else ""),
         )
 
     async def run(self, ctx: RunContext) -> AgentResult:

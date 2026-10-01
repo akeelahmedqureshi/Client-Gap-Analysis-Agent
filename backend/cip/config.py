@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"
     max_competitors: int = 5
+    # Security review: passive website checks + dependency lookups against OSV.dev (public vulnerability
+    # database; only package names/versions are sent). Set false to keep dependency lists in-house.
+    security_review_enabled: bool = True
+    osv_enabled: bool = True
     # Headless-browser rendering for JavaScript-heavy sites (needs `pip install .[browser]` + a Chromium):
     #   auto   – render only pages that look script-rendered (default)
     #   always – render every HTML page (slower, most complete)

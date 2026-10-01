@@ -106,6 +106,12 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
             "technical_debt": p.get("technical_debt_indicators", []),
         } for p in profiles],
     }
+    sec = ctx.data("security_review")
+    sections["security"] = None if not sec.get("enabled") else {
+        "score": sec.get("score"), "grade": sec.get("grade"), "counts": sec.get("counts", {}),
+        "method": sec.get("method"), "scope": sec.get("scope", []), "note": sec.get("note"),
+        "issues": [{**i, "cite": cite([i["evidence_id"]])} for i in sec.get("issues", [])],
+    }
     sections["market_analysis"] = {
         "competitors": [{"name": c["name"], "url": c.get("url"), "classification": c["classification"],
                          "description": c.get("description"), "pricing": c.get("pricing"),
@@ -213,6 +219,22 @@ def render_markdown(report: dict) -> str:
         out += ["", f"Tests: {'yes' if r['has_tests'] else 'no'} · CI/CD: {'yes' if r['has_ci'] else 'no'} · "
                     f"Containerized: {'yes' if r['has_docker'] else 'no'}", "", "**Technical debt indicators**",
                 _md_list(r["technical_debt"]), ""]
+
+    sec = s.get("security")
+    if sec:
+        c = sec["counts"]
+        out += ["### Security review",
+                f"**Grade {sec['grade']}** (score {sec['score']}/100) — "
+                + ", ".join(f"{c.get(k, 0)} {k}" for k in ("critical", "high", "medium", "low", "info")) + ".", "",
+                f"_{sec['note']}_ Scoring: {sec['method']}.", "", "**Scope**", _md_list(sec["scope"]), ""]
+        if sec["issues"]:
+            out += ["| Severity | Issue | Recommendation | Evidence |", "|---|---|---|---|"]
+            for i in sec["issues"]:
+                refs = " ".join(r for r in i.get("references", []) if r.startswith("CVE-"))
+                title = i["title"].replace("|", "\\|") + (f" ({refs})" if refs else "")
+                out.append(f"| {i['severity']} | {title} | {i['recommendation'].replace('|', '/')} | "
+                           f"{i['cite'].strip() or '—'} |")
+            out.append("")
 
     out += ["## 4. Market Analysis"]
     for comp in ma["competitors"]:

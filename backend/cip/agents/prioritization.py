@@ -58,6 +58,18 @@ PRICING_GAP_FACTORS: dict[str, dict[str, float]] = {
     "Entry price above market": dict(business_value=4, user_impact=3, revenue_potential=3, strategic_alignment=3,
                                      ai_opportunity=0, complexity=1, risk=3),
 }
+SECURITY_GAP_FACTORS: dict[str, dict[str, float]] = {
+    "HTTPS enforcement": dict(business_value=4, user_impact=3, revenue_potential=1, strategic_alignment=5,
+                              ai_opportunity=0, complexity=1, risk=1),
+    "Web security hardening (headers & cookies)": dict(business_value=3, user_impact=2, revenue_potential=1,
+                                                       strategic_alignment=4, ai_opportunity=0, complexity=1, risk=2),
+    "Vulnerable dependency remediation": dict(business_value=4, user_impact=2, revenue_potential=1,
+                                              strategic_alignment=5, ai_opportunity=0, complexity=2, risk=3),
+    "Secure coding fixes": dict(business_value=4, user_impact=2, revenue_potential=1, strategic_alignment=5,
+                                ai_opportunity=0, complexity=2, risk=2),
+    "Vulnerability disclosure policy": dict(business_value=2, user_impact=0, revenue_potential=0,
+                                            strategic_alignment=3, ai_opportunity=0, complexity=1, risk=0),
+}
 GENERIC_FACTORS = dict(business_value=3, user_impact=3, revenue_potential=2, strategic_alignment=3,
                        ai_opportunity=1, complexity=3, risk=2)
 
@@ -87,13 +99,14 @@ provided context. These are estimates and will be labelled as such."""
 def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, float]:
     tf = ctx.taxonomy.get(gap["feature_id"]) if gap.get("feature_id") else None
     base = dict(tf.defaults) if tf else dict(TECH_GAP_FACTORS.get(gap["name"])
-                                              or PRICING_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
+                                              or PRICING_GAP_FACTORS.get(gap["name"])
+                                              or SECURITY_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
     n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
     coverage = len(gap.get("competitors_with", [])) / n_comp
-    base["market_demand"] = round(1 + 4 * coverage, 2) if gap["gap_type"] != "technology" else 2.0
+    base["market_demand"] = round(1 + 4 * coverage, 2) if gap["gap_type"] not in ("technology", "security") else 2.0
     base["competitive_gap"] = {
         "missing": 2 + 3 * coverage, "ux": 2 + 3 * coverage, "ai": 2 + 3 * coverage,
-        "partial": 1.5 + 2 * coverage, "technology": 1.5, "pricing": 2 + 3 * coverage,
+        "partial": 1.5 + 2 * coverage, "technology": 1.5, "pricing": 2 + 3 * coverage, "security": 2.5,
     }.get(gap["gap_type"], 2.0)
     feasibility = 3.0
     if gap["gap_type"] == "partial":
@@ -135,6 +148,12 @@ def default_narrative(gap: dict) -> dict[str, str]:
                 "potential_users": "Engineering and operations teams",
                 "revenue_opportunity": "Indirect — faster, safer releases and lower incident cost.",
                 "user_impact_text": "Fewer defects and outages for end users."}
+    if t == "security":
+        sev = "critical" if "critical" in gap["description"] else "high" if "high" in gap["description"] else None
+        return {"business_opportunity": f"Reduce breach and compliance risk: {gap['name']}.",
+                "potential_users": "All customers (data protection); security & compliance reviewers",
+                "revenue_opportunity": "Protects existing revenue and unblocks security reviews in enterprise deals.",
+                "user_impact_text": "Customer data better protected" + (f" ({sev}-severity issues)" if sev else "") + "."}
     if t == "pricing":
         return {"business_opportunity": f"Align pricing & packaging with the market: {gap['name']}.",
                 "potential_users": "Prospects evaluating the product; sales and marketing teams",
@@ -186,6 +205,8 @@ class PrioritizationAgent(Agent):
         scored: list[tuple[float, dict, Opportunity, Recommendation]] = []
         for g in gaps:
             factors = baseline_factors(ctx, g, stack)
+            if g["gap_type"] == "security" and ("critical" in g["description"] or "high" in g["description"]):
+                factors["business_value"] = clamp_factor(factors.get("business_value", 0) + 1)
             hiring = hiring_signal_for(g, signals)
             if hiring:
                 # The client is staffing up in this area: evidence of strategic intent.

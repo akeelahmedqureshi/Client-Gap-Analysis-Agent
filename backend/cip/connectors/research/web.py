@@ -263,6 +263,35 @@ class WebFetcher:
             log.info("JSON fetch failed for %s: %s", url, exc)
             return None
 
+    async def fetch_raw(self, url: str, follow_redirects: bool = True) -> tuple[int, httpx.Headers, str, str] | None:
+        """(status, headers, final_url, body) for passive security checks; SSRF-guarded, robots-aware."""
+        try:
+            if self._check_public:
+                await assert_public_url(url)
+            async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=follow_redirects,
+                                         transport=self._transport, headers={"User-Agent": self._ua}) as client:
+                if not await self._allowed(client, url):
+                    return None
+                resp = await client.get(url)
+            if self._check_public and follow_redirects and str(resp.url) != url:
+                await assert_public_url(str(resp.url))
+            return resp.status_code, resp.headers, str(resp.url), resp.text[:20_000]
+        except (httpx.HTTPError, UnsafeURL) as exc:
+            log.info("raw fetch failed for %s: %s", url, exc)
+            return None
+
+    async def post_json(self, url: str, payload: dict) -> dict | list | None:
+        """POST to a public JSON API (e.g. OSV.dev). Same SSRF guard; None on failure."""
+        try:
+            if self._check_public:
+                await assert_public_url(url)
+            async with self._client() as client:
+                resp = await client.post(url, json=payload, headers={"Accept": "application/json"})
+            return resp.json() if resp.status_code < 400 else None
+        except (httpx.HTTPError, UnsafeURL, ValueError) as exc:
+            log.info("JSON POST failed for %s: %s", url, exc)
+            return None
+
     async def get_text(self, url: str, headers: dict | None = None, max_chars: int = 200_000) -> str | None:
         """GET a public text resource (e.g. a README via the GitHub API). Same SSRF guard."""
         try:

@@ -95,12 +95,41 @@ SITES: dict[str, str] = {
 }
 
 
+# Responses that need specific methods/headers (security review, OSV.dev).
+OSV_VULN = {
+    "id": "GHSA-test-0001", "summary": "Open redirect in express (test advisory)", "aliases": ["CVE-2099-0001"],
+    "database_specific": {"severity": "HIGH"},
+    "affected": [{"package": {"name": "express", "ecosystem": "npm"},
+                  "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "4.19.2"}]}]}],
+}
+
+
+def _raw(request: httpx.Request, sites: dict) -> httpx.Response | None:
+    url = str(request.url)
+    if request.method == "POST" and url == "https://api.osv.dev/v1/querybatch":
+        queries = json.loads(request.content)["queries"]
+        return httpx.Response(200, json={"results": [
+            {"vulns": [{"id": "GHSA-test-0001"}]} if q["package"]["name"] == "express" else {} for q in queries]})
+    if url == "https://api.osv.dev/v1/vulns/GHSA-test-0001":
+        return httpx.Response(200, json=OSV_VULN)
+    if url == "https://abc-healthcare.com/" and url in sites:
+        return httpx.Response(200, text=sites[url], headers=[
+            ("content-type", "text/html"), ("server", "nginx/1.18.0"), ("x-powered-by", "Express"),
+            ("x-content-type-options", "nosniff"), ("set-cookie", "sid=abc123; Path=/")])
+    if url == "http://abc-healthcare.com/":
+        return httpx.Response(200, text="<html>plain http</html>", headers={"content-type": "text/html"})
+    return None
+
+
 def web_transport(sites: dict[str, str] | None = None) -> httpx.MockTransport:
     sites = sites or SITES
 
     def handler(request: httpx.Request) -> httpx.Response:
         from urllib.parse import unquote
 
+        raw = _raw(request, sites)
+        if raw is not None:
+            return raw
         url = unquote(str(request.url))
         prefixed = next((k for k in sites if k.endswith("*") and url.startswith(k[:-1])), None)
         if prefixed:
@@ -135,7 +164,9 @@ REPO_FILES = {
     "README.md": "# ABC Patient Management\nAppointment booking platform with Stripe payments.\n",
     "package.json": PACKAGE_JSON,
     "Dockerfile": "FROM node:20\nCOPY . .\nCMD node server.js\n",
-    "server.js": f"const express = require('express');\nconst STRIPE_KEY = '{FAKE_STRIPE_KEY}';\n",
+    "server.js": f"const express = require('express');\nconst STRIPE_KEY = '{FAKE_STRIPE_KEY}';\n"
+                 "app.use(cors({ origin: '*', credentials: true }));\n"
+                 "const digest = crypto.createHash('md5').update(password).digest('hex');\n",
     "src/routes/auth.js": "router.post('/login', passport.authenticate('local'))\n",
     ".env": "DATABASE_URL=postgres://user:secret@db/prod\n",
 }

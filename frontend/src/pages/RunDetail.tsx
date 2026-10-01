@@ -10,7 +10,7 @@ import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 
-const TABS = ["Pipeline", "Client", "Project", "Competitors", "Pricing", "Comparison", "Gaps", "Opportunities",
+const TABS = ["Pipeline", "Client", "Project", "Security", "Competitors", "Pricing", "Comparison", "Gaps", "Opportunities",
   "Roadmap", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
@@ -118,6 +118,7 @@ export default function RunDetailPage() {
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
         {tab === "Competitors" && <CompetitorsTab runId={runId} enabled={done("competitor_research")} />}
+        {tab === "Security" && <SecurityTab runId={runId} enabled={done("security_review")} />}
         {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
         {tab === "Comparison" && <ComparisonTab runId={runId} enabled={done("feature_comparison")} />}
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
@@ -281,6 +282,62 @@ function CompetitorsTab({ runId, enabled }: { runId: string; enabled: boolean })
           <ul className="text-sm space-y-1">{d.rejected.map((c: any) => <li key={c.url}>{c.name} <span className="text-slate-500">— {c.rationale}</span></li>)}</ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+const SEV_STYLE: Record<string, string> = {
+  critical: "bg-rose-600 text-white", high: "bg-rose-100 text-rose-800", medium: "bg-amber-100 text-amber-800",
+  low: "bg-slate-100 text-slate-700", info: "bg-sky-50 text-sky-700",
+};
+const GRADE_STYLE: Record<string, string> = {
+  A: "text-emerald-600", B: "text-emerald-600", C: "text-amber-600", D: "text-rose-600", F: "text-rose-700",
+};
+
+function SecurityTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+  const res = useAgent(runId, "security_review", enabled);
+  if (!enabled) return <Empty>Available once the security review has completed (it is skipped when disabled).</Empty>;
+  const d = res.data?.data;
+  if (!d) return null;
+  const order = ["critical", "high", "medium", "low", "info"];
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className="bg-white border rounded-xl p-3 col-span-2 flex items-center gap-4">
+          <div className={`text-5xl font-bold ${GRADE_STYLE[d.grade] ?? ""}`}>{d.grade}</div>
+          <div><div className="text-xs text-slate-500">Security score</div><div className="text-2xl font-semibold">{d.score}/100</div></div>
+        </div>
+        {order.map((s) => (
+          <div key={s} className="bg-white border rounded-xl p-3">
+            <div className="text-xs text-slate-500 capitalize">{s}</div>
+            <div className="text-2xl font-semibold">{d.counts?.[s] ?? 0}</div>
+          </div>
+        ))}
+      </div>
+      <Card title="Findings">
+        {d.issues.length ? (
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-500"><tr><th className="py-1">Severity</th><th>Issue</th><th>Recommendation</th><th /></tr></thead>
+            <tbody>
+              {d.issues.map((i: any) => (
+                <tr key={i.key} className="border-t align-top">
+                  <td className="py-1.5 pr-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${SEV_STYLE[i.severity]}`}>{i.severity}</span></td>
+                  <td className="pr-2"><div className="font-medium">{i.title}</div><div className="text-xs text-slate-500">{i.detail}</div>
+                    {i.references?.filter((r: string) => r.startsWith("http")).map((r: string) => (
+                      <a key={r} href={r} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 underline mr-2">advisory</a>))}
+                  </td>
+                  <td className="text-xs pr-2">{i.recommendation}</td>
+                  <td><EvidenceRefs ids={[i.evidence_id]} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <Empty>No issues found in the reviewed scope.</Empty>}
+      </Card>
+      <Card title="Scope & method">
+        <ul className="list-disc pl-5 text-sm space-y-1">{d.scope.map((s: string) => <li key={s}>{s}</li>)}</ul>
+        <p className="text-xs text-slate-500 mt-2">{d.note} Scoring: {d.method}.</p>
+      </Card>
     </div>
   );
 }

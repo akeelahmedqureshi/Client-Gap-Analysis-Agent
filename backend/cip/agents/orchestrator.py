@@ -36,6 +36,7 @@ from cip.agents.prioritization import PrioritizationAgent
 from cip.agents.product_features import ProductFeatureAgent
 from cip.agents.reporting import ReportAgent
 from cip.agents.repository import RepositoryAgent
+from cip.agents.security_review import SecurityReviewAgent
 from cip.core.schemas import AgentResult, AgentStatus, Evidence
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ def default_agents() -> list[Agent]:
         ClientResearchAgent(),
         RepositoryAgent(),
         CodeAnalysisAgent(),
+        SecurityReviewAgent(),
         ProductFeatureAgent(),
         CompetitorResearchAgent(),
         PricingAnalysisAgent(),

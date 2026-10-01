@@ -123,6 +123,12 @@ low-confidence evidence.
 4. Phases: complexity ≤ 2 → Phase 1; ≤ 3 → Phase 2; ≤ 4 and not a large AI bet → Phase 3; otherwise
    Phase 4.
 
+**Security Review** (`security_review`, after client research and code analysis). It is passive
+only; see docs/security.md. It checks the live site's posture, looks up dependencies on OSV.dev and
+scans reviewed files for insecure patterns. Output: a score and grade, issues with severity and
+recommendations, and security gaps (HTTPS enforcement, header and cookie hardening, dependency
+remediation, secure-coding fixes, disclosure policy). High and critical gaps get +1 business value.
+
 **Architecture diagrams** (built by `enhancement_planning`, in `core/architecture.py`).
 
 - **Current:** a layered model of users, client apps, application, data, external services and the
