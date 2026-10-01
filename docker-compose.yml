@@ -1,7 +1,17 @@
-# Local or single-server stack: PostgreSQL (with pgvector for the upcoming knowledge layer), API, web UI.
+# Single-server stack: PostgreSQL (with pgvector for the upcoming knowledge layer), Redis, API,
+# Celery worker(s) and the web UI.
 #   cp .env.example .env   # set CIP_PUBLIC_URL, POSTGRES_PASSWORD, CIP_OPENROUTER_API_KEY, secrets …
 #   docker compose up -d --build
+#   docker compose up -d --scale worker=3     # more parallel analyses
 # All deployment-specific values come from .env (see docs/deployment.md).
+x-backend-env: &backend-env
+  CIP_DATABASE_URL: postgresql+asyncpg://cip:${POSTGRES_PASSWORD:-cip}@db:5432/cip
+  CIP_STORAGE_DIR: /app/storage
+  CIP_CORS_ORIGINS: '["${CIP_PUBLIC_URL:-http://localhost:8080}"]'
+  CIP_OAUTH_REDIRECT_BASE: ${CIP_PUBLIC_URL:-http://localhost:8080}
+  CIP_RUN_EXECUTOR: celery
+  CIP_REDIS_URL: redis://redis:6379/0
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -16,18 +26,36 @@ services:
       retries: 10
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
   api:
     build: { context: ., dockerfile: docker/backend.Dockerfile }
     env_file: .env
-    environment:
-      CIP_DATABASE_URL: postgresql+asyncpg://cip:${POSTGRES_PASSWORD:-cip}@db:5432/cip
-      CIP_STORAGE_DIR: /app/storage
-      CIP_CORS_ORIGINS: '["${CIP_PUBLIC_URL:-http://localhost:8080}"]'
-      CIP_OAUTH_REDIRECT_BASE: ${CIP_PUBLIC_URL:-http://localhost:8080}
+    environment: *backend-env
     volumes: [storage:/app/storage]
     depends_on:
       db: { condition: service_healthy }
+      redis: { condition: service_healthy }
     # Not published: the web container proxies /api to it.
+    restart: unless-stopped
+
+  worker:
+    build: { context: ., dockerfile: docker/backend.Dockerfile }
+    env_file: .env
+    environment: *backend-env
+    command: ["celery", "-A", "cip.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    volumes: [storage:/app/storage]
+    depends_on:
+      api: { condition: service_started }   # api applies migrations on start
+      redis: { condition: service_healthy }
     restart: unless-stopped
 
   web:
@@ -39,4 +67,5 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   storage:

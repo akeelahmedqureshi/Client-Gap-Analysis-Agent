@@ -85,10 +85,10 @@ def token_for(u: User) -> TokenOut:
     return TokenOut(access_token=create_access_token(u.id, u.org_id, u.role, u.token_version))
 
 
-def _throttle(request: Request) -> None:
+async def _throttle(request: Request) -> None:
     s = get_settings()
     ip = audit.client_ip(request) or "unknown"
-    if not limiter.hit(f"auth:{ip}", s.login_ip_limit, s.login_ip_window_seconds):
+    if not await limiter.hit(f"auth:{ip}", s.login_ip_limit, s.login_ip_window_seconds):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many attempts; please wait and try again")
 
 
@@ -96,7 +96,7 @@ def _throttle(request: Request) -> None:
 async def register(body: RegisterIn, request: Request, session: AsyncSession = Depends(get_session)) -> TokenOut:
     if not get_settings().allow_registration:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Registration is disabled")
-    _throttle(request)
+    await _throttle(request)
     if (await session.execute(select(User).where(User.email == body.email.lower()))).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
     org = Organization(name=body.organization)
@@ -114,7 +114,7 @@ async def register(body: RegisterIn, request: Request, session: AsyncSession = D
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, request: Request, session: AsyncSession = Depends(get_session)) -> TokenOut:
     s = get_settings()
-    _throttle(request)
+    await _throttle(request)
     email = body.email.lower()
     user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if user and is_locked(user):

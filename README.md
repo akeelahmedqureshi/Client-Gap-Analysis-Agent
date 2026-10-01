@@ -81,11 +81,11 @@ Also built:
 - automatic OAuth token refresh;
 - auto-resume of interrupted runs;
 - login protection, user management, per-project access control and an audit log;
-- a CI pipeline.
+- a CI pipeline;
+- optional Celery + Redis workers for scaling.
 
 Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
-app-store and pricing analysis, UX/security deep dives, continuous monitoring and alerts, and a
-Celery or workflow-engine worker in place of the in-process runner.
+app-store and pricing analysis, UX/security deep dives, and continuous monitoring and alerts.
 
 ## Quick start
 

@@ -212,7 +212,7 @@ async def resume(run_id: str, request: Request, user: User = Depends(require_rol
     run = await _run_for(session, run_id, user)
     if run.status in ("completed",):
         raise HTTPException(409, "Run already completed")
-    if not runner.is_running(run.id):
+    if not await runner.is_active(run.id):
         # Failed agents are retried on resume; completed agents are not re-run.
         for e in (await session.execute(select(AgentExecution).where(
                 AgentExecution.run_id == run.id, AgentExecution.status.in_(["failed", "skipped"])))).scalars():

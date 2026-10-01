@@ -7,13 +7,20 @@ Two supported layouts on a single Linux server:
 - **B. Without Docker**: Python, PostgreSQL and nginx are installed directly on the server, and
   systemd runs the API.
 
-> **Run one API process.** Analyses execute inside the API process, and approvals, re-runs and login
-> rate limits are tracked in memory. Use `--workers 1` (the default in both layouts below). Scaling
-> out needs a separate job worker such as Celery or Redis first.
+> **Where analyses run (`CIP_RUN_EXECUTOR`).**
 >
-> **Restarts.** On start-up the API automatically resumes analyses that were interrupted by a restart
-> or deploy (`CIP_RESUME_RUNS_ON_STARTUP=true`). Completed agents are kept, and the agent that was
-> running is re-run.
+> - **`inline`** (the default for a plain install): analyses run inside the API process. Keep the API
+>   at one process (`--workers 1`), because run coordination and login rate limits are kept in
+>   memory.
+> - **`celery`** (what Docker Compose uses): analyses run in Celery workers through Redis. A Redis
+>   lock guarantees one executor per run, and approvals granted mid-run trigger a re-run. Login rate
+>   limits are shared in Redis. You can run several API processes (`CIP_API_WORKERS`) and scale the
+>   workers (`docker compose up -d --scale worker=3`).
+>
+> **Restarts and crashes.** Analyses interrupted by a deploy or restart are resumed automatically.
+> Completed agents are kept, and the agent that was running is re-run. The API does this on start-up
+> (`CIP_RESUME_RUNS_ON_STARTUP`). In celery mode a worker does it on start-up too. The run lock
+> expires 5 minutes after its worker dies, and a crashed worker process's task is redelivered.
 
 The server needs outbound HTTPS access to `openrouter.ai`, `github.com` / `gitlab.com`, your search
 API (Tavily or Brave), and the client and competitor websites.
@@ -229,6 +236,47 @@ cd ../frontend && npm ci && npm run build
 exit
 sudo systemctl restart cip-api      # interrupted analyses resume automatically
 ```
+
+### Optional: background workers (celery mode)
+
+Use this for more parallel analyses or several API processes.
+
+```bash
+sudo apt install -y redis-server
+sudo -iu cip /opt/cip/venv/bin/pip install "/opt/cip/app/backend[browser,worker]"
+```
+
+Add to `.env`:
+
+```bash
+CIP_RUN_EXECUTOR=celery
+CIP_REDIS_URL=redis://localhost:6379/0
+```
+
+Create `/etc/systemd/system/cip-worker.service`:
+
+```ini
+[Unit]
+Description=Client Intelligence Platform worker
+After=network.target redis-server.service postgresql.service
+
+[Service]
+User=cip
+WorkingDirectory=/opt/cip/app/backend
+ExecStart=/opt/cip/venv/bin/celery -A cip.workers.celery_app worker --loglevel=info --concurrency=2
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable the worker and restart the API:
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now cip-worker && sudo systemctl restart cip-api
+```
+
+In this mode the API's `ExecStart` may use `--workers 2` or more.
 
 ### 8. Backups
 

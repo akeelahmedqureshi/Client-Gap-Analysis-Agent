@@ -9,6 +9,8 @@ Multi-agent client intelligence & gap analysis platform. Backend: Python 3.11 / 
 - Frontend type-check/build: `cd frontend && npm run build`
 - Run API: `cd backend && uvicorn cip.api.main:app --reload`; UI: `cd frontend && npm run dev`
 - New migration: `cd backend && alembic revision --autogenerate -m "..."`
+- Worker (celery mode): `cd backend && celery -A cip.workers.celery_app worker --loglevel=info`
+  (needs `CIP_RUN_EXECUTOR=celery` and `CIP_REDIS_URL`; default `inline` runs analyses in the API process)
 
 ## Rules
 - Agents return `AgentResult` only (never free text) and never call each other; the orchestrator owns the DAG.

@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     allow_registration: bool = True
     # Restart analyses that were interrupted (crash/deploy) when the API starts.
     resume_runs_on_startup: bool = True
+    # Where analyses execute:
+    #   inline – asyncio tasks inside the API process (single API process only; no extra services)
+    #   celery – Celery workers via Redis (multiple API processes/workers; needs `pip install .[worker]`)
+    run_executor: Literal["inline", "celery"] = "inline"
+    # Redis for the Celery broker, distributed run locks and shared login rate limits.
+    redis_url: str | None = None
+    run_lock_ttl_seconds: int = 300        # renewed while a run executes; expires if a worker dies
+    celery_visibility_timeout_seconds: int = 6 * 3600
 
     # --- Auth -------------------------------------------------------------
     jwt_secret: str = "change-me-in-production"

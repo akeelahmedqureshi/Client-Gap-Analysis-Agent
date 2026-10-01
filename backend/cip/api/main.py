@@ -12,6 +12,7 @@ from cip.config import get_settings
 from cip.core.scoring import ScoringConfig
 from cip.core.taxonomy import load_taxonomy
 from cip.db import session as db
+from cip.services.ratelimit import limiter
 from cip.services.runner import runner
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
     if settings.resume_runs_on_startup:
         await runner.resume_interrupted()
     yield
+    await limiter.aclose()
     await db.dispose()
 
 

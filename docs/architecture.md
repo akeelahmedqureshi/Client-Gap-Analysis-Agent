@@ -58,9 +58,20 @@ Agent state, as exposed by `GET /api/runs/{id}`:
 
 ### Execution
 
-`services/runner.py` runs each analysis as an in-process asyncio task and queues a re-run if an
-approval arrives mid-pass. This is enough for the MVP. The `RunStore` / `build_context` split lets the
-runner move to Celery (with Redis) or a workflow engine later without touching the agents.
+`services/runner.py` dispatches runs according to `CIP_RUN_EXECUTOR`:
+
+- **inline**: each analysis runs as an asyncio task in the API process. An approval that arrives
+  mid-pass queues a re-run.
+- **celery**: runs are queued to Celery workers (`cip/workers/celery_app.py`) through Redis. Each
+  execution holds a Redis lock (`services/runlock.py`), which is renewed while the run executes and
+  expires if the worker dies, so only one process ever executes a given run.
+  - A start request that arrives while a run executes leaves a re-run flag. The holder honours the
+    flag before releasing the lock, and the requester retries the lock after setting it, which closes
+    the release race.
+  - Tasks are acknowledged late and redelivered if a worker process dies.
+  - Workers re-queue interrupted runs when they start.
+
+Either way, a resumed run rebuilds its context from the database, so completed agents never re-run.
 
 ## Data model
 

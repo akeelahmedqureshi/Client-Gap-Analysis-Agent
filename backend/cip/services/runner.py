@@ -148,7 +148,12 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
 
 
 class AnalysisRunner:
-    """Runs analyses in-process as asyncio tasks (swap for Celery/a workflow engine at scale)."""
+    """Dispatches analysis runs.
+
+    ``inline`` (default): runs execute as asyncio tasks inside this API process.
+    ``celery``: runs are queued to Celery workers (see cip/workers/celery_app.py) and coordinated
+    with a Redis lock, so any number of API processes and workers can be used.
+    """
 
     def __init__(self) -> None:
         self._tasks: dict[str, asyncio.Task] = {}
@@ -160,9 +165,35 @@ class AnalysisRunner:
         t = self._tasks.get(run_id)
         return bool(t and not t.done())
 
+    @property
+    def mode(self) -> str:
+        return get_settings().run_executor
+
+    def _redis(self):
+        import redis.asyncio as aioredis
+
+        return aioredis.from_url(get_settings().redis_url)
+
+    async def is_active(self, run_id: str) -> bool:
+        """Is the run executing anywhere (this process, or any worker in celery mode)?"""
+        if self.mode != "celery":
+            return self.is_running(run_id)
+        from cip.services.runlock import is_locked
+
+        client = self._redis()
+        try:
+            return await is_locked(client, run_id)
+        finally:
+            await client.aclose()
+
     def start(self, run_id: str) -> bool:
         """Start (or resume) a run. If it is already executing, re-run it once the current pass ends
         so approvals granted mid-pass are picked up."""
+        if self.mode == "celery":
+            from cip.workers.celery_app import execute_run
+
+            execute_run.delay(run_id)  # the worker's run lock de-duplicates and handles re-runs
+            return True
         if self.is_running(run_id):
             self._rerun.add(run_id)
             return False
@@ -194,6 +225,8 @@ class AnalysisRunner:
         async with db.sessionmaker()() as s:
             runs = (await s.execute(select(AnalysisRun).where(
                 AnalysisRun.status.in_(["queued", "running"])))).scalars().all()
+            # With Celery, runs still executing on a live worker hold their lock: leave those alone.
+            runs = [r for r in runs if not await self.is_active(r.id)]
             ids = [r.id for r in runs]
             if ids:
                 for ex in (await s.execute(select(AgentExecution).where(
