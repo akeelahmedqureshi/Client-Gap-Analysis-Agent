@@ -28,7 +28,7 @@ TECH_GAP_RULES: list[tuple[str, str, str, str]] = [
 class GapAnalysisAgent(Agent):
     name = "gap_analysis"
     description = "Identify missing, partial, technology, UX and AI gaps"
-    after = ("feature_comparison", "code_analysis")
+    after = ("feature_comparison", "code_analysis", "pricing_analysis")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         ledger = ctx.ledger
@@ -126,6 +126,9 @@ class GapAnalysisAgent(Agent):
                                 gap_type=GapType.TECHNOLOGY,
                                 description="No Dockerfile or platform deployment config was found.",
                                 evidence_ids=[ev.id], confidence=0.55))
+
+        # Pricing & packaging gaps from the pricing analysis --------------------
+        gaps.extend(Gap.model_validate(g) for g in ctx.data("pricing_analysis").get("gaps", []))
 
         by_type: dict[str, int] = {}
         for g in gaps:

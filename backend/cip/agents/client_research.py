@@ -25,6 +25,8 @@ from cip.connectors.research.enrichment import (
     legal_name_from_footer,
     organization_facts,
 )
+from cip.agents.pricing_analysis import record_pricing
+from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.web import Page, registrable_domain
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
@@ -346,6 +348,9 @@ class ClientResearchAgent(Agent):
         # schema.org structured data: the company's own canonical statements --------
         self._apply_structured_facts(ctx, profile, all_pages, contacts)
 
+        # The client's own pricing page ---------------------------------------
+        pricing = record_pricing(ledger, rec.client.name, extract_pricing(all_pages))
+
         # Careers & technology hiring signals -----------------------------------
         hiring = await self._hiring(ctx, all_pages, findings)
 
@@ -388,6 +393,7 @@ class ClientResearchAgent(Agent):
                 "leadership": leadership,
                 "linkedin_url": linkedin,
                 "hiring": hiring,
+                "pricing": pricing,
                 "announcements": announcements,
                 "pages": [page_summary(p) for p in pages],
                 "project_pages": [page_summary(p) for p in project_pages],

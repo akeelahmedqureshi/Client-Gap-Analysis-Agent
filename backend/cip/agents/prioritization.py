@@ -44,6 +44,20 @@ TECH_GAP_FACTORS: dict[str, dict[str, float]] = {
     "Containerized, reproducible deployment": dict(business_value=3, user_impact=1, revenue_potential=1,
                                                    strategic_alignment=3, ai_opportunity=0, complexity=2, risk=2),
 }
+PRICING_GAP_FACTORS: dict[str, dict[str, float]] = {
+    "Transparent self-serve pricing": dict(business_value=4, user_impact=3, revenue_potential=4,
+                                           strategic_alignment=3, ai_opportunity=0, complexity=1, risk=2),
+    "Free trial": dict(business_value=4, user_impact=4, revenue_potential=4, strategic_alignment=3,
+                       ai_opportunity=1, complexity=2, risk=1),
+    "Free tier (freemium)": dict(business_value=3, user_impact=4, revenue_potential=3, strategic_alignment=3,
+                                 ai_opportunity=0, complexity=2, risk=3),
+    "Annual billing discount": dict(business_value=3, user_impact=1, revenue_potential=4, strategic_alignment=3,
+                                    ai_opportunity=0, complexity=1, risk=1),
+    "Enterprise tier": dict(business_value=4, user_impact=2, revenue_potential=5, strategic_alignment=4,
+                            ai_opportunity=0, complexity=2, risk=2),
+    "Entry price above market": dict(business_value=4, user_impact=3, revenue_potential=3, strategic_alignment=3,
+                                     ai_opportunity=0, complexity=1, risk=3),
+}
 GENERIC_FACTORS = dict(business_value=3, user_impact=3, revenue_potential=2, strategic_alignment=3,
                        ai_opportunity=1, complexity=3, risk=2)
 
@@ -72,13 +86,14 @@ provided context. These are estimates and will be labelled as such."""
 
 def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, float]:
     tf = ctx.taxonomy.get(gap["feature_id"]) if gap.get("feature_id") else None
-    base = dict(tf.defaults) if tf else dict(TECH_GAP_FACTORS.get(gap["name"], GENERIC_FACTORS))
+    base = dict(tf.defaults) if tf else dict(TECH_GAP_FACTORS.get(gap["name"])
+                                              or PRICING_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
     n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
     coverage = len(gap.get("competitors_with", [])) / n_comp
     base["market_demand"] = round(1 + 4 * coverage, 2) if gap["gap_type"] != "technology" else 2.0
     base["competitive_gap"] = {
         "missing": 2 + 3 * coverage, "ux": 2 + 3 * coverage, "ai": 2 + 3 * coverage,
-        "partial": 1.5 + 2 * coverage, "technology": 1.5,
+        "partial": 1.5 + 2 * coverage, "technology": 1.5, "pricing": 2 + 3 * coverage,
     }.get(gap["gap_type"], 2.0)
     feasibility = 3.0
     if gap["gap_type"] == "partial":
@@ -120,6 +135,11 @@ def default_narrative(gap: dict) -> dict[str, str]:
                 "potential_users": "Engineering and operations teams",
                 "revenue_opportunity": "Indirect — faster, safer releases and lower incident cost.",
                 "user_impact_text": "Fewer defects and outages for end users."}
+    if t == "pricing":
+        return {"business_opportunity": f"Align pricing & packaging with the market: {gap['name']}.",
+                "potential_users": "Prospects evaluating the product; sales and marketing teams",
+                "revenue_opportunity": "Higher trial-to-paid conversion and win-rate against priced competitors.",
+                "user_impact_text": "Easier evaluation and purchase decisions for prospects."}
     if t == "ai":
         return {"business_opportunity": f"Differentiate with {gap['name']} to automate work and increase engagement.",
                 "potential_users": "End users and internal operations teams",

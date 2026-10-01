@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useParams } from "react-router-dom";
@@ -10,8 +10,8 @@ import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 
-const TABS = ["Pipeline", "Client", "Project", "Competitors", "Comparison", "Gaps", "Opportunities", "Roadmap",
-  "Evidence", "Report"] as const;
+const TABS = ["Pipeline", "Client", "Project", "Competitors", "Pricing", "Comparison", "Gaps", "Opportunities",
+  "Roadmap", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -118,6 +118,7 @@ export default function RunDetailPage() {
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
         {tab === "Competitors" && <CompetitorsTab runId={runId} enabled={done("competitor_research")} />}
+        {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
         {tab === "Comparison" && <ComparisonTab runId={runId} enabled={done("feature_comparison")} />}
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
@@ -280,6 +281,75 @@ function CompetitorsTab({ runId, enabled }: { runId: string; enabled: boolean })
           <ul className="text-sm space-y-1">{d.rejected.map((c: any) => <li key={c.url}>{c.name} <span className="text-slate-500">— {c.rationale}</span></li>)}</ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+const MODEL_LABELS: Record<string, string> = {
+  per_seat: "per seat", flat: "flat fee", usage_based: "usage-based", tiered: "tiered", freemium: "freemium",
+  quote_based: "quote only",
+};
+
+function PricingTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+  const res = useAgent(runId, "pricing_analysis", enabled);
+  if (!enabled) return <Pending />;
+  const d = res.data?.data;
+  if (!d) return null;
+  const m = d.market ?? {};
+  const money = (v: number | null, cur: string | null) => (v ? `${v.toLocaleString()} ${cur ?? ""}` : "—");
+  const row = (name: React.ReactNode, p: any, ids: string[]) => (
+    <tr className="border-t align-top">
+      <td className="py-1.5 font-medium">{name}</td>
+      <td>{money(p.entry_price_monthly, p.currency)}</td>
+      <td>{money(p.max_price_monthly, p.currency)}</td>
+      <td className="text-xs">{(p.models ?? []).map((x: string) => MODEL_LABELS[x] ?? x).join(", ") || "—"}</td>
+      <td className="text-center">{p.free_trial ? `✓${p.trial_days ? ` ${p.trial_days}d` : ""}` : "—"}</td>
+      <td className="text-center">{p.free_tier ? "✓" : "—"}</td>
+      <td className="text-center">{p.annual_discount_pct ? `${p.annual_discount_pct}%` : "—"}</td>
+      <td className="text-center">{p.enterprise_contact ? "✓" : "—"}</td>
+      <td><EvidenceRefs ids={ids} /></td>
+    </tr>
+  );
+  const pos: Record<string, string> = { above: "above", below: "below", within: "within", unknown: "unknown vs" };
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[["Client position", `${pos[d.position] ?? d.position} market`],
+          ["Market entry price (median)", m.entry_price_median ? `${m.entry_price_median} ${m.currency ?? ""}/mo` : "—"],
+          ["Competitors with free trial", m.free_trial_share != null ? `${Math.round(m.free_trial_share * 100)}%` : "—"],
+          ["Competitors pricing per seat", m.per_seat_share != null ? `${Math.round(m.per_seat_share * 100)}%` : "—"]].map(([k, v]) => (
+          <div key={k} className="bg-white border rounded-xl p-3">
+            <div className="text-xs text-slate-500">{k}</div>
+            <div className="text-lg font-semibold">{v}</div>
+          </div>
+        ))}
+      </div>
+      <Card title="Pricing comparison (per month)">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-500">
+              <tr><th className="py-1">Company</th><th>Entry</th><th>Highest</th><th>Model</th><th className="text-center">Trial</th>
+                <th className="text-center">Free tier</th><th className="text-center">Annual disc.</th><th className="text-center">Enterprise</th><th /></tr>
+            </thead>
+            <tbody>
+              {d.client ? row("Client", d.client, d.client.evidence_ids ?? []) :
+                <tr className="border-t"><td className="py-1.5 font-medium">Client</td><td colSpan={8} className="text-slate-500 italic">No public pricing page found</td></tr>}
+              {d.competitors.map((c: any) => <Fragment key={c.competitor_id}>{row(c.name, c, c.evidence_ids)}</Fragment>)}
+            </tbody>
+          </table>
+        </div>
+        {m.excluded_other_currency > 0 && <p className="text-xs text-slate-500 mt-2">{m.excluded_other_currency} competitor(s) priced in another currency are excluded from the market statistics.</p>}
+      </Card>
+      <Card title="Pricing gaps">
+        {d.gaps.length ? (
+          <ul className="space-y-2 text-sm">
+            {d.gaps.map((g: any) => (
+              <li key={g.id}><span className="font-medium">{g.name}</span><BasisTag basis={g.basis} /> <Confidence value={g.confidence} /> <EvidenceRefs ids={g.evidence_ids} />
+                <div className="text-slate-600">{g.description}</div></li>
+            ))}
+          </ul>
+        ) : <Empty>No pricing gaps — the client's pricing practices match the market.</Empty>}
+      </Card>
     </div>
   );
 }

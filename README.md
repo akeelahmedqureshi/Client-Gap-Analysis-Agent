@@ -74,6 +74,10 @@ Platform features:
   evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.
 - **Report export** as a client-ready PDF, plus Markdown and JSON.
+- **Pricing analysis:** plans, prices, pricing models and practices for the client and competitors;
+  market positioning; pricing gaps.
+- **Deeper research:** schema.org company facts, job-board hiring signals, announcements, and
+  open-source and review-site competitor sources.
 
 Also built:
 
@@ -85,7 +89,7 @@ Also built:
 - optional Celery + Redis workers for scaling.
 
 Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
-app-store and pricing analysis, UX/security deep dives, and continuous monitoring and alerts.
+app-store analysis, UX/security deep dives, and continuous monitoring and alerts.
 
 ## Quick start
 

@@ -219,7 +219,7 @@ categories:
         defaults: {business_value: 4, user_impact: 4, revenue_potential: 3, strategic_alignment: 4, ai_opportunity: 2, complexity: 3, risk: 2}
       - id: ux.onboarding
         name: Guided onboarding
-        keywords: ["onboarding", "getting started", "setup wizard", "free trial", "start free"]
+        keywords: ["onboarding", "getting started", "setup wizard", "guided setup", "product tour"]  # trials are pricing (see pricing analysis)
         code_signals: ["react-joyride", "intro.js", "shepherd.js", "driver.js", "userflow", "appcues"]
         defaults: {business_value: 3, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, ai_opportunity: 3, complexity: 2, risk: 1}
       - id: ux.localization

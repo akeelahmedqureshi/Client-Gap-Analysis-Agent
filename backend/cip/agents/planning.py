@@ -61,6 +61,29 @@ def template_plan(rec: dict, ctx: RunContext, stack: dict[str, list[str]]) -> Im
     feature = rec["feature"]
     is_ai = gap.get("gap_type") == "ai"
     is_tech = gap.get("gap_type") == "technology"
+    if gap.get("gap_type") == "pricing":
+        return ImplementationPlan(
+            recommendation_id=rec["id"], feature=feature,
+            objective=f"Close the pricing & packaging gap: {rec['problem']}",
+            architecture_impact="Commercial / billing change; product changes limited to plans, entitlements and checkout.",
+            frontend_changes=["Public pricing page with plan comparison", "Self-serve signup / trial / upgrade flow",
+                              "In-app plan & usage indicators"],
+            backend_changes=["Plan & entitlement model (feature flags per plan)",
+                             "Billing provider integration (e.g. Stripe Billing: products, prices, trials, coupons)",
+                             "Webhook handling for subscription lifecycle"],
+            database_changes=["plans, subscriptions and entitlements tables (or billing-provider sync)"],
+            api_changes=["Entitlement checks on gated endpoints"],
+            infrastructure_changes=["Billing webhooks endpoint, secrets in a secrets manager"],
+            security_changes=["PCI scope kept with the payment provider (hosted checkout)", "Audit plan changes"],
+            testing_requirements=["Billing lifecycle tests (trial → paid → cancel)", "Entitlement unit tests",
+                                  "Pricing page A/B or conversion tracking"],
+            dependencies=["Pricing decision from leadership / finance"] + rec.get("dependencies", []),
+            migration_requirements=["Grandfather existing customers onto equivalent plans"],
+            estimated_effort=EFFORT_BY_COMPLEXITY.get(rec["complexity"], "TBD"),
+            recommended_team=["Product manager", "Backend engineer", "Frontend engineer", "Finance / RevOps"],
+            acceptance_criteria=[f"{feature} live and measurable", "Conversion and ARPA tracked before/after"],
+            basis=Basis.ESTIMATE,
+        )
     slug = feature.lower().split("(")[0].strip().replace(" / ", "_").replace(" ", "_").replace("-", "_")[:30]
     return ImplementationPlan(
         recommendation_id=rec["id"], feature=feature,

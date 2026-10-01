@@ -45,6 +45,9 @@ SITES: dict[str, str] = {
         ["/about", "/products/patient-scheduler", "/contact", "https://www.linkedin.com/company/abc-healthcare",
          "https://twitter.com/abchealth"],
         head=f'<script type="application/ld+json">{ABC_JSONLD}</script>'),
+    "https://abc-healthcare.com/pricing": html(
+        "Pricing", "<h1>Pricing</h1><h2>Practice</h2><p>$79 /month per provider, billed monthly.</p>"
+        "<h2>Group</h2><p>$149 /month per provider.</p>"),
     "https://abc-healthcare.com/careers": html(
         "Careers", "<h1>Join ABC Healthcare</h1><p>See our open roles.</p>"
         "<a href='https://boards.greenhouse.io/abchealth'>Open positions</a>"),
@@ -77,6 +80,13 @@ SITES: dict[str, str] = {
         "patient questions 24/7. SMS reminders and email reminders. Telehealth video consultation. "
         "Single sign-on (SSO) with Okta. HIPAA compliant. iOS app and Android app on Google Play.</p>",
         "Clinic scheduling with an AI assistant"),
+    "https://clinicflow.com/pricing": html(
+        "Pricing | ClinicFlow", "<h1>Plans</h1><p>Start a 14-day free trial. Save 20% with annual billing.</p>"
+        "<h2>Starter</h2><p>$49 /month per provider</p><h2>Growth</h2><p>$99 /month per provider</p>"
+        "<h2>Enterprise</h2><p>Custom pricing - contact sales.</p><p>Backed by $12M in funding.</p>"),
+    "https://medibook.io/pricing": html(
+        "MediBook pricing", "<h1>Pricing</h1><h2>Free</h2><p>Free forever for one practitioner.</p>"
+        "<h2>Pro</h2><p>$29 /month per practitioner. 30-day free trial.</p>"),
     "https://clinicflow.com/": html(
         "ClinicFlow", "<h1>ClinicFlow</h1><p>Scheduling software for clinics with online booking, SMS reminders, "
         "analytics dashboard, patient portal and a public REST API. Pricing from $49/month. HIPAA compliant.</p>",

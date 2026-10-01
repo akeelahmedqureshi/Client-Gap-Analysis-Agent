@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from cip.agents.base import Agent, ApprovalRequest, RunContext
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import AgentResult
+from cip.agents.pricing_analysis import MODEL_LABELS
 from cip.core.scoring import PHASE_LABELS
 
 STATUS_ICON = {"available": "✅", "partial": "🟡", "missing": "❌", "unknown": "·"}
@@ -112,6 +113,14 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
                          "cite": cite(c.get("evidence_ids"))} for c in comp],
         "rejected_candidates": [{"name": c["name"], "url": c.get("url"), "reason": c.get("rationale")}
                                 for c in ctx.data("competitor_research").get("rejected", [])],
+    }
+    pricing = ctx.data("pricing_analysis")
+    client_pricing = pricing.get("client") or {}
+    sections["pricing"] = {
+        "position": pricing.get("position", "unknown"),
+        "market": pricing.get("market", {}),
+        "client": {**client_pricing, "cite": cite(client_pricing.get("evidence_ids"))} if client_pricing else None,
+        "competitors": [{**r, "cite": cite(r.get("evidence_ids"))} for r in pricing.get("competitors", [])],
     }
     sections["feature_comparison"] = comparison
     sections["gap_analysis"] = [{**g, "cite": cite(g.get("evidence_ids"))} for g in gaps]
@@ -216,6 +225,42 @@ def render_markdown(report: dict) -> str:
         out += [f"- {r['name']} ({r['url']}): {r['reason']}" for r in ma["rejected_candidates"]]
         out += ["", "</details>"]
     out.append("")
+
+    pr = s.get("pricing") or {}
+    if pr.get("competitors") or pr.get("client"):
+        def money(v, cur):
+            return f"{v:g} {cur or ''}".strip() if v else "—"
+
+        def practices(p):
+            bits = [", ".join(MODEL_LABELS.get(m, m) for m in p.get("models", []))]
+            if p.get("free_trial"):
+                days = p.get("trial_days")
+                bits.append(f"free trial ({days}d)" if days else "free trial")
+            if p.get("annual_discount_pct"):
+                bits.append(f"{p['annual_discount_pct']}% annual discount")
+            if p.get("enterprise_contact"):
+                bits.append("enterprise tier")
+            return "; ".join(b for b in bits if b) or "—"
+
+        out += ["### Pricing", "", "| Company | Entry price / month | Highest / month | Model & practices | Evidence |",
+                "|---|---|---|---|---|"]
+        c = pr.get("client")
+        if c:
+            out.append(f"| **Client** | {money(c.get('entry_price_monthly'), c.get('currency'))} | "
+                       f"{money(c.get('max_price_monthly'), c.get('currency'))} | {practices(c)} | "
+                       f"{c['cite'].strip() or '—'} |")
+        for r in pr.get("competitors", []):
+            out.append(f"| {r['name']} | {money(r.get('entry_price_monthly'), r.get('currency'))} | "
+                       f"{money(r.get('max_price_monthly'), r.get('currency'))} | {practices(r)} | "
+                       f"{r['cite'].strip() or '—'} |")
+        m = pr.get("market", {})
+        if m.get("entry_price_median"):
+            out += ["", f"Market entry price: median **{m['entry_price_median']:g} {m.get('currency') or ''}**/month "
+                        f"(range {m['entry_price_min']:g}–{m['entry_price_max']:g}). Client position: "
+                        f"**{pr.get('position', 'unknown')}** market."
+                    + (f" {m['excluded_other_currency']} competitor(s) priced in another currency were excluded."
+                       if m.get("excluded_other_currency") else "")]
+        out.append("")
 
     fc = s["feature_comparison"]
     comps = fc.get("competitors", [])

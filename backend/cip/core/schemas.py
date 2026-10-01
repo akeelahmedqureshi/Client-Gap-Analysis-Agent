@@ -237,6 +237,7 @@ class Competitor(BaseModel):
     description: str = ""
     target_market: str | None = None
     pricing: str | None = None
+    pricing_profile: dict | None = None  # structured plans/prices (see connectors/research/pricing.py)
     verified: bool = False
     rationale: str = ""
     features: list[FeatureObservation] = Field(default_factory=list)
@@ -259,6 +260,7 @@ class GapType(str, Enum):
     TECHNOLOGY = "technology"
     UX = "ux"
     AI = "ai"
+    PRICING = "pricing"
 
 
 class Gap(BaseModel):

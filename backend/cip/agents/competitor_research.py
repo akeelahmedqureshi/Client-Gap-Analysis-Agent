@@ -22,6 +22,8 @@ from typing import get_args
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.agents.pricing_analysis import record_pricing
+from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.web import registrable_domain
 from cip.connectors.source_control.base import parse_repo_url
 from cip.core.evidence import snippet
@@ -283,7 +285,7 @@ class CompetitorResearchAgent(Agent):
         if repo and repo.provider == "github":
             return await self._profile_github(ctx, repo, comp, client_feats)
 
-        pages = await ctx.fetcher.crawl(comp.url, max_pages=6)
+        pages = await ctx.fetcher.crawl(comp.url, max_pages=6, prefer=["/pricing", "/plans"])
         if not pages:
             comp.rationale = (comp.rationale + " — website could not be verified").strip(" —")
             comp.confidence = 0.2
@@ -350,6 +352,12 @@ class CompetitorResearchAgent(Agent):
 
         comp.description = comp.description or home.description or ""
         comp.features = list(obs.values())
+        comp.pricing_profile = record_pricing(ledger, cand.name, extract_pricing(pages))
+        if comp.pricing_profile and not comp.pricing:
+            entry = comp.pricing_profile.get("entry_price_monthly")
+            comp.pricing = (f"from {entry:g} {comp.pricing_profile.get('currency') or ''}/month".strip()
+                            if entry else "custom / contact sales" if comp.pricing_profile.get("enterprise_contact")
+                            else None)
 
         # Relevance against the client's footprint
         comp_feats = {o.feature_id for o in comp.features}

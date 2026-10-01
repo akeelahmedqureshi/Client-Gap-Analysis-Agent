@@ -20,6 +20,7 @@ Each `Finding` has a `basis`:
 | `code_analysis` | **requires** repository | — | `profiles[]` (RepositoryProfile: technologies, architecture, tests/CI/Docker/IaC, debt), `feature_signals[]` |
 | `product_features` | after client_research, code_analysis | — | `observations{feature_id: FeatureObservation}`, `inventory[]`, `coverage` |
 | `competitor_research` | after client_research, product_features | (covered by `external_research`) | `competitors[]` (verified, classified, feature observations), `rejected[]` |
+| `pricing_analysis` | after client_research, competitor_research | — | `client` and per-competitor pricing (plans, monthly prices, models, trial, free tier, annual discount, enterprise tier), `market` statistics, client `position`, pricing `gaps` |
 | `feature_comparison` | after product_features, competitor_research | — | `rows[]` (client status and each competitor's status per taxonomy feature, coverage) |
 | `gap_analysis` | after feature_comparison, code_analysis | — | `gaps[]` (missing / partial / technology / ux / ai), `existing[]` |
 | `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown), `recommendations[]` (top N with phase), `roadmap` |
@@ -86,6 +87,19 @@ Candidate sources:
 - **Open-source alternatives** from GitHub's search API: at least 50 stars, no forks. They are
   verified through the GitHub API (metadata and README), because GitHub's robots.txt disallows
   crawling repository pages.
+
+**Pricing Analysis.** Pricing pages are read during client and competitor research; competitor
+crawls visit `/pricing` and `/plans` first.
+
+- **What's extracted:** plans, prices normalized to per month, the pricing model, trials, free tiers,
+  annual discounts and "contact sales" tiers. Each plan price and practice becomes evidence. Amounts
+  without a billing period (e.g. "$12M raised") are ignored.
+- **Market comparison:** median and range of entry prices, using the dominant currency only (prices
+  in different currencies are never mixed), and how common each practice is. The client is positioned
+  above market (> 1.5× the median), below (< 0.5×) or within.
+- **Pricing gaps:** raised when a practice is used by at least half of the priced competitors but not
+  by the client, or when the client is priced far above market. They get commercial/billing patch
+  plans.
 
 **Gap Analysis.**
 

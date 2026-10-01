@@ -291,17 +291,18 @@ class WebFetcher:
     def _render_session(self):
         return self.renderer.session() if self.renderer is not None else nullcontext()
 
-    async def crawl(self, start_url: str, max_pages: int | None = None) -> list[Page]:
-        """Breadth-first same-site crawl, priority pages first."""
+    async def crawl(self, start_url: str, max_pages: int | None = None, prefer: list[str] | None = None) -> list[Page]:
+        """Breadth-first same-site crawl, priority pages first (``prefer`` paths before everything else)."""
         async with self._render_session():
-            return await self._crawl(start_url, max_pages)
+            return await self._crawl(start_url, max_pages, prefer or [])
 
-    async def _crawl(self, start_url: str, max_pages: int | None = None) -> list[Page]:
+    async def _crawl(self, start_url: str, max_pages: int | None = None, prefer: list[str] = ()) -> list[Page]:
         max_pages = max_pages or get_settings().crawler_max_pages
         start_url = normalize_url(start_url)
         p = urlparse(start_url)
         origin = f"{p.scheme}://{p.netloc}"
-        queue = [start_url] + [origin + path for path in PRIORITY_PATHS if path != "/"]
+        queue = [start_url] + [origin + path for path in prefer] + \
+            [origin + path for path in PRIORITY_PATHS if path != "/" and path not in prefer]
         seen: set[str] = set()
         pages: list[Page] = []
         async with self._client() as client:
