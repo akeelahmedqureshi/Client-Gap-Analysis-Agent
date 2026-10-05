@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { AgentResult, Evidence, Run, RunChanges } from "../lib/types";
+import type { AgentResult, Evidence, Run, RunChanges, User } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
@@ -29,6 +29,8 @@ export default function RunDetailPage() {
   const { runId = "" } = useParams();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("Pipeline");
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
+  const canAct = !!me.data && me.data.role !== "viewer";
   const run = useQuery({
     queryKey: ["run", runId],
     queryFn: () => api.get<Run>(`/api/runs/${runId}`),
@@ -78,7 +80,7 @@ export default function RunDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             <Badge value={r.status} />
-            {["failed", "completed_with_errors"].includes(r.status) && <Button variant="secondary" onClick={resume}>Retry failed agents</Button>}
+            {canAct && ["failed", "completed_with_errors"].includes(r.status) && <Button variant="secondary" onClick={resume}>Retry failed agents</Button>}
             {r.has_report && (
               <>
                 <Button onClick={() => api.download(`/api/runs/${runId}/report.pdf`, `report-${runId}.pdf`).catch(setError)}>
@@ -103,8 +105,12 @@ export default function RunDetailPage() {
               <dt className="text-slate-500">Data analyzed</dt><dd>{a.data_analyzed}</dd>
             </dl>
             <div className="mt-3 flex gap-2">
-              <Button onClick={() => decide(a.id, true)}>Approve</Button>
-              <Button variant="danger" onClick={() => decide(a.id, false)}>Reject (skip step)</Button>
+              {canAct ? (
+                <>
+                  <Button onClick={() => decide(a.id, true)}>Approve</Button>
+                  <Button variant="danger" onClick={() => decide(a.id, false)}>Reject (skip step)</Button>
+                </>
+              ) : <span className="text-xs text-slate-500">Waiting for an analyst or admin to decide</span>}
             </div>
           </div>
         ))}

@@ -257,3 +257,32 @@ async def test_emerging_ai_gaps_when_client_has_no_ai(make_ctx):
     await run_all(ctx)
     ai_gaps = [g for g in ctx.data("gap_analysis")["gaps"] if g["gap_type"] == "ai"]
     assert len(ai_gaps) == 3 and all(g["basis"] == "estimate" for g in ai_gaps)
+
+
+async def test_rejected_external_research_means_no_search_and_no_competitor_sites(make_ctx):
+    """The external-research gate covers web search, GitHub search and competitor websites."""
+    import httpx
+
+    from cip.connectors.research.web import WebFetcher
+    from fakes import FakeSearch, web_transport
+
+    fetched: list[str] = []
+    transport = web_transport()
+    orig = transport.handle_async_request
+
+    async def spy(request: httpx.Request):
+        fetched.append(str(request.url))
+        return await orig(request)
+
+    transport.handle_async_request = spy
+    search = FakeSearch()
+    ctx = make_ctx(approvals=("repository_access", "client_report"), search=search,
+                   fetcher=WebFetcher(transport=transport))
+    # As the runner does after a rejection: the gated agent is marked skipped and the run continues.
+    statuses = {"client_research": AgentStatus.SKIPPED}
+    status = await Orchestrator(MemStore(), retry_delay=0).run(ctx, statuses)
+    assert status == "completed"
+    assert statuses["competitor_research"] == AgentStatus.SKIPPED
+    assert search.queries == []
+    hosts = {httpx.URL(u).host for u in fetched}
+    assert not hosts & {"medibook.io", "clinicflow.com", "abc-healthcare.com", "api.github.com"}, hosts

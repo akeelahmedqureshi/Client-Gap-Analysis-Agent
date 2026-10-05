@@ -31,6 +31,7 @@ from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_promp
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import (
     AgentResult,
+    AgentStatus,
     Basis,
     Competitor,
     CompetitorClass,
@@ -128,6 +129,14 @@ class CompetitorResearchAgent(Agent):
     after = ("client_research", "product_features")
 
     async def run(self, ctx: RunContext) -> AgentResult:
+        if "external_research" not in ctx.approvals:
+            # Web search, GitHub search and competitor websites are covered by the external-research gate.
+            return AgentResult(status=AgentStatus.SKIPPED, confidence=1.0,
+                               findings=[Finding(category="market", title="Competitor research skipped",
+                                                 detail="External research was not approved for this run.",
+                                                 confidence=1.0)],
+                               data={"competitors": [], "rejected": [],
+                                     "reason": "external research not approved"})
         rec = ctx.record
         profile = ctx.data("client_research").get("profile", {})
         client_obs = ctx.data("product_features").get("observations", {})

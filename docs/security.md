@@ -99,6 +99,10 @@ target, and what data is analyzed:
 Decisions, including pre-approvals given when a run starts, are stored with the deciding user and a
 timestamp.
 
+Rejecting a gate skips every step it covers; the rest of the run continues. The external-research
+gate covers the client's website, web search, GitHub search, competitor websites, app-store listings
+and the UX review. When it is rejected, none of those are contacted, and a test enforces this.
+
 ## Passive security review of client projects
 
 The `security_review` agent only does what a normal visitor or a public database query does.
