@@ -9,6 +9,7 @@ x-backend-env: &backend-env
   CIP_STORAGE_DIR: /app/storage
   CIP_CORS_ORIGINS: '["${CIP_PUBLIC_URL:-http://localhost:8080}"]'
   CIP_OAUTH_REDIRECT_BASE: ${CIP_PUBLIC_URL:-http://localhost:8080}
+  CIP_APP_BASE_URL: ${CIP_PUBLIC_URL:-http://localhost:8080}   # links in alert notifications
   CIP_RUN_EXECUTOR: celery
   CIP_REDIS_URL: redis://redis:6379/0
 

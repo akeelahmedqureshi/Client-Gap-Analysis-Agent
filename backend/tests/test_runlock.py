@@ -131,6 +131,7 @@ async def test_redis_rate_limiter_is_shared_across_processes(redis_url, monkeypa
 
 
 async def test_celery_mode_dispatches_to_workers(monkeypatch):
+    pytest.importorskip("celery", reason="needs the worker extra: pip install -e '.[worker]'")
     from cip.config import get_settings
     from cip.services.runner import AnalysisRunner
 

@@ -112,6 +112,14 @@ and a deeper LLM evaluation set.
 
 ## Quick start
 
+**Full guides:** [docs/getting-started.md](docs/getting-started.md) covers setup: offline demo,
+local development, Docker and production. [docs/testing.md](docs/testing.md) covers testing the
+complete system: automated tests, API smoke test, a UI walkthrough and a real-world acceptance
+checklist.
+
+Try it without any API keys: `cd backend && pip install -e ".[dev]" && python scripts/demo_server.py`
+(simulated web; build the UI first with `cd frontend && npm install && npm run build`).
+
 ### Backend
 
 ```bash
@@ -167,12 +175,14 @@ field.
 ## Tests
 
 ```bash
-cd backend && python -m pytest       # fully offline (fake web, repos, search, LLM) (fake web, repos, search, LLM)
+cd backend && python -m pytest       # fully offline (fake web, repos, search, LLM)
 cd frontend && npm run build         # type-check and build
 ```
 
 ## Documentation
 
+- [docs/getting-started.md](docs/getting-started.md): complete setup (demo, local, Docker)
+- [docs/testing.md](docs/testing.md): how to test the complete system
 - [docs/architecture.md](docs/architecture.md): layers, orchestration, state, data model
 - [docs/agents.md](docs/agents.md): each agent's inputs, outputs and evidence rules
 - [docs/connectors.md](docs/connectors.md): GitHub, GitLab, web, search and LinkedIn providers
