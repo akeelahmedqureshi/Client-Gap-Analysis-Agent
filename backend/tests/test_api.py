@@ -208,3 +208,17 @@ async def test_interrupted_runs_resume_on_startup(client):
     run = (await client.get(f"/api/runs/{run_id}", headers=h)).json()
     assert run["status"] == "completed" and run["has_report"]
     assert all(s == "completed" for a, s in run["agents"].items())
+
+
+async def test_upload_with_malformed_url_cell_reports_issue_not_500(client):
+    """Regression: a cell like '[2013-04-24]' in the Project URL column crashed POST /api/uploads with a 500."""
+    h = await register(client)
+    csv_text = ("Client Name,Project Name,Project URL,Start Date\n"
+                "Acme,Portal,[2013-04-24],2013-04-24\n"
+                "Beta,Shop,https://shop.beta-corp.com,2020-01-01\n")
+    r = await client.post("/api/uploads", headers=h, files={"file": ("clients.csv", csv_text, "text/csv")})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert len(body["records"]) == 2
+    assert any("Invalid project URL" in i for i in body["records"][0]["issues"])
+    assert body["records"][1]["project"]["url"] == "https://shop.beta-corp.com"

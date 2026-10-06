@@ -8,7 +8,7 @@ estimates are explicitly labelled.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from pydantic import BaseModel
 

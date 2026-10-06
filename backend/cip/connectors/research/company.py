@@ -17,7 +17,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import Protocol
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from cip.connectors.research.search import SearchProvider
 from cip.connectors.research.web import Page, WebFetcher, registrable_domain

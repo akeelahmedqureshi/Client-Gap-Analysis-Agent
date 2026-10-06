@@ -23,7 +23,7 @@ import logging
 import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from cip.config import Settings, get_settings
 

@@ -14,7 +14,7 @@ runs and inspected the same scope — a skipped research step must never read as
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 SEVERITIES = ["critical", "warning", "info"]
 SECURITY_TO_ALERT = {"critical": "critical", "high": "critical", "medium": "warning", "low": "info", "info": "info"}

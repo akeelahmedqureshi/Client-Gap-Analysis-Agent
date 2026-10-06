@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import get_args
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from pydantic import BaseModel, Field
 

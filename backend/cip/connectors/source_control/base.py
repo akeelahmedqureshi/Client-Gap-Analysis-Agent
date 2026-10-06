@@ -10,7 +10,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from typing import Literal
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 ProviderName = Literal["github", "gitlab"]
 

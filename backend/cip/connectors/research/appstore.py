@@ -17,7 +17,9 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote
+
+from cip.core.urls import urlparse
 
 from cip.connectors.research.web import _EMAIL, _PHONE, WebFetcher, registrable_domain
 

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
 
 from cip.agents.base import Agent, RunContext
 from cip.connectors.source_control.base import parse_repo_url
+from cip.core.urls import urlparse
 from cip.core.schemas import (
     AgentResult,
     ClientRecord,
@@ -18,6 +19,8 @@ from cip.core.schemas import (
     ProjectRecord,
     SourceLinks,
 )
+
+log = logging.getLogger(__name__)
 
 COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "client_name": ("client name", "client", "company", "company name", "customer", "customer name",
@@ -276,7 +279,12 @@ def parse_csv(content: bytes | str) -> CsvParseResult:
             break
         if not any((v or "").strip() for v in row.values() if isinstance(v, str)):
             continue
-        rec = normalize_row(i, row, mapping)
+        try:
+            rec = normalize_row(i, row, mapping)
+        except Exception as exc:  # noqa: BLE001 - one unreadable row must never fail the whole upload
+            log.warning("CSV row %s could not be normalized: %s", i, exc)
+            result.warnings.append(f"Row {i} could not be read and was skipped ({type(exc).__name__})")
+            continue
         ckey = _key(rec.client.domain) or _key(rec.client.name)
         client_rows.setdefault(ckey, []).append(i)
         pkey = (ckey, _key(rec.project.name))

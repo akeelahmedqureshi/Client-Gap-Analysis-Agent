@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import statistics
 from dataclasses import asdict, dataclass, field
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from cip.connectors.research.web import Page
 

@@ -13,7 +13,7 @@ import asyncio
 import logging
 import smtplib
 from email.message import EmailMessage
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 import httpx
 

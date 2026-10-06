@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from cip.connectors.research.web import WebFetcher
 from cip.core.code_scanner import Dependency, find_line

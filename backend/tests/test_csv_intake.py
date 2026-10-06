@@ -61,3 +61,40 @@ def test_github_pages_is_not_a_repository():
     rec = parse_csv("Client,URL\nX,https://x.github.io/site\n").records[0]
     assert rec.sources.github == []
     assert rec.project.url == "https://x.github.io/site"
+
+
+MALFORMED = ["[2013-04-24]", "https://[2013-04-24]/x", "http://[::1", "http://a.com:99999/", "ftp://files.example.com",
+             "http://", "[]", "//", "javascript:alert(1)", "https://exa mple.com", "\x00", "%%%", "😀.com",
+             "a" * 3000, "http://[fe80::1%eth0]/"]
+
+
+def test_malformed_values_never_crash_the_upload():
+    """Regression: '[2013-04-24]' in a URL column raised ValueError (bracketed IPv6 host) -> HTTP 500."""
+    import csv as _csv
+    import io as _io
+
+    from cip.agents.csv_intake import parse_csv
+
+    out = _io.StringIO()
+    w = _csv.writer(out)
+    w.writerow(["Client Name", "Client Email", "Project Name", "Project URL", "Repository URL", "LinkedIn",
+                "Description", "Notes"])
+    for i, bad in enumerate(MALFORMED):
+        w.writerow([f"Client {i}", bad, f"Project {i}", bad, bad, bad, f"see {bad}", bad])
+    result = parse_csv(out.getvalue())
+    assert not result.errors and len(result.records) == len(MALFORMED)
+    first = result.records[0]
+    assert first.project.url is None and any("Invalid project URL" in x for x in first.issues)
+    # Everything except the (valid, internationalised) emoji domain is rejected as a project URL.
+    rejected = [r for r, bad in zip(result.records, MALFORMED) if not bad.endswith(".com") or " " in bad]
+    assert all(r.project.url is None for r in rejected)
+
+
+def test_malformed_links_on_a_page_are_ignored():
+    from cip.connectors.research.web import parse_html
+
+    html = ("<a href='http://[2013-04-24]/x'>a</a><a href='http://a.com:99999/'>b</a><a href='//[::1'>c</a>"
+            "<a href='/about'>About</a><a href='https://partner.example.org/'>Partner</a>")
+    page = parse_html("https://site.example.com/", 200, html)
+    assert page.links == ["https://site.example.com/about"]
+    assert page.external_links == ["https://partner.example.org/"]

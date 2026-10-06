@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import statistics
-from urllib.parse import urlparse
+from cip.core.urls import urlparse
 
 from cip.agents.base import Agent, RunContext
 from cip.connectors.research.ux import (

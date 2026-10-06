@@ -17,7 +17,7 @@ import re
 import socket
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urldefrag, urlparse
+from cip.core.urls import is_valid_http_url, urldefrag, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -159,8 +159,8 @@ def parse_html(url: str, status: int, html: str) -> Page:
         if href.startswith(("javascript:", "#")):
             continue
         absolute = normalize_url(urljoin(url, href))
-        if not absolute.startswith(("http://", "https://")):
-            continue
+        if not is_valid_http_url(absolute):
+            continue  # malformed links (bad host/port) are ignored, never crash the crawl
         if registrable_domain(absolute) == base_domain:
             links.append(absolute)
             anchor = " ".join(a.get_text(" ", strip=True).split())[:200]
