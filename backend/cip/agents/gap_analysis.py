@@ -66,14 +66,20 @@ class GapAnalysisAgent(Agent):
             if client_status in ("missing", "unknown") and with_it:
                 gtype = GapType.AI if tf.ai else GapType.UX if tf.category_id in UX_CATEGORIES else GapType.MISSING
                 ab = absence_evidence(tf.name)
-                uncertain = client_status == "unknown"
+                # "missing" only ever comes from positive evidence of absence; silence is "unknown",
+                # and how well the client was inspected decides how confident the gap is.
+                confirmed = client_status == "missing"
+                uncertain = not confirmed and client_obs.get(tf.id, {}).get("confidence", 0) < 0.45
                 gaps.append(Gap(
                     feature_id=tf.id, name=tf.name, category=tf.category_name, gap_type=gtype,
                     description=(f"{', '.join(names)} offer{'s' if len(names) == 1 else ''} {tf.name}; "
-                                 + ("the client's status could not be confirmed."
-                                    if uncertain else "no implementation was found for the client.")),
+                                 + ("it is confirmed missing for the client." if confirmed else
+                                    "the client's status could not be checked (little of its product was "
+                                    "inspected)." if uncertain else
+                                    "it is not publicly identified in the client's offering.")),
                     competitors_with=with_it, evidence_ids=comp_ev + ([ab] if ab else []),
-                    confidence=round((0.45 if uncertain else 0.7) * (0.6 + 0.4 * r["competitor_coverage"]), 3),
+                    confidence=round((0.45 if uncertain else 0.8 if confirmed else 0.7)
+                                     * (0.6 + 0.4 * r["competitor_coverage"]), 3),
                 ))
             elif client_status == "partial" and any(s == "available" for s in r["competitors"].values()):
                 client_ev = client_obs.get(tf.id, {}).get("evidence_ids", [])[:2]
@@ -95,7 +101,7 @@ class GapAnalysisAgent(Agent):
                 ab = absence_evidence(f.name)
                 gaps.append(Gap(
                     feature_id=f.id, name=f.name, category=f.category_name, gap_type=GapType.AI,
-                    description=f"No AI capability was detected in the client's product. {f.name} is an emerging "
+                    description=f"No AI capability is publicly identified in the client's product. {f.name} is an emerging "
                                 "opportunity (not yet evidenced among the analysed competitors).",
                     evidence_ids=[ab] if ab else [], confidence=0.4, basis=Basis.ESTIMATE,
                 ))

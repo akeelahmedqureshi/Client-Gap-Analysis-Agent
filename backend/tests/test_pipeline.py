@@ -61,7 +61,7 @@ async def test_full_pipeline_deterministic(make_ctx):
     obs = ctx.data("product_features")["observations"]
     assert obs["billing.payments"]["status"] == "available"
     assert obs["workflow.scheduling"]["status"] == "available"
-    assert obs["ai.assistant"]["status"] == "missing"
+    assert obs["ai.assistant"]["status"] == "unknown"  # not publicly identified, never "missing"
 
     # Competitors verified; unrelated search results rejected; directories never considered.
     comps = {c["name"]: c for c in ctx.data("competitor_research")["competitors"]}
@@ -286,3 +286,22 @@ async def test_rejected_external_research_means_no_search_and_no_competitor_site
     assert search.queries == []
     hosts = {httpx.URL(u).host for u in fetched}
     assert not hosts & {"medibook.io", "clinicflow.com", "abc-healthcare.com", "api.github.com"}, hosts
+
+
+def test_features_without_evidence_are_not_publicly_identified_never_missing():
+    """BRS 5.3 / 7.3: a lack of public evidence is never recorded as a confirmed absence."""
+    from cip.agents.product_features import fill_missing
+    from cip.core.schemas import FeatureStatus
+    from cip.core.taxonomy import load_taxonomy
+
+    taxonomy = load_taxonomy()
+    for coverage in ({"website": True, "docs": True, "code": True}, {"code": True}, {"website": True}, {}):
+        obs: dict = {}
+        fill_missing(obs, taxonomy, coverage)
+        assert {o.status for o in obs.values()} == {FeatureStatus.UNKNOWN}
+    well, thin = {}, {}
+    fill_missing(well, taxonomy, {"website": True, "docs": True})
+    fill_missing(thin, taxonomy, {"website": True})
+    fid = taxonomy.features[0].id
+    assert well[fid].confidence > thin[fid].confidence
+    assert "website, docs" in well[fid].notes

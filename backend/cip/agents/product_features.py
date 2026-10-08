@@ -69,15 +69,20 @@ def combine_signals(signals: list[dict], coverage: dict[str, bool]) -> dict[str,
 
 
 def fill_missing(obs: dict[str, FeatureObservation], taxonomy: Taxonomy, coverage: dict[str, bool]) -> None:
-    """Features with no signal are 'missing' only if enough of the product was inspected."""
-    inspected = sum(1 for v in coverage.values() if v)
+    """Features with no signal are "not publicly identified" — never "missing" (BRS 5.3, 7.3).
+
+    The confidence says how thoroughly the client was inspected, so a gap built on a well-inspected
+    absence ranks above one built on thin coverage; the status itself stays UNKNOWN either way.
+    """
+    inspected = [k for k, v in coverage.items() if v]
     for f in taxonomy.features:
         if f.id in obs:
             continue
-        if inspected >= 2 or coverage.get("code"):
-            obs[f.id] = FeatureObservation(feature_id=f.id, status=FeatureStatus.MISSING,
-                                           confidence=0.6 if inspected >= 2 else 0.45,
-                                           notes="no signal in inspected sources", basis=Basis.INFERRED)
+        if len(inspected) >= 2 or coverage.get("code"):
+            obs[f.id] = FeatureObservation(feature_id=f.id, status=FeatureStatus.UNKNOWN,
+                                           confidence=0.6 if len(inspected) >= 2 else 0.45,
+                                           notes=f"not found in the client's {', '.join(inspected)}",
+                                           basis=Basis.INFERRED)
         else:
             obs[f.id] = FeatureObservation(feature_id=f.id, status=FeatureStatus.UNKNOWN, confidence=0.2,
                                            notes="insufficient coverage", basis=Basis.INFERRED)

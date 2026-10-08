@@ -666,7 +666,7 @@ function AppsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   );
 }
 
-const ICON: Record<string, string> = { available: "✅", partial: "🟡", missing: "❌", unknown: "·" };
+const ICON: Record<string, string> = { available: "✅", partial: "🟡", missing: "❌", unknown: "❔" };
 
 function ComparisonTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const res = useAgent(runId, "feature_comparison", enabled);
@@ -693,7 +693,8 @@ function ComparisonTab({ runId, enabled }: { runId: string; enabled: boolean }) 
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500 mt-2">✅ available · 🟡 partial · ❌ not found · · not evidenced</p>
+      <p className="text-xs text-slate-500 mt-2">✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing.
+        Not publicly identified means no public evidence was found, not that the capability is absent.</p>
     </Card>
   );
 }

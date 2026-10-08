@@ -213,10 +213,25 @@ class RepositoryProfile(BaseModel):
 
 
 class FeatureStatus(str, Enum):
+    """Public-evidence state of a capability (BRS 7.9).
+
+    UNKNOWN is "Not publicly identified": no reliable public evidence was found. It is never proof of
+    absence. MISSING is "Not available / confirmed missing" and needs positive evidence of absence (for
+    example a reviewer's override); it is never inferred from silence.
+    """
+
     AVAILABLE = "available"
     PARTIAL = "partial"
     MISSING = "missing"
     UNKNOWN = "unknown"
+
+
+STATUS_LABELS = {
+    "available": "available",
+    "partial": "partially available",
+    "unknown": "not publicly identified",
+    "missing": "confirmed missing",
+}
 
 
 class FeatureObservation(BaseModel):

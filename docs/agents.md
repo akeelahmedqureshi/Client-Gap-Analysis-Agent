@@ -105,8 +105,14 @@ crawls visit `/pricing` and `/plans` first.
 
 **Gap Analysis.**
 
-- A feature a competitor has but the client doesn't is a *missing* gap. It becomes a *UX* gap for
-  experience-category features and an *AI* gap for AI features.
+- Capability statuses follow BRS 7.9: *available*, *partially available*, *not publicly identified*
+  (`unknown`) and *confirmed missing* (`missing`). A feature with no signal in the client's sources is
+  always *not publicly identified*, never *confirmed missing*: absence of public evidence is not proof
+  of absence. *Confirmed missing* needs positive evidence, such as a reviewer's override. How thoroughly
+  the client was inspected sets the observation's confidence instead.
+- A feature a competitor has that is not publicly identified (or confirmed missing) for the client is a
+  *missing* gap. It becomes a *UX* gap for experience-category features and an *AI* gap for AI
+  features. Its description and confidence say which case applies.
 - A basic client version against a fuller competitor version is a *partial* gap.
 - Tech-debt indicators become *technology* gaps: tests, CI/CD, observability, lockfiles, legacy
   frameworks, documentation, committed secrets, and deployment/containerization.

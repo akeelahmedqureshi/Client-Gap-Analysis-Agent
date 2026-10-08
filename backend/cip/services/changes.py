@@ -14,6 +14,7 @@ runs and inspected the same scope — a skipped research step must never read as
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from cip.core.schemas import STATUS_LABELS
 from cip.core.urls import urlparse
 
 SEVERITIES = ["critical", "warning", "info"]
@@ -108,7 +109,7 @@ def _competitor_features(prev_cmp: dict, cur_cmp: dict, prev_fc: dict, cur_fc: d
                     "competitor_feature", "info" if client_has else "warning",
                     f"{comp.get('name', key)}: new evidence of {names.get(fid, fid)}",
                     "The client already offers this." if client_has else
-                    f"The client does not offer this ({client_status.get(fid, 'missing')}).",
+                    f"The client does not publicly offer this ({STATUS_LABELS.get(client_status.get(fid) or 'unknown')}).",
                     subject=comp.get("name", key), evidence_ids=evidence.get(fid, [])[:5], before=old, after=status))
     return out
 

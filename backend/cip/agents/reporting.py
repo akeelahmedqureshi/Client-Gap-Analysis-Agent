@@ -19,7 +19,8 @@ from cip.agents.pricing_analysis import MODEL_LABELS
 from cip.core.scoring import PHASE_LABELS
 from cip.connectors.research.ux import PRACTICES
 
-STATUS_ICON = {"available": "✅", "partial": "🟡", "missing": "❌", "unknown": "·"}
+STATUS_ICON = {"available": "✅", "partial": "🟡", "missing": "❌", "unknown": "❔"}
+STATUS_LEGEND = "✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing"
 
 
 class _LLMSummary(BaseModel):
@@ -388,7 +389,8 @@ def render_markdown(report: dict) -> str:
     for row in fc.get("rows", []):
         cells = [STATUS_ICON[row["competitors"].get(c["id"], "unknown")] for c in comps]
         out.append(f"| {row['feature_name']} | {STATUS_ICON[row['client']]} | " + " | ".join(cells) + " |")
-    out += ["", "✅ available · 🟡 partial · ❌ not found · `·` not evidenced", ""]
+    out += ["", STATUS_LEGEND,
+            "_Not publicly identified means no public evidence was found; it does not mean the capability is absent._", ""]
 
     out += ["## 6. Gap Analysis", "| Gap | Type | Description | Confidence | Evidence |", "|---|---|---|---|---|"]
     for g in s["gap_analysis"]:

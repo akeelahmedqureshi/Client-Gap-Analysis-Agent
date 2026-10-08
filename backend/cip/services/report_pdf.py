@@ -18,7 +18,8 @@ from cip.config import Settings, get_settings
 _ICONS = {
     "✅": '<span class="dot ok" title="available">●</span>',
     "🟡": '<span class="dot partial" title="partial">●</span>',
-    "❌": '<span class="dot missing" title="not found">●</span>',
+    "❌": '<span class="dot missing" title="confirmed missing">●</span>',
+    "❔": '<span class="dot unknown" title="not publicly identified">○</span>',
 }
 
 CSS = """
@@ -39,6 +40,7 @@ a { color: #4338ca; text-decoration: none; word-break: break-all; }
 em { color: #475569; }
 .dot { font-size: 11pt; }
 .dot.ok { color: #059669; } .dot.partial { color: #d97706; } .dot.missing { color: #dc2626; }
+.dot.unknown { color: #64748b; }
 details > summary { font-weight: bold; }
 .diagram { margin: 6pt 0 12pt; page-break-inside: avoid; }
 .diagram svg { width: 100%; height: auto; }

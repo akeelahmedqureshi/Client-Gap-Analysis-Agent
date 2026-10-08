@@ -13,8 +13,8 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 53 |
-| 🟡 Partially completed | 32 |
+| ✅ Completed | 54 |
+| 🟡 Partially completed | 31 |
 | ❌ Incomplete | 43 |
 | **Total** | **128** |
 
@@ -59,7 +59,7 @@ _Baseline audit: 2026-10-08._
 | 23 | Products, services, target customers, geography | ✅ | |
 | 24 | Capability inventory with evidence and confidence | ✅ | |
 | 25 | Value proposition, use cases, customer problems | 🟡 | A description only |
-| 26 | Four statuses and the "Not publicly identified" rule | 🟡 | No signal becomes "missing" |
+| 26 | Four statuses and the "Not publicly identified" rule | ✅ | No signal is "not publicly identified"; "confirmed missing" needs proof |
 | 27 | User, customer and business workflows | ❌ | |
 
 ## 4. Industry and market (3)
