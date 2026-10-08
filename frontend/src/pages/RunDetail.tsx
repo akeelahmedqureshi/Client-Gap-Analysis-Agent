@@ -10,9 +10,10 @@ import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 import { ChangeList, SeverityBadge } from "../components/Changes";
+import SalesTab from "../components/SalesTab";
 
 const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
-  "Roadmap", "Our Fit", "Evidence", "Report"] as const;
+  "Roadmap", "Our Fit", "Sales", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -138,6 +139,7 @@ export default function RunDetailPage() {
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
         {tab === "Roadmap" && <RoadmapTab runId={runId} enabled={done("enhancement_planning")} />}
         {tab === "Our Fit" && <FitTab runId={runId} enabled={done("capability_matching")} />}
+        {tab === "Sales" && (done("sales_intelligence") ? <SalesTab runId={runId} canAct={canAct} /> : <Pending />)}
         {tab === "Evidence" && <EvidenceTab evidence={evidence.data ?? []} />}
         {tab === "Report" && <ReportTab runId={runId} enabled={r.has_report} />}
       </div>

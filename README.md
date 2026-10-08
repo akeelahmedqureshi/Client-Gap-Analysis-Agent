@@ -50,6 +50,7 @@ facts whose quote can't be found are kept only at low confidence. Every finding 
 | 10 | Enhancement Planning: frontend/backend/DB/API/AI/infra/security/testing plan per recommendation | `agents/planning.py` |
 | 11 | Report: Markdown and JSON report with an evidence appendix | `agents/reporting.py` |
 | 12 | Capability Matching: opportunities → approved knowledge-base capabilities, projects and case studies | `agents/capability_matching.py`, `core/matching.py` |
+| 13 | Sales Intelligence and Outreach: sales-ready summary and a claim-checked personalised email, reviewed and approved in the UI | `agents/sales.py`, `core/outreach.py` |
 
 Platform features:
 
@@ -73,7 +74,8 @@ Platform features:
   (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules), Knowledge
   Base (capabilities and case studies with approval workflow and version history) and Run detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
   security, UX, competitors, pricing, apps, comparison, gaps, opportunity matrix, roadmap and patch plans,
-  our fit (knowledge-base matches), evidence explorer, and the report. A Settings screen manages connections and users.
+  our fit (knowledge-base matches), sales summary and outreach email (edit, regenerate, approve,
+  export), evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.
 - **Report export** as a client-ready PDF, plus Markdown and JSON.
 - **Pricing analysis:** plans, prices, pricing models and practices for the client and competitors;

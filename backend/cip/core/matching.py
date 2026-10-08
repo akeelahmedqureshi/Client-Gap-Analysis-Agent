@@ -50,6 +50,7 @@ class Match:
     reference_allowed: bool = False
     technologies: list[str] = field(default_factory=list)
     customer_name: str | None = None
+    outcomes: str = ""
 
     def to_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items()}
@@ -135,6 +136,7 @@ def score_record(need: Need, record: dict, taxonomy: Taxonomy, *, industry: str 
         reference_allowed=is_client_facing(record) and bool(record.get("reference_allowed")),
         technologies=list(record.get("technologies") or [])[:6],
         customer_name=record.get("customer_name") if record.get("reference_allowed") else None,
+        outcomes=(record.get("outcomes") or "")[:500],
     )
 
 

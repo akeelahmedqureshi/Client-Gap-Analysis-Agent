@@ -28,9 +28,31 @@ Each `Finding` has a `basis`:
 | `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown), `recommendations[]` (top N with phase), `roadmap` |
 | `enhancement_planning` | after opportunity_prioritization | — | `plans[]` (ImplementationPlan) |
 | `capability_matching` | after opportunity_prioritization | — | `matches[]` (per recommendation: up to 3 knowledge-base records with confidence, reasons, `client_facing`, `reference_allowed`), `by_record[]` (demand per record), `unmatched[]`, `knowledge_base` (record ids + versions used) |
+| `sales_intelligence` | after capability_matching | — | `pain_points[]` (source, evidence, `internal_only`), `top_gaps[]` (claim-safe, with competitors and coverage), `top_improvements[]`, `ai_opportunity`, `automation_opportunity`, `cost_saving_opportunity`, `revenue_opportunity`, `conversation_angle`, `relevant_capabilities[]` / `internal_capabilities[]` / `case_studies[]`, `contact`, `next_step`, `claim_safety`, `outreach_input` |
+| `outreach` | **requires** sales_intelligence | — | `to`, `subject`, `body`, `generated_by` (llm / template), `problems[]` (claim check), `notes[]`, `facts[]` |
 | `report` | after enhancement_planning | `client_report` | `report` (structured JSON), `markdown` |
 
 ## Notes by agent
+
+**Sales Intelligence.** Builds the sales-ready summary (BRS 7.20) deterministically from the same gaps,
+scores and matches as the report. Claim safety:
+
+- Only gaps with confidence ≥ 0.5, competitor evidence and a client-facing type (missing, partial, AI,
+  UX, pricing) lead; weaker ones are listed under `claim_safety.excluded_gaps`. Each is phrased as *not
+  publicly identified*.
+- Pain points come from public app-store reviews, review feature requests and high-severity conversion
+  or mobile UX issues. Pricing opinions and security findings are marked `internal_only`.
+- Client-facing and internal-only knowledge-base matches are kept apart; a case-study customer is named
+  only when its record allows references.
+
+**Outreach.** Writes the email (BRS 7.19) from `outreach_input.facts` only: the top two gaps, customer
+pain, one AI or automation idea (labelled as an idea), and one approved client-facing capability or
+case study (`core/outreach.py`). With an LLM, the draft is claim-checked; a failing draft is retried
+once with the problems, then replaced by the deterministic template. The claim check flags internal-only
+titles and non-referenceable customers, competitors not in the facts, security topics, and numbers
+that are not in the facts. Internal-only knowledge is never in the prompt. People then edit, regenerate
+(with instructions) and approve the email in the **Sales** tab; approval is refused while internal-only
+or security content remains, and other warnings must be acknowledged.
 
 **Capability Matching.** Maps each recommendation to the organization's *approved* knowledge-base
 records (BRS 7.18): gap → required capability → internal capability → technology → previous project →

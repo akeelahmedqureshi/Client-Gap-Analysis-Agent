@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 58 |
+| ✅ Completed | 62 |
 | 🟡 Partially completed | 31 |
-| ❌ Incomplete | 39 |
+| ❌ Incomplete | 35 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -138,10 +138,10 @@ _Baseline audit: 2026-10-08._
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 65 | Sales-intelligence summary | ❌ | |
-| 66 | Personalised outreach email | ❌ | |
-| 67 | Edit, regenerate and approve the email | ❌ | |
-| 68 | Export the email | ❌ | |
+| 65 | Sales-intelligence summary | ✅ | `sales_intelligence` agent, Sales tab, Markdown export |
+| 66 | Personalised outreach email | ✅ | `outreach` agent: claim-checked LLM draft or template |
+| 67 | Edit, regenerate and approve the email | ✅ | Versioned history; approval blocked on internal-only or security content |
+| 68 | Export the email | ✅ | Copy, `.eml` draft |
 
 ## 12. Evidence and quality (10)
 

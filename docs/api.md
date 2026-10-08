@@ -77,6 +77,22 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
 | GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
+## Sales summary and outreach
+
+The run's sales summary and outreach email are created from the agent results the first time they are
+opened, then reviewed by people. Every change is versioned in `history`.
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/runs/{id}/sales` | viewer | `{summary, outreach}`, each `{content, status: draft\|approved, version, history, edited}` |
+| PATCH | `/api/runs/{id}/sales/summary` | analyst | `{conversation_angle?, next_step?, reviewer_notes?, note?}`; back to draft |
+| POST | `/api/runs/{id}/sales/summary/approve` | analyst | `{note?}` |
+| GET | `/api/runs/{id}/sales-summary.md` | viewer | Markdown export (internal-only items labelled) |
+| PATCH | `/api/runs/{id}/outreach` | analyst | `{to?, subject?, body?, note?}`; re-runs the claim check, back to draft |
+| POST | `/api/runs/{id}/outreach/regenerate` | analyst | `{instructions?}`: new LLM draft (template without an LLM), claim-checked |
+| POST | `/api/runs/{id}/outreach/approve` | analyst | `{acknowledge_warnings?, note?}`. 409 while the draft mentions internal-only knowledge or security findings; other claim-check warnings need `acknowledge_warnings: true` |
+| GET | `/api/runs/{id}/outreach.eml` | viewer | The email as an unsent `.eml` draft (file name ends in `-DRAFT` until approved) |
+
 ## Knowledge base
 
 Internal capabilities, reusable solutions, previous projects and case studies (BRS 27). Viewers see

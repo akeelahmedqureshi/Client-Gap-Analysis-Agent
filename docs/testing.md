@@ -182,6 +182,13 @@ Start a second analysis of ABC Patient Management with all three gates ticked.
       the approved record with reasons (required capability, same industry, the client's technology). The
       draft record is never matched; *AI assistant / chatbot* is under *No internal match*.
 - [ ] **Restrict** a record as admin: analysts and viewers no longer see it, and new runs ignore it.
+- [ ] **Sales** tab: pain points (app reviews and website issues; pricing and security marked *internal
+      only*), top 3 competitive gaps with sources, top 3 improvements, AI / automation / cost / revenue
+      opportunities, conversation angle, your capabilities and next step. **Edit**, **Approve**, **Export**.
+- [ ] The outreach email names only analysed competitors, says *could not find publicly* rather than
+      *you lack*, and uses only client-facing records. Add “we cut costs by 45%” and **Save edits**: a
+      warning appears and approval asks you to confirm. Add an internal-only record's title: **Approve**
+      is disabled. **Regenerate** with an instruction, then **Approve** and **Download .eml**.
 
 ### 3.5 Monitoring and alerts
 

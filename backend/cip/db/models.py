@@ -327,3 +327,29 @@ class KnowledgeRecordVersion(Base):
     changed_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
     changed_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SalesDocument(Base):
+    """Human-reviewed sales output of a run: the sales summary or the outreach email (BRS 7.19-7.20).
+
+    Created from the agent result the first time it is opened; people then edit, regenerate and approve
+    it. ``generated`` keeps the agent's original; ``history`` keeps every version (who, when, what).
+    """
+
+    __tablename__ = "sales_documents"
+    __table_args__ = (UniqueConstraint("run_id", "kind"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("sd"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("analysis_runs.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # sales_summary | outreach
+    content: Mapped[dict] = mapped_column(default=dict)
+    generated: Mapped[dict] = mapped_column(default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | approved
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    history: Mapped[list] = mapped_column(default=list)
+    updated_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
