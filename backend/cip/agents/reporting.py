@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from cip.agents.base import Agent, ApprovalRequest, RunContext
 from cip.core.llm import LLMError, LLMUnavailable
-from cip.core.schemas import AgentResult
+from cip.core.schemas import STATUS_LABELS, AgentResult
 from cip.agents.pricing_analysis import MODEL_LABELS
 from cip.core.scoring import PHASE_LABELS
 from cip.connectors.research.ux import PRACTICES
@@ -66,7 +66,9 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
     plans = ctx.data("enhancement_planning").get("plans", [])
 
     sections: dict = {}
-    top_recs = prio.get("recommendations", [])[:5]
+    top_recs = sorted(prio.get("recommendations", []), key=lambda r: -r["score"]["total"])[:5]
+    scores = {o["gap_id"]: o["score"]["total"] for o in prio.get("opportunities", [])}
+    ranked_gaps = sorted(gaps, key=lambda g: -scores.get(g["id"], 0))
     sections["executive_summary"] = {
         "client": rec.client.name, "project": rec.project.name,
         "industry": profile.get("industry") or rec.client.industry,
@@ -74,7 +76,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         (f"{rec.project.name} evidences {sum(1 for f in features.get('inventory', []) if f['status'] == 'available')} "
          f"features against {len(comp)} verified competitor(s); {len(gaps)} gaps identified."),
         "key_findings": summary.key_findings if summary else
-        [f"{g['name']}: {g['description']}" for g in gaps[:5]],
+        [f"{g['name']}: {g['description']}" for g in ranked_gaps[:5]],
         "major_opportunities": summary.major_opportunities if summary else
         [f"{r['feature']} — {PHASE_LABELS[r['phase']]}" for r in top_recs],
         "ai_generated": summary is not None,
@@ -163,6 +165,74 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
     }
     sections["patch_plans"] = plans
     sections["architecture"] = ctx.data("enhancement_planning").get("architecture")
+    # --- BRS 7.23 sections added on top of the original report data -------------------------------
+    opp_by_gap = {o["gap_id"]: o for o in prio.get("opportunities", [])}
+    qa = ctx.data("quality_assurance")
+    sections["completeness"] = None if not qa else {
+        "state": qa["state"], "label": qa["label"], "metrics": qa["metrics"],
+        "issues": [i for i in qa["issues"] if i["severity"] in ("blocking", "warning")],
+        "conflicts": [{**c, "cite": cite(c.get("evidence_ids"))} for c in qa.get("conflicts", [])],
+        "reproducibility": qa.get("reproducibility", {}), "thresholds": qa.get("thresholds", {}),
+    }
+    im = ctx.data("industry_market")
+    sections["industry"] = None if not im else {
+        **{k: im.get(k) for k in ("industry", "market_segment", "product_category", "customer_segment",
+                                  "business_model", "geography", "basis", "notes")},
+        "cite": cite(im.get("evidence_ids"), 3),
+        "trends": [{**t, "cite": cite([t["evidence_id"]])} for t in im.get("trends", [])],
+        "market": comparison.get("market"),
+    }
+    research_c = ctx.data("competitor_research")
+    sections["landscape"] = [{**c, "cite": cite(c.get("evidence_ids"), 2)} for c in research_c.get("landscape", [])]
+    sections["deep_competitors"] = [{
+        "name": c["name"], "url": c.get("url"), "rank": c.get("rank"), "classification": c["classification"],
+        "description": c.get("description"), "target_market": c.get("target_market"), "pricing": c.get("pricing"),
+        "rationale": c.get("rationale"), "pages_analysed": len(c.get("pages_analysed", [])),
+        "deep_error": c.get("deep_error"), "cite": cite(c.get("evidence_ids")),
+        "capabilities": [{"name": ctx.taxonomy.get(o["feature_id"]).name if ctx.taxonomy.get(o["feature_id"]) else
+                          o["feature_id"], "status": o["status"], "cite": cite(o.get("evidence_ids"), 1)}
+                         for o in c.get("features", []) if o["status"] in ("available", "partial")],
+    } for c in comp]
+    rows = comparison.get("rows", [])
+    sections["common_capabilities"] = {
+        cls: [{"name": r["feature_name"], "client": r["client"], "top3": f"{r['top3_count']}/{r['top3_total']}",
+               "top10": f"{r['top10_count']}/{r['top10_total']}" if r.get("top10_total") else "—"}
+              for r in rows if r.get("market_class") == cls]
+        for cls in ("industry_standard", "emerging", "differentiator", "niche", "unique_to_client")
+    }
+    procs = ctx.data("business_process")
+    gap_by_process = {g.get("process_id"): g for g in gaps if g.get("process_id")}
+    sections["processes"] = [{
+        **p, "cite": cite(p.get("evidence_ids")),
+        "priority": opp_by_gap.get(gap_by_process.get(p["process_id"], {}).get("id"), {}).get("priority"),
+    } for p in procs.get("opportunities", [])]
+    sections["process_disclaimer"] = procs.get("disclaimer")
+    ai_gaps = [g for g in gaps if g["gap_type"] == "ai" and g["id"] in opp_by_gap]
+    sections["ai_gaps"] = [{
+        "name": g["name"], "description": g["description"], "basis": g.get("basis"),
+        "priority": opp_by_gap[g["id"]].get("priority"), "opportunity": opp_by_gap[g["id"]].get("business_opportunity"),
+        "revenue": opp_by_gap[g["id"]].get("revenue_opportunity"),
+        "complexity": opp_by_gap[g["id"]].get("attributes", {}).get("complexity"), "cite": cite(g.get("evidence_ids")),
+    } for g in sorted(ai_gaps, key=lambda g: -opp_by_gap[g["id"]]["score"]["total"])]
+    recs_all = sorted(prio.get("recommendations", []), key=lambda r: -r["score"]["total"])
+    sections["recommendations"] = [{**r, "cite": cite(r.get("evidence_ids")),
+                                    "why": opp_by_gap.get(r["gap_id"], {}).get("business_opportunity", "")}
+                                   for r in recs_all]
+    dims = (("Revenue", "revenue_potential"), ("Cost", "cost_saving"), ("Productivity", "productivity"),
+            ("Customer experience", "user_impact"), ("Competitive positioning", "competitive_gap"))
+    impact = []
+    for label, factor in dims:
+        top = sorted((o for o in prio.get("opportunities", []) if o.get("factors", {}).get(factor, 0) >= 4
+                      and o["gap_id"] in {r["gap_id"] for r in recs_all}),
+                     key=lambda o: -o["score"]["total"])[:3]
+        impact.append({"dimension": label, "level": "high" if len(top) >= 2 else "medium" if top else "low",
+                       "drivers": [o["name"] for o in top]})
+    sections["business_impact"] = impact
+    counts = {"high": 0, "medium": 0, "low": 0}
+    for r in recs_all:
+        counts[r.get("priority", "medium")] = counts.get(r.get("priority", "medium"), 0) + 1
+    sections["executive_summary"]["priority_counts"] = counts
+    sections["executive_summary"]["completeness"] = qa.get("label") if qa else None
     sections["evidence_appendix"] = cite.appendix()
     return {
         "title": f"Client Intelligence Report — {rec.client.name}: {rec.project.name}",
@@ -177,24 +247,61 @@ def _md_list(items: list[str]) -> str:
     return "\n" + ("\n".join(f"- {i}" for i in items if i) or "- _None identified_")
 
 
+CONTENTS = ["Executive Summary", "Client Overview", "Client Website & Product Analysis", "Industry & Market Analysis",
+            "Competitor Landscape", "Top 3 Competitor Deep Analysis", "Feature Comparison Matrix",
+            "Feature Gap Analysis", "Common Competitor Features", "Business Cost-Reduction Opportunities",
+            "AI & Automation Opportunities", "Prioritized Recommendations", "Quick Wins", "Strategic Roadmap",
+            "Business Impact Summary"]
+CLASS_LABEL = {"industry_standard": "Industry standard (must-have)", "emerging": "Emerging market expectation",
+               "differentiator": "Competitive differentiator", "niche": "Niche capability",
+               "unique_to_client": "Unique to the client"}
+HORIZONS = (("Short term (0-3 months)", ("phase_1_quick_wins",)), ("Medium term (3-6 months)", ("phase_2_growth",)),
+            ("Long term (6-12 months)", ("phase_3_major", "phase_4_strategic")))
+
+
+def _cell(text) -> str:
+    return str(text or "").replace("|", "/").replace("\n", " ").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def render_markdown(report: dict) -> str:
     s = report["sections"]
     es = s["executive_summary"]
     ci = s["client_intelligence"]
     pa = s["project_analysis"]
-    ma = s["market_analysis"]
+    q = s.get("completeness")
     out: list[str] = [f"# {report['title']}", f"_Generated {report['generated_at']} · run `{report['run_id']}`_", ""]
+    if q:
+        icon = {"complete": "✅", "complete_with_warnings": "⚠️", "partial": "⚠️", "needs_review": "⛔"}[q["state"]]
+        out += [f"> {icon} **Analysis status: {q['label']}.** "
+                + {"complete": "All analysis stages completed and passed the quality checks.",
+                   "complete_with_warnings": "All stages completed; review the warnings below before relying on them.",
+                   "partial": "Some analysis stages did not complete; the affected sections are incomplete.",
+                   "needs_review": "Quality checks found blocking issues; review before sharing this report."}[q["state"]]]
+        for i in q["issues"][:6]:
+            out.append(f"> - {i['message']}")
+        out.append("")
     out += ["> **Legend** — `[E#]` cites the Evidence Appendix. Items marked _(estimate)_ are AI-generated "
-            "estimates or hypotheses, not verified facts.", ""]
+            "estimates or hypotheses, and _(assumption)_ marks statements about internal processes that are not "
+            "publicly observable. Not publicly identified ≠ absent.", "",
+            "**Contents:** " + " · ".join(f"{i}. {t}" for i, t in enumerate(CONTENTS, 1))
+            + " · Appendices: A. Technical Patch Plan · B. Analysis Quality · C. Evidence", ""]
 
+    # 1 ---------------------------------------------------------------------------------------
+    pc = es.get("priority_counts") or {}
     out += ["## 1. Executive Summary", f"**Client:** {es['client']}  ", f"**Project:** {es['project']}  ",
-            f"**Industry:** {es.get('industry') or 'Unknown'}", "",
-            f"**Current product position{' (estimate)' if es['ai_generated'] else ''}:** {es['current_position']}", "",
+            f"**Industry:** {es.get('industry') or 'Unknown'}  "]
+    if es.get("completeness"):
+        out.append(f"**Analysis status:** {es['completeness']}  ")
+    out += ["", f"**Current product position{' (estimate)' if es['ai_generated'] else ''}:** {es['current_position']}", "",
             "**Key findings**", _md_list(es["key_findings"]), "", "**Major opportunities**",
             _md_list(es["major_opportunities"]), ""]
+    if pc:
+        out += [f"**Recommended priorities:** {pc.get('high', 0)} high, {pc.get('medium', 0)} medium, "
+                f"{pc.get('low', 0)} low (see section 12).", ""]
 
+    # 2 ---------------------------------------------------------------------------------------
     c = ci["company"]
-    out += ["## 2. Client Intelligence", f"{c.get('description') or '_No public description found._'}"
+    out += ["## 2. Client Overview", f"{c.get('description') or '_No public description found._'}"
             f"{ci['company_citations']}", ""]
     facts = [f"**{k.replace('_', ' ').title()}:** {v}" for k, v in c.items()
              if v and k not in ("name", "description")]
@@ -225,7 +332,15 @@ def render_markdown(report: dict) -> str:
                           + (f" ({a['date']})" if a.get("date") else "") + a["cite"] for a in ci["announcements"]]),
                 ""]
 
-    out += ["## 3. Existing Project Analysis", "### Features",
+    ind = s.get("industry") or {}
+    if ind.get("customer_segment") or ind.get("geography"):
+        out += ["### Target audience & market",
+                _md_list([f"**Customers:** {', '.join(ind.get('customer_segment') or []) or 'not publicly identified'}",
+                          f"**Markets:** {', '.join(ind.get('geography') or []) or 'not publicly identified'}",
+                          f"**Business model:** {ind.get('business_model') or 'not publicly identified'}"]), ""]
+
+    # 3 ---------------------------------------------------------------------------------------
+    out += ["## 3. Client Website & Product Analysis", "### Capability inventory",
             "| Feature | Status | Technology | Evidence |", "|---|---|---|---|"]
     for f in pa["features"]:
         out.append(f"| {f['name']} | {STATUS_ICON.get(f['status'], '')} {f['status']} | "
@@ -291,55 +406,6 @@ def render_markdown(report: dict) -> str:
                            f"{esc(i['recommendation'])} | {i['cite'].strip() or '—'} |")
         out += [""] + [f"_{n}_" for n in ux.get("notes", [])] + [f"_Scoring: {ux['method']}_", ""]
 
-    out += ["## 4. Market Analysis"]
-    for comp in ma["competitors"]:
-        out.append(f"- **[{comp['name']}]({comp['url']})** — _{comp['classification']}_. "
-                   f"{comp.get('description') or ''}{comp['cite']}"
-                   + (f" Pricing: {comp['pricing']}." if comp.get("pricing") else ""))
-    if not ma["competitors"]:
-        out.append("- _No verified competitors._")
-    if ma["rejected_candidates"]:
-        out += ["", "<details><summary>Candidates rejected during verification</summary>", ""]
-        out += [f"- {r['name']} ({r['url']}): {r['reason']}" for r in ma["rejected_candidates"]]
-        out += ["", "</details>"]
-    out.append("")
-
-    pr = s.get("pricing") or {}
-    if pr.get("competitors") or pr.get("client"):
-        def money(v, cur):
-            return f"{v:g} {cur or ''}".strip() if v else "—"
-
-        def practices(p):
-            bits = [", ".join(MODEL_LABELS.get(m, m) for m in p.get("models", []))]
-            if p.get("free_trial"):
-                days = p.get("trial_days")
-                bits.append(f"free trial ({days}d)" if days else "free trial")
-            if p.get("annual_discount_pct"):
-                bits.append(f"{p['annual_discount_pct']}% annual discount")
-            if p.get("enterprise_contact"):
-                bits.append("enterprise tier")
-            return "; ".join(b for b in bits if b) or "—"
-
-        out += ["### Pricing", "", "| Company | Entry price / month | Highest / month | Model & practices | Evidence |",
-                "|---|---|---|---|---|"]
-        c = pr.get("client")
-        if c:
-            out.append(f"| **Client** | {money(c.get('entry_price_monthly'), c.get('currency'))} | "
-                       f"{money(c.get('max_price_monthly'), c.get('currency'))} | {practices(c)} | "
-                       f"{c['cite'].strip() or '—'} |")
-        for r in pr.get("competitors", []):
-            out.append(f"| {r['name']} | {money(r.get('entry_price_monthly'), r.get('currency'))} | "
-                       f"{money(r.get('max_price_monthly'), r.get('currency'))} | {practices(r)} | "
-                       f"{r['cite'].strip() or '—'} |")
-        m = pr.get("market", {})
-        if m.get("entry_price_median"):
-            out += ["", f"Market entry price: median **{m['entry_price_median']:g} {m.get('currency') or ''}**/month "
-                        f"(range {m['entry_price_min']:g}–{m['entry_price_max']:g}). Client position: "
-                        f"**{pr.get('position', 'unknown')}** market."
-                    + (f" {m['excluded_other_currency']} competitor(s) priced in another currency were excluded."
-                       if m.get("excluded_other_currency") else "")]
-        out.append("")
-
     ap = s.get("app_store")
     if ap:
         def cell(text) -> str:
@@ -381,54 +447,226 @@ def render_markdown(report: dict) -> str:
                 f"{r['name']} ({r['count']} review(s)){r['cite']}" for r in ap["requests"])]
         out += ["", f"_{ap['method']}_"] + [f"_{n}_" for n in ap.get("notes", [])] + [""]
 
+    # 4 ---------------------------------------------------------------------------------------
+    out += ["## 4. Industry & Market Analysis"]
+    if ind:
+        basis = ind.get("basis") or {}
+        rows = [("Industry", ind.get("industry"), basis.get("industry")),
+                ("Market segment", ind.get("market_segment"), basis.get("market_segment")),
+                ("Product category", ind.get("product_category"), basis.get("product_category")),
+                ("Customer segment", ", ".join(ind.get("customer_segment") or []), basis.get("customer_segment")),
+                ("Business model", ind.get("business_model"), basis.get("business_model"))]
+        out += ["| Dimension | Value | Basis |", "|---|---|---|"]
+        out += [f"| {k} | {_cell(v) or 'not publicly identified'} | {b or '—'} |" for k, v, b in rows]
+        out += ["", f"Sources:{ind['cite'] or ' —'}", ""]
+        for kind, label in (("trend", "Industry trends"), ("technology", "Emerging technology"),
+                            ("ai_adoption", "AI adoption"), ("automation", "Automation trends")):
+            items = [t for t in ind.get("trends", []) if t["kind"] == kind]
+            if items:
+                out += [f"**{label}**", _md_list([f"{t['statement']}{t['cite']}" for t in items]), ""]
+        if not ind.get("trends"):
+            out += ["_" + ((ind.get("notes") or ["No sourced market trends were found."])[0]) + "_", ""]
+        m = ind.get("market") or {}
+        if m.get("landscape_size"):
+            pct = lambda v: "—" if v is None else f"{v:.0%}"  # noqa: E731
+            out += [f"**Across the {m['landscape_size']} competitors analysed:** {pct(m.get('ai_adoption'))} offer an AI "
+                    f"capability and {pct(m.get('automation_adoption'))} offer automation; the client publicly offers "
+                    f"{pct(m.get('client_standard_coverage'))} of the {len(m.get('industry_standards', []))} industry-"
+                    "standard capabilities.", ""]
+    else:
+        out += ["_Industry & market analysis did not run._", ""]
+    pr = s.get("pricing") or {}
+    if pr.get("competitors") or pr.get("client"):
+        def money(v, cur):
+            return f"{v:g} {cur or ''}".strip() if v else "—"
+
+        def practices(p):
+            bits = [", ".join(MODEL_LABELS.get(m, m) for m in p.get("models", []))]
+            if p.get("free_trial"):
+                days = p.get("trial_days")
+                bits.append(f"free trial ({days}d)" if days else "free trial")
+            if p.get("annual_discount_pct"):
+                bits.append(f"{p['annual_discount_pct']}% annual discount")
+            if p.get("enterprise_contact"):
+                bits.append("enterprise tier")
+            return "; ".join(b for b in bits if b) or "—"
+
+        out += ["### Pricing", "", "| Company | Entry price / month | Highest / month | Model & practices | Evidence |",
+                "|---|---|---|---|---|"]
+        c = pr.get("client")
+        if c:
+            out.append(f"| **Client** | {money(c.get('entry_price_monthly'), c.get('currency'))} | "
+                       f"{money(c.get('max_price_monthly'), c.get('currency'))} | {practices(c)} | "
+                       f"{c['cite'].strip() or '—'} |")
+        for r in pr.get("competitors", []):
+            out.append(f"| {r['name']} | {money(r.get('entry_price_monthly'), r.get('currency'))} | "
+                       f"{money(r.get('max_price_monthly'), r.get('currency'))} | {practices(r)} | "
+                       f"{r['cite'].strip() or '—'} |")
+        m = pr.get("market", {})
+        if m.get("entry_price_median"):
+            out += ["", f"Market entry price: median **{m['entry_price_median']:g} {m.get('currency') or ''}**/month "
+                        f"(range {m['entry_price_min']:g}–{m['entry_price_max']:g}). Client position: "
+                        f"**{pr.get('position', 'unknown')}** market."
+                    + (f" {m['excluded_other_currency']} competitor(s) priced in another currency were excluded."
+                       if m.get("excluded_other_currency") else "")]
+        out.append("")
+
+    # 5 ---------------------------------------------------------------------------------------
+    out += ["## 5. Competitor Landscape",
+            "Ranked by relevance to this client — capability overlap, product, industry, customers, geography and "
+            "business model — not by company size.", "",
+            "| # | Competitor | Type | Relevance | Why included | Evidence |", "|---|---|---|---|---|---|"]
+    for c in s.get("landscape", []):
+        deep = " **(deep analysis)**" if c.get("deep") else ""
+        out.append(f"| {c['rank']} | [{_cell(c['name'])}]({c['url']}){deep} | {c['classification']} | "
+                   f"{c['relevance']['overall']:.0%} | {_cell(c['reason'])} | {c['cite'].strip() or '—'} |")
+    if not s.get("landscape"):
+        out.append("| — | _No verified competitors_ | | | | |")
+    rejected = s["market_analysis"]["rejected_candidates"]
+    if rejected:
+        out += ["", "**Candidates rejected during verification:** "
+                + "; ".join(f"{_cell(r['name'])} ({_cell(r['reason'])[:120]})" for r in rejected[:10])]
+    out.append("")
+
+    # 6 ---------------------------------------------------------------------------------------
+    out += ["## 6. Top 3 Competitor Deep Analysis"]
+    for c in s.get("deep_competitors", []):
+        out += [f"### #{c['rank']} [{c['name']}]({c['url']}) — {c['classification']}",
+                f"{c.get('description') or ''}{c['cite']}", ""]
+        facts = [f"**Target market:** {c['target_market']}" if c.get("target_market") else "",
+                 f"**Pricing:** {c['pricing']}" if c.get("pricing") else "",
+                 f"**Why it matters:** {c['rationale']}" if c.get("rationale") else "",
+                 f"**Pages analysed:** {c['pages_analysed']}"
+                 + (" (deep analysis failed; light profile shown)" if c.get("deep_error") else "")]
+        out += [_md_list([f for f in facts if f]), ""]
+        if c["capabilities"]:
+            out += ["**Capabilities evidenced:** " + ", ".join(
+                f"{x['name']}{' (partial)' if x['status'] == 'partial' else ''}{x['cite']}" for x in c["capabilities"]), ""]
+    if not s.get("deep_competitors"):
+        out += ["_No competitor was analysed in depth._", ""]
+
+    # 7 ---------------------------------------------------------------------------------------
     fc = s["feature_comparison"]
     comps = fc.get("competitors", [])
-    out += ["## 5. Feature Comparison", "",
-            "| Feature | Client | " + " | ".join(c["name"] for c in comps) + " |",
-            "|---|---|" + "---|" * len(comps)]
+    out += ["## 7. Feature Comparison Matrix", "",
+            "| Capability | Client | " + " | ".join(_cell(c["name"]) for c in comps) + " | Top 3 | Top 10 | Market |",
+            "|---|---|" + "---|" * len(comps) + "---|---|---|"]
     for row in fc.get("rows", []):
         cells = [STATUS_ICON[row["competitors"].get(c["id"], "unknown")] for c in comps]
-        out.append(f"| {row['feature_name']} | {STATUS_ICON[row['client']]} | " + " | ".join(cells) + " |")
+        top10 = f"{row.get('top10_count', 0)}/{row['top10_total']}" if row.get("top10_total") else "—"
+        out.append(f"| {row['feature_name']} | {STATUS_ICON[row['client']]} | " + " | ".join(cells)
+                   + f" | {row.get('top3_count', 0)}/{row.get('top3_total', len(comps))} | {top10} | "
+                   f"{CLASS_LABEL.get(row.get('market_class'), '—')} |")
     out += ["", STATUS_LEGEND,
             "_Not publicly identified means no public evidence was found; it does not mean the capability is absent._", ""]
 
-    out += ["## 6. Gap Analysis", "| Gap | Type | Description | Confidence | Evidence |", "|---|---|---|---|---|"]
+    # 8 ---------------------------------------------------------------------------------------
+    opps = {o["gap_id"]: o for o in s["opportunities"]}
+    out += ["## 8. Feature Gap Analysis",
+            "| Gap | Category | Priority | Offered by | Description | Confidence | Evidence |", "|---|---|---|---|---|---|---|"]
+    names = {c["id"]: c["name"] for c in comps}
     for g in s["gap_analysis"]:
+        o = opps.get(g["id"], {})
         est = " _(estimate)_" if g.get("basis") == "estimate" else ""
-        out.append(f"| {g['name']} | {g['gap_type']} | {g['description']}{est} | {g['confidence']:.0%} | "
-                   f"{g['cite'].strip() or '—'} |")
+        offered = ", ".join(names.get(c, c) for c in g.get("competitors_with", [])) or "—"
+        out.append(f"| {_cell(g['name'])} | {o.get('business_category') or g['gap_type']} | {o.get('priority', '—')} | "
+                   f"{_cell(offered)} | {_cell(g['description'])}{est} | {g['confidence']:.0%} | {g['cite'].strip() or '—'} |")
     out.append("")
 
-    out += ["## 7. Recommended Opportunities _(estimates)_",
-            "| # | Opportunity | Why | Impact | Complexity | Score |", "|---|---|---|---|---|---|"]
-    opps = {o["gap_id"]: o for o in s["opportunities"]}
-    ranked = [r for phase in PHASE_LABELS for r in s["roadmap"][phase]]
-    ranked.sort(key=lambda r: -r["score"]["total"])
-    for i, r in enumerate(ranked, 1):
-        o = opps.get(r["gap_id"], {})
-        out.append(f"| {i} | {r['feature']} | {o.get('business_opportunity', '')} | {r['business_impact']} | "
-                   f"{r['complexity']} | {r['score']['total']} |")
-    w = s.get("scoring_weights", {})
-    out += ["", "Score = Σ weight × factor (0–5) for benefits − weight × (complexity, risk). Weights: "
-            + ", ".join(f"{k} {v}" for k, v in w.items()), ""]
+    # 9 ---------------------------------------------------------------------------------------
+    cc = s.get("common_capabilities") or {}
+    out += ["## 9. Common Competitor Features"]
+    for cls in ("industry_standard", "emerging", "differentiator", "niche", "unique_to_client"):
+        items = cc.get(cls, [])
+        if not items:
+            continue
+        out += [f"**{CLASS_LABEL[cls]}**",
+                _md_list([f"{i['name']} — top 3: {i['top3']}, top 10: {i['top10']}; client: "
+                          f"{STATUS_LABELS.get(i['client'], i['client'])}" for i in items]), ""]
+    if not any(cc.values()):
+        out += ["_No common capabilities could be determined._", ""]
 
-    out += ["## 8. Enhancement Roadmap"]
+    # 10 --------------------------------------------------------------------------------------
+    out += ["## 10. Business Cost-Reduction Opportunities"]
+    if s.get("process_disclaimer"):
+        out += [f"_{s['process_disclaimer']}_", ""]
+    for p in s.get("processes", []):
+        out += [f"### {p['area']}: {p['name']}" + (f" — {p['priority']} priority" if p.get("priority") else ""),
+                _md_list([f"**Observed:** {'; '.join(p['observed'])}{p['cite']}",
+                          f"**Likely current process _(assumption)_:** {p['current_process']}",
+                          f"**Inefficiency _(assumption)_:** {p['inefficiency']}",
+                          f"**Recommended improvement:** {p['proposed_solution']} _(estimate)_",
+                          f"**Operational benefit:** resource saving {p['cost_reduction']}, processing time "
+                          f"{p['time_reduction']}, errors/rework {p['error_reduction']} (qualitative)",
+                          f"**Complexity:** {p['complexity']}/5 · **Confidence:** {p['confidence']:.0%}"]), ""]
+    if not s.get("processes"):
+        out += ["_No business process with an open improvement was observed._", ""]
+
+    # 11 --------------------------------------------------------------------------------------
+    out += ["## 11. AI & Automation Opportunities",
+            "AI and automation are recommended only where an observed business process or competitor evidence "
+            "justifies them.", ""]
+    ai_proc = [p for p in s.get("processes", []) if p.get("ai")]
+    auto_proc = [p for p in s.get("processes", []) if p.get("automation") and not p.get("ai")]
+    for label, items in (("AI opportunities", ai_proc), ("Automation opportunities", auto_proc)):
+        if not items:
+            continue
+        out += [f"### {label}", "| Opportunity | Business problem | How it works | Benefit | Customer impact | "
+                "Revenue | Complexity | Priority |", "|---|---|---|---|---|---|---|---|"]
+        out += [f"| {_cell(p['name'])} | {_cell(p['business_problem'])} | {_cell(p['how_it_works'])} | "
+                f"cost {p['cost_reduction']}, productivity {p['productivity']} | {_cell(p['customer_impact'])} | "
+                f"{_cell(p['revenue_opportunity'])} | {p['complexity']}/5 | {p.get('priority') or '—'} |" for p in items]
+        out.append("")
+    if s.get("ai_gaps"):
+        out += ["### AI capabilities competitors offer",
+                "| Capability | Evidence of need | Opportunity | Complexity | Priority | Evidence |", "|---|---|---|---|---|---|"]
+        out += [f"| {_cell(g['name'])} | {_cell(g['description'])}{' _(estimate)_' if g.get('basis') == 'estimate' else ''} | "
+                f"{_cell(g['opportunity'])} | {g.get('complexity') or '—'} | {g.get('priority') or '—'} | "
+                f"{g['cite'].strip() or '—'} |" for g in s["ai_gaps"]]
+        out.append("")
+
+    # 12 --------------------------------------------------------------------------------------
+    out += ["## 12. Prioritized Recommendations _(estimates)_"]
+    recs = s.get("recommendations", [])
+    for level in ("high", "medium", "low"):
+        items = [r for r in recs if r.get("priority", "medium") == level]
+        out += [f"### {level.title()} priority"]
+        if not items:
+            out += ["- _None_", ""]
+            continue
+        out += ["| Recommendation | Category | Why it matters | Expected value | Complexity | Horizon | Score |",
+                "|---|---|---|---|---|---|---|"]
+        out += [f"| {_cell(r['feature'])} | {r.get('business_category') or '—'} | {_cell(r['why'])} | "
+                f"{_cell(r['business_impact'])} | {r['complexity']} | {PHASE_LABELS[r['phase']].split(' — ')[1]} | "
+                f"{r['score']['total']} |" for r in items]
+        out.append("")
+    w = s.get("scoring_weights", {})
+    out += ["Score = Σ weight × factor (0–5) for benefits, scaled by evidence confidence, − weight × (complexity, risk). "
+            "A recommendation is High only with confidence ≥ 50%. Weights: " + ", ".join(f"{k} {v}" for k, v in w.items()), ""]
+
+    # 13 --------------------------------------------------------------------------------------
+    quick = [r for r in recs if r["phase"] == "phase_1_quick_wins"]
+    out += ["## 13. Quick Wins", "Improvements that can be delivered relatively quickly (0-4 weeks) for immediate value.", ""]
+    out += [_md_list([f"**{r['feature']}** ({r.get('priority', 'medium')} priority) — {r['expected_outcome']}{r['cite']}"
+                      for r in quick]), ""]
+
+    # 14 --------------------------------------------------------------------------------------
+    out += ["## 14. Strategic Roadmap"]
     efforts = {p["recommendation_id"]: p.get("estimated_effort") for p in s["patch_plans"]}
-    for phase, label in PHASE_LABELS.items():
+    for label, phases in HORIZONS:
         out += [f"### {label}"]
-        items = s["roadmap"][phase]
+        items = [r for ph in phases for r in s["roadmap"][ph]]
         if not items:
             out += ["- _No items_", ""]
             continue
-        out += ["| Feature | Complexity / effort | Dependencies | Expected impact | Evidence |", "|---|---|---|---|---|"]
+        out += ["| Initiative | Priority | Complexity / effort | Dependencies | Expected impact | Evidence |",
+                "|---|---|---|---|---|---|"]
         for r in items:
             effort = efforts.get(r["id"])
-            out.append(f"| {r['feature']} | {r['complexity']}{f' ({effort})' if effort else ''} | "
-                       f"{', '.join(r['dependencies']) or '—'} | "
-                       f"{r['expected_outcome']} | {r['cite'].strip() or '—'} |")
+            out.append(f"| {_cell(r['feature'])} | {r.get('priority', '—')} | {r['complexity']}{f' ({effort})' if effort else ''} | "
+                       f"{_cell(', '.join(r['dependencies'])) or '—'} | {_cell(r['expected_outcome'])} | "
+                       f"{r['cite'].strip() or '—'} |")
         out.append("")
-
-    out += ["## 9. Technical Patch Plan _(estimates)_"]
     arch = s.get("architecture")
     if arch:
         out += ["### Architecture: current vs. target",
@@ -439,6 +677,15 @@ def render_markdown(report: dict) -> str:
         if arch.get("new_components"):
             out += ["**New components**",
                     _md_list([f"{c['label']} ({c['layer']}) — for {c['for']}" for c in arch["new_components"]]), ""]
+    # 15 --------------------------------------------------------------------------------------
+    out += ["## 15. Business Impact Summary _(estimates)_",
+            "| Dimension | Expected impact | Main drivers |", "|---|---|---|"]
+    for d in s.get("business_impact", []):
+        out.append(f"| {d['dimension']} | {d['level']} | {_cell(', '.join(d['drivers'])) or '—'} |")
+    out += ["", "_Impact levels are qualitative estimates from the scored recommendations; validate them with the client._", ""]
+
+    # Appendices ------------------------------------------------------------------------------
+    out += ["## Appendix A. Technical Patch Plan _(estimates)_"]
     for p in s["patch_plans"]:
         out += [f"### {p['feature']}", f"**Objective:** {p['objective']}  ",
                 f"**Architecture impact:** {p['architecture_impact']}  ",
@@ -451,7 +698,31 @@ def render_markdown(report: dict) -> str:
             if p.get(key):
                 out += [f"**{label}**", _md_list(p[key]), ""]
 
-    out += ["## 10. Evidence Appendix", "| Ref | Claim | Source | Type | Confidence | Collected |",
+    if q:
+        m = q["metrics"]
+        r = q.get("reproducibility", {})
+        fr = m.get("source_freshness", {})
+        cov = m.get("evidence_coverage")
+        out += ["## Appendix B. Analysis Quality & Reproducibility",
+                f"**Status:** {q['label']} · **Evidence coverage:** {'—' if cov is None else f'{cov:.0%}'} of "
+                f"{m['significant_findings']} significant findings · **Low-confidence findings:** {m['low_confidence_findings']} · "
+                f"**Inferred / assumption-based:** {m['inferred_findings']} / {m['assumption_findings']} · "
+                f"**Sources:** {m['evidence_items']} ({fr.get('fresh', 0)} fresh, {fr.get('aging', 0)} aging, "
+                f"{fr.get('stale', 0)} stale) · **Competitors:** {m['landscape_size']} ranked, {m['competitors_deep']} deep-analysed", ""]
+        if m.get("stages_missing"):
+            out += [f"**Stages not completed:** {', '.join(m['stages_missing'])}", ""]
+        if q.get("conflicts"):
+            out += ["**Conflicting information**", _md_list([f"{c['topic']}: {c['detail']}{c['cite']}" for c in q["conflicts"]]), ""]
+        if q.get("issues"):
+            out += ["**Quality issues**", _md_list([f"{i['severity']}: {i['message']}" for i in q["issues"]]), ""]
+        out += ["**Reproducibility**", _md_list([
+            f"Model: {r.get('model')}" + (f" (temperature {r['llm_temperature']})" if r.get("llm_temperature") is not None else ""),
+            f"Prompt version {r.get('prompt_version')} · taxonomy {r.get('taxonomy_version')} · process catalog "
+            f"{r.get('process_catalog_version')}",
+            f"Research window: {(r.get('research_from') or '')[:19]} – {(r.get('research_to') or '')[:19]} UTC",
+            "Settings: " + ", ".join(f"{k} {v}" for k, v in (r.get("settings") or {}).items()),
+        ]), ""]
+    out += ["## Appendix C. Evidence Appendix", "| Ref | Claim | Source | Type | Confidence | Collected |",
             "|---|---|---|---|---|---|"]
     for e in s["evidence_appendix"]:
         src = e["source_url"]
@@ -467,7 +738,7 @@ def render_markdown(report: dict) -> str:
 class ReportAgent(Agent):
     name = "report"
     description = "Generate the final client intelligence report"
-    after = ("enhancement_planning",)
+    after = ("enhancement_planning", "quality_assurance")
     max_attempts = 1
 
     def approval_needed(self, ctx: RunContext) -> ApprovalRequest | None:

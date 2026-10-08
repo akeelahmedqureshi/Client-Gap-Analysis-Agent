@@ -88,9 +88,13 @@ async def test_full_pipeline_deterministic(make_ctx):
 
     # Report
     md = ctx.data("report")["markdown"]
-    for heading in ("Executive Summary", "Client Intelligence", "Feature Comparison", "Gap Analysis",
-                    "Enhancement Roadmap", "Technical Patch Plan", "Evidence Appendix"):
+    # The 15 report sections of BRS 7.23, in order, then the appendices.
+    from cip.agents.reporting import CONTENTS
+    positions = [md.index(f"## {i}. {title}") for i, title in enumerate(CONTENTS, 1)]
+    assert positions == sorted(positions) and len(CONTENTS) == 15
+    for heading in ("Appendix A. Technical Patch Plan", "Appendix B. Analysis Quality", "Appendix C. Evidence Appendix"):
         assert heading in md
+    assert "Analysis status: Complete" in md and "<details>" not in md
     appendix = ctx.data("report")["report"]["sections"]["evidence_appendix"]
     assert appendix and all(e["source_url"] for e in appendix)
     assert totals  # noqa

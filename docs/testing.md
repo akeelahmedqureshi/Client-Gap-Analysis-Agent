@@ -182,6 +182,12 @@ Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC
 - [ ] **Comparison**: Top-3 and Top-10 frequency and a market class per capability. Search, filter and
       **Export CSV** work.
 
+- [ ] **Pipeline**: the *Analysis quality* card shows *Complete*, evidence coverage 100%, source
+      freshness and the model/prompt/taxonomy versions; the run header shows the same status.
+- [ ] **Report**: 15 numbered sections in the BRS order, then appendices A (patch plans), B (quality &
+      reproducibility) and C (evidence). Re-run with external research rejected: the report opens with
+      *Analysis status: Partially complete* and lists the stages that did not complete.
+
 ### 3.4 Knowledge base and capability matching
 
 - [ ] **Knowledge Base → Add record**: type *Reusable solution*, title *Workflow automation platform*,

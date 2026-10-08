@@ -32,7 +32,8 @@ Each `Finding` has a `basis`:
 | `capability_matching` | after opportunity_prioritization | — | `matches[]` (per recommendation: up to 3 knowledge-base records with confidence, reasons, `client_facing`, `reference_allowed`), `by_record[]` (demand per record), `unmatched[]`, `knowledge_base` (record ids + versions used) |
 | `sales_intelligence` | after capability_matching | — | `pain_points[]` (source, evidence, `internal_only`), `top_gaps[]` (claim-safe, with competitors and coverage), `top_improvements[]`, `ai_opportunity`, `automation_opportunity`, `cost_saving_opportunity`, `revenue_opportunity`, `conversation_angle`, `relevant_capabilities[]` / `internal_capabilities[]` / `case_studies[]`, `contact`, `next_step`, `claim_safety`, `outreach_input` |
 | `outreach` | **requires** sales_intelligence | — | `to`, `subject`, `body`, `generated_by` (llm / template), `problems[]` (claim check), `notes[]`, `facts[]` |
-| `report` | after enhancement_planning | `client_report` | `report` (structured JSON), `markdown` |
+| `quality_assurance` | after outreach and every analysis stage | — | `state` (complete / complete_with_warnings / partial / needs_review), `issues[]` (blocking / warning / info), `conflicts[]`, `metrics` (evidence coverage, low-confidence, inferred and assumption counts, source freshness and types, competitor and comparison coverage, stages completed / missing), `reproducibility` |
+| `report` | after enhancement_planning, quality_assurance | `client_report` | `report` (structured JSON, 15 BRS sections + appendices), `markdown` |
 
 ## Notes by agent
 
@@ -55,6 +56,35 @@ titles and non-referenceable customers, competitors not in the facts, security t
 that are not in the facts. Internal-only knowledge is never in the prompt. People then edit, regenerate
 (with instructions) and approve the email in the **Sales** tab; approval is refused while internal-only
 or security content remains, and other warnings must be acknowledged.
+
+**Quality Assurance** (BRS 32, 41, 28, 31). Checks the run before the report and never changes findings:
+
+- **Data:** duplicate capabilities, gaps that reference unknown competitors, scores or confidences out
+  of range (blocking).
+- **Evidence:** coverage of significant findings (gaps, recommendations, competitors; warning below
+  70%), references that do not resolve (blocking), unsupported findings, low-confidence (< 45%) and
+  inferred / assumption-based findings, source freshness (fresh ≤ 30 days, stale > 180 days;
+  `CIP_FRESHNESS_*_DAYS`) and conflicts: CSV vs website industry, a mobile app mentioned on the website
+  without a verified store listing, CSV feature lists without public evidence.
+- **Recommendations:** each needs a business justification, priority, complexity and evidence; one that
+  rests only on thin evidence of absence is flagged; a High priority on low confidence is blocking.
+- **Outputs:** the sales summary must match the recommendations; outreach claim-check problems carry
+  over (internal-only or security content is blocking).
+- **State:** *needs review* with any blocking issue, otherwise *partial* when a mandatory stage did not
+  complete, *complete with warnings* or *complete*. The run page and the report show it prominently.
+- **Reproducibility:** model and temperature, a fingerprint of every agent prompt, taxonomy and process
+  catalog versions, scoring weights, settings and the research time window.
+
+**Report** (BRS 7.23). Built only from the structured state, in the BRS order: 1 Executive Summary
+(with the analysis status and priority counts), 2 Client Overview, 3 Client Website & Product Analysis
+(capability inventory, repositories, security, UX, app stores), 4 Industry & Market Analysis (profile,
+sourced trends, adoption, pricing), 5 Competitor Landscape (Top 10 with relevance), 6 Top 3 Competitor
+Deep Analysis, 7 Feature Comparison Matrix (with Top-3/Top-10 frequency and market class), 8 Feature
+Gap Analysis (category and priority), 9 Common Competitor Features, 10 Business Cost-Reduction
+Opportunities (assumptions labelled), 11 AI & Automation Opportunities, 12 Prioritized Recommendations
+(High / Medium / Low), 13 Quick Wins, 14 Strategic Roadmap (short / medium / long term, architecture),
+15 Business Impact Summary; then appendices A Technical Patch Plan, B Analysis Quality &
+Reproducibility, C Evidence.
 
 **Capability Matching.** Maps each recommendation to the organization's *approved* knowledge-base
 records (BRS 7.18): gap → required capability → internal capability → technology → previous project →

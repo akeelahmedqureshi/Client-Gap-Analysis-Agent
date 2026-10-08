@@ -115,6 +115,11 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     notify_timeout_seconds: float = 10.0
 
+    # --- Quality ------------------------------------------------------------
+    # Research freshness (BRS 28): sources up to N days old are fresh, older than the stale limit are stale.
+    freshness_fresh_days: int = 30
+    freshness_stale_days: int = 180
+
     # --- Prioritization ---------------------------------------------------
     roadmap_top_n: int = 10
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])

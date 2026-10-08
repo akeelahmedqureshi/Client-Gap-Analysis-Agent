@@ -38,6 +38,7 @@ from cip.agents.planning import EnhancementPlanningAgent
 from cip.agents.pricing_analysis import PricingAnalysisAgent
 from cip.agents.prioritization import PrioritizationAgent
 from cip.agents.product_features import ProductFeatureAgent
+from cip.agents.quality import QualityAssuranceAgent
 from cip.agents.reporting import ReportAgent
 from cip.agents.repository import RepositoryAgent
 from cip.agents.sales import OutreachAgent, SalesIntelligenceAgent
@@ -72,6 +73,7 @@ def default_agents() -> list[Agent]:
         CapabilityMatchingAgent(),
         SalesIntelligenceAgent(),
         OutreachAgent(),
+        QualityAssuranceAgent(),
         ReportAgent(),
     ]
 

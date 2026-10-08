@@ -75,6 +75,7 @@ export default function RunDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             <Badge value={r.status} />
+            {done("quality_assurance") && <QualityBadge runId={runId} />}
             {canAct && ["failed", "completed_with_errors"].includes(r.status) && <Button variant="secondary" onClick={resume}>Retry failed agents</Button>}
             {r.has_report && (
               <>
@@ -119,7 +120,7 @@ export default function RunDetailPage() {
           ))}
         </div>
 
-        {tab === "Pipeline" && <Pipeline run={r} />}
+        {tab === "Pipeline" && <>{done("quality_assurance") && <QualityCard runId={runId} />}<Pipeline run={r} /></>}
         {tab === "Changes" && <ChangesTab runId={runId} status={r.status} />}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
@@ -166,6 +167,46 @@ function Pipeline({ run }: { run: Run }) {
           </li>
         ))}
       </ol>
+    </Card>
+  );
+}
+
+const QA_STYLE: Record<string, string> = {
+  complete: "bg-emerald-100 text-emerald-800", complete_with_warnings: "bg-amber-100 text-amber-800",
+  partial: "bg-amber-100 text-amber-800", needs_review: "bg-rose-100 text-rose-800",
+};
+
+function QualityBadge({ runId }: { runId: string }) {
+  const q = useAgent(runId, "quality_assurance", true).data?.data;
+  if (!q) return null;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${QA_STYLE[q.state]}`} title="Analysis completeness and quality">{q.label}</span>;
+}
+
+function QualityCard({ runId }: { runId: string }) {
+  const q = useAgent(runId, "quality_assurance", true).data?.data;
+  const [open, setOpen] = useState(false);
+  if (!q) return null;
+  const m = q.metrics;
+  const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`);
+  const shown = q.issues.filter((i: any) => i.severity !== "info");
+  return (
+    <Card title={<span>Analysis quality <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${QA_STYLE[q.state]}`}>{q.label}</span></span>}>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+        <div><div className="text-xs text-slate-500">Evidence coverage</div><div className="font-semibold">{pct(m.evidence_coverage)}</div></div>
+        <div><div className="text-xs text-slate-500">Low-confidence findings</div><div className="font-semibold">{m.low_confidence_findings}</div></div>
+        <div><div className="text-xs text-slate-500">Inferred / assumptions</div><div className="font-semibold">{m.inferred_findings} / {m.assumption_findings}</div></div>
+        <div><div className="text-xs text-slate-500">Sources (fresh / aging / stale)</div><div className="font-semibold">{m.source_freshness.fresh} / {m.source_freshness.aging} / {m.source_freshness.stale}</div></div>
+        <div><div className="text-xs text-slate-500">Conflicts</div><div className="font-semibold">{m.conflicts}</div></div>
+      </div>
+      {shown.length > 0 && (
+        <ul className="mt-3 space-y-1 text-sm">
+          {shown.slice(0, open ? undefined : 5).map((i: any, n: number) => (
+            <li key={n}><span className={`text-xs rounded px-1 mr-1 ${i.severity === "blocking" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>{i.severity}</span>{i.message}</li>
+          ))}
+        </ul>
+      )}
+      {shown.length > 5 && <button className="text-xs text-indigo-700 underline mt-1" onClick={() => setOpen(!open)}>{open ? "Show less" : `Show all ${shown.length}`}</button>}
+      <p className="text-xs text-slate-500 mt-2">Model: {q.reproducibility.model} · prompts {q.reproducibility.prompt_version} · taxonomy {q.reproducibility.taxonomy_version}</p>
     </Card>
   );
 }

@@ -48,11 +48,12 @@ facts whose quote can't be found are kept only at low confidence. Every finding 
 | 8 | Gap Analysis: missing, partial, technology, UX and AI gaps | `agents/gap_analysis.py` |
 | 9 | Opportunity & Prioritization: transparent weighted scoring scaled by evidence confidence, High/Medium/Low priority, business categories, phase assignment | `agents/prioritization.py`, `core/scoring.py` |
 | 10 | Enhancement Planning: frontend/backend/DB/API/AI/infra/security/testing plan per recommendation | `agents/planning.py` |
-| 11 | Report: Markdown and JSON report with an evidence appendix | `agents/reporting.py` |
+| 11 | Report: the 15 BRS sections in Markdown, JSON and PDF, with analysis status, quality and evidence appendices | `agents/reporting.py` |
 | 12 | Capability Matching: opportunities → approved knowledge-base capabilities, projects and case studies | `agents/capability_matching.py`, `core/matching.py` |
 | 13 | Sales Intelligence and Outreach: sales-ready summary and a claim-checked personalised email, reviewed and approved in the UI | `agents/sales.py`, `core/outreach.py` |
 | 14 | Business Process: cost-reduction, automation and AI opportunities in observed business processes, with assumptions labelled | `agents/business_process.py`, `core/processes.yaml` |
 | 15 | Industry & Market: segment, customers, business model, sourced trends, AI and automation adoption | `agents/industry_market.py` |
+| 16 | Quality Assurance: evidence coverage, freshness, conflicts, recommendation and output checks, completeness state, reproducibility | `agents/quality.py` |
 
 Platform features:
 

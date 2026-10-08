@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 81 |
-| 🟡 Partially completed | 20 |
-| ❌ Incomplete | 27 |
+| ✅ Completed | 88 |
+| 🟡 Partially completed | 19 |
+| ❌ Incomplete | 21 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -153,10 +153,10 @@ _Baseline audit: 2026-10-08._
 | 72 | Evidence view with filters | ✅ | |
 | 73 | Drill-down from recommendation to gap to evidence | 🟡 | "N sources" links only |
 | 74 | Source-quality tiers | 🟡 | Source type only |
-| 75 | Detection of conflicting sources | ❌ | |
-| 76 | Freshness states (fresh / aging / stale) | ❌ | |
-| 77 | Quality-check agent and quality metrics | ❌ | |
-| 78 | Report blocked or flagged when quality is low | ❌ | |
+| 75 | Detection of conflicting sources | ✅ | Targeted checks: CSV vs website industry, website vs app store, CSV features vs public evidence |
+| 76 | Freshness states (fresh / aging / stale) | ✅ | Configurable thresholds; stale sources flagged |
+| 77 | Quality-check agent and quality metrics | ✅ | `quality_assurance` |
+| 78 | Report blocked or flagged when quality is low | ✅ | Flagged: *needs review* / *partial* banner in report and run page |
 
 ## 13. Research layer (7)
 
@@ -181,7 +181,7 @@ _Baseline audit: 2026-10-08._
 | 90 | Runs survive restarts | ✅ | |
 | 91 | LLM output checked against a schema, with a retry | ✅ | |
 | 92 | Approval gates | ✅ | |
-| 93 | Full status model (completed with warnings, partial, needs review, cancelled) | 🟡 | |
+| 93 | Full status model (completed with warnings, partial, needs review, cancelled) | 🟡 | Completeness states added; cancel not yet |
 | 94 | Cancel a run | ❌ | |
 | 95 | Pause and resume | ❌ | |
 | 96 | Rerun selected stages; regenerate the report or email | ❌ | |
@@ -201,8 +201,8 @@ _Baseline audit: 2026-10-08._
 |---|---|---|---|
 | 101 | Run history and comparing versions | ✅ | |
 | 102 | Tracking changed competitors, capabilities and prices | ✅ | |
-| 103 | Recording how a run was produced (model, prompt and taxonomy versions) | 🟡 | Scoring weights only |
-| 104 | Prompt and model versioning | ❌ | |
+| 103 | Recording how a run was produced (model, prompt and taxonomy versions) | ✅ | Model, prompt fingerprint, taxonomy, process catalog, scoring, settings, research window |
+| 104 | Prompt and model versioning | 🟡 | Versions fingerprinted per run; no managed prompt registry |
 
 ## 17. Configuration (1)
 
@@ -216,10 +216,10 @@ _Baseline audit: 2026-10-08._
 |---|---|---|---|
 | 106 | Report built from the stored analysis data | ✅ | |
 | 107 | Markdown and PDF export | ✅ | |
-| 108 | The 15 required sections | 🟡 | 10 sections |
-| 109 | Section navigation, print view, version display | 🟡 | |
+| 108 | The 15 required sections | ✅ | Plus appendices |
+| 109 | Section navigation, print view, version display | 🟡 | Contents line, run/version and PDF print; no clickable navigation |
 | 110 | Structured exports (matrix CSV, opportunities CSV, JSON) | 🟡 | Evidence JSON only |
-| 111 | Completeness indicator and low-confidence warnings | ❌ | |
+| 111 | Completeness indicator and low-confidence warnings | ✅ | |
 
 ## 19. Dashboard and portfolio (5)
 
