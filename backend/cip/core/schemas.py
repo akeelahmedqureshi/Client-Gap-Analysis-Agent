@@ -87,6 +87,8 @@ class AgentResult(BaseModel):
     next_actions: list[str] = Field(default_factory=list)
     data: dict[str, Any] = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
+    # Filled in by the orchestrator (core/usage.py): LLM tokens, cost, models, web requests of this agent.
+    usage: dict[str, Any] | None = None
 
 
 # --------------------------------------------------------------------------

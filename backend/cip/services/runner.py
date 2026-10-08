@@ -152,6 +152,8 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
         scoring=scoring, fetcher=WebFetcher(), search=get_search_provider(settings),
         token_resolver=make_token_resolver(run.org_id), knowledge=knowledge,
     )
+    # Usage of stages completed in an earlier pass counts toward this run's budgets.
+    ctx.usage.preload({name: res.usage for name, res in outputs.items() if res.usage})
     return ctx, statuses, rejected
 
 

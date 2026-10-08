@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     notify_timeout_seconds: float = 10.0
 
+    # --- Usage & budgets (0 = unlimited) ---------------------------------------
+    run_llm_token_budget: int = 0
+    agent_llm_token_budget: int = 0
+    run_web_request_budget: int = 0
+    # Used when the provider does not report a cost (OpenRouter does): USD per million tokens / per search.
+    llm_price_input_per_million: float = 0.0
+    llm_price_output_per_million: float = 0.0
+    search_cost_per_query: float = 0.0
+
     # --- Quality ------------------------------------------------------------
     # Research freshness (BRS 28): sources up to N days old are fresh, older than the stale limit are stale.
     freshness_fresh_days: int = 30

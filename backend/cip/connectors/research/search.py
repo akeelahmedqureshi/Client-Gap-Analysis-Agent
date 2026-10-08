@@ -79,3 +79,26 @@ def get_search_provider(settings: Settings | None = None) -> SearchProvider:
     if s.search_provider == "brave" and s.brave_api_key:
         return BraveSearchProvider(s.brave_api_key)
     return NullSearchProvider()
+
+
+class MeteredSearch(SearchProvider):
+    """Wraps any provider: counts queries against the run's usage meter and web budget."""
+
+    def __init__(self, inner: SearchProvider) -> None:
+        self.inner = inner
+        self.name = getattr(inner, "name", "search")
+
+    def __getattr__(self, item):  # e.g. a test fake's recorded queries
+        return getattr(self.inner, item)
+
+    async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
+        from cip.core import usage
+
+        meter = usage.current()
+        if meter:
+            try:
+                meter.record_web(search=True)
+            except usage.BudgetExhausted:
+                log.warning("Search skipped: web request budget exhausted")
+                return []
+        return await self.inner.search(query, limit)

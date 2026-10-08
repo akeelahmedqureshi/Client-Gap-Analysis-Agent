@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Evidence, KnowledgeMatch, Run, RunChanges, User } from "../lib/types";
+import type { Evidence, KnowledgeMatch, Run, RunChanges, Usage, User } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
@@ -185,9 +185,25 @@ export default function RunDetailPage() {
   );
 }
 
+const fmt = (n: number) => n.toLocaleString();
+
+function usageText(u: Usage | null | undefined): string {
+  if (!u) return "";
+  const parts = [];
+  if (u.llm_calls) parts.push(`${fmt(u.total_tokens)} LLM tokens (${u.llm_calls} call${u.llm_calls === 1 ? "" : "s"})`);
+  if (u.web_requests) parts.push(`${fmt(u.web_requests)} web requests`);
+  if (u.search_queries) parts.push(`${u.search_queries} searches`);
+  return parts.join(" · ");
+}
+
 function Pipeline({ run }: { run: Run }) {
+  const u = run.usage;
   return (
-    <Card title="Agent pipeline">
+    <Card title="Agent pipeline" actions={u && (
+      <span className="text-xs text-slate-500" title={Object.entries(u.models ?? {}).map(([m, t]) => `${m}: ${fmt(t)} tokens`).join("\n")}>
+        {usageText(u) || "no external usage"}{u.cost_usd ? ` · $${u.cost_usd.toFixed(4)}` : ""}
+      </span>
+    )}>
       <ol className="space-y-2">
         {run.agent_details.map((a, i) => (
           <li key={a.agent} className="flex items-start gap-3 text-sm">
@@ -201,7 +217,7 @@ function Pipeline({ run }: { run: Run }) {
               </div>
               <div className="text-slate-500">{a.description}</div>
               {a.status === "completed" && (
-                <div className="text-xs text-slate-400">{a.finding_count} findings · {a.evidence_count} evidence items{a.attempts > 1 ? ` · ${a.attempts} attempts` : ""}</div>
+                <div className="text-xs text-slate-400">{a.finding_count} findings · {a.evidence_count} evidence items{a.attempts > 1 ? ` · ${a.attempts} attempts` : ""}{a.usage ? ` · ${usageText(a.usage)}` : ""}</div>
               )}
               {a.error && <div className="text-xs text-rose-700">{a.error}</div>}
             </div>

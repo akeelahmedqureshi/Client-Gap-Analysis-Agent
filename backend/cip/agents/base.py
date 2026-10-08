@@ -15,6 +15,7 @@ from cip.core.llm import LLMClient, NullLLM
 from cip.core.schemas import AgentResult, NormalizedRecord
 from cip.core.scoring import ScoringConfig
 from cip.core.taxonomy import Taxonomy, load_taxonomy
+from cip.core.usage import UsageMeter
 
 # (provider, host) -> decrypted access token or None. Resolved lazily so tokens
 # are only held in memory for the duration of an API call and never land in
@@ -58,6 +59,8 @@ class RunContext:
     # The organization's approved knowledge-base records (see services/knowledge.py). Internal data:
     # used for deterministic matching only, never sent to the LLM or written to the evidence ledger.
     knowledge: list[dict] = field(default_factory=list)
+    # LLM / web usage and budgets of this run (core/usage.py).
+    usage: UsageMeter = field(default_factory=lambda: UsageMeter.from_settings(get_settings()))
 
     def data(self, agent: str) -> dict[str, Any]:
         result = self.outputs.get(agent)

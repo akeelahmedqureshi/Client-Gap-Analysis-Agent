@@ -16,6 +16,7 @@ from cip.api.deps import not_found, require_role
 from cip.core.evidence import EvidenceLedger
 from cip.core.schemas import NormalizedRecord
 from cip.core.scoring import ALL_FACTORS
+from cip.core.usage import total_usage
 from cip.db.models import AgentExecution, AnalysisRun, Approval, EvidenceRecord, Project, Report, User
 from cip.db.session import get_session
 from cip.services import audit
@@ -72,6 +73,7 @@ class AgentStateOut(BaseModel):
     confidence: float | None = None
     finding_count: int = 0
     evidence_count: int = 0
+    usage: dict | None = None
 
 
 class RunOut(BaseModel):
@@ -88,6 +90,7 @@ class RunOut(BaseModel):
     monitor_id: str | None = None  # set for runs started by a monitoring schedule
     parent_run_id: str | None = None  # partial re-run: the run this version was derived from
     rerun_stages: list[str] | None = None
+    usage: dict = {}  # totals across agents: LLM calls/tokens/cost/models, web requests, search queries
 
 
 class DecisionIn(BaseModel):
@@ -119,13 +122,14 @@ async def _run_out(session: AsyncSession, run: AnalysisRun) -> RunOut:
             attempts=e.attempts if e else 0, error=e.error if e else None,
             started_at=e.started_at if e else None, finished_at=e.finished_at if e else None,
             confidence=res.get("confidence"), finding_count=len(res.get("findings", [])),
-            evidence_count=len(res.get("evidence", [])),
+            evidence_count=len(res.get("evidence", [])), usage=res.get("usage"),
         ))
     return RunOut(run_id=run.id, project_id=run.project_id, status=run.status, error=run.error,
                   created_at=run.created_at, updated_at=run.updated_at,
                   agents={d.agent: d.status for d in details}, agent_details=details,
                   approvals=[_approval_out(a) for a in approvals], has_report=has_report,
-                  monitor_id=run.monitor_id, parent_run_id=run.parent_run_id, rerun_stages=run.rerun_stages)
+                  monitor_id=run.monitor_id, parent_run_id=run.parent_run_id, rerun_stages=run.rerun_stages,
+                  usage=total_usage([d.usage for d in details]))
 
 
 @router.get("/approval-preview", response_model=list[ApprovalPreview])

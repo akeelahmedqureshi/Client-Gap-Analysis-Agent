@@ -201,6 +201,8 @@ class QualityAssuranceAgent(Agent):
             flag("blocking" if ("internal-only" in p or "security" in p.lower()) else "warning", "outputs",
                  f"Outreach draft: {p}")
 
+        for event in ctx.usage.events:
+            flag("warning", "budget", f"{event}: some steps used their deterministic fallback or skipped requests.")
         blocking = [i for i in issues if i["severity"] == "blocking"]
         warnings = [i for i in issues if i["severity"] == "warning"]
         state = ("needs_review" if blocking else "partial" if missing else
@@ -220,6 +222,7 @@ class QualityAssuranceAgent(Agent):
                                     if rows else None),
             "stages_completed": sorted(done), "stages_missing": missing,
             "blocking_issues": len(blocking), "warnings": len(warnings),
+            "usage": ctx.usage.summary(),
         }
         repro = {
             "model": s.openrouter_model if s.llm_enabled else "none (deterministic pipeline)",

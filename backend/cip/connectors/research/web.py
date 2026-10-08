@@ -17,6 +17,7 @@ import re
 import socket
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from cip.core import usage
 from cip.core.urls import is_valid_http_url, urldefrag, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -189,6 +190,17 @@ def parse_html(url: str, status: int, html: str) -> Page:
     )
 
 
+async def _meter_request(request: httpx.Request) -> None:
+    """Count every research request against the run's usage meter and web budget (core/usage.py)."""
+    meter = usage.current()
+    if meter is None:
+        return
+    try:
+        meter.record_web()
+    except usage.BudgetExhausted as exc:
+        raise httpx.RequestError(str(exc), request=request) from exc
+
+
 class WebFetcher:
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None, check_public: bool = True,
                  rendering: str | None = None, renderer: BrowserRenderer | None = None) -> None:
@@ -209,7 +221,8 @@ class WebFetcher:
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self._timeout, follow_redirects=True, transport=self._transport,
-                                 headers={"User-Agent": self._ua, "Accept": "text/html,application/xhtml+xml"})
+                                 headers={"User-Agent": self._ua, "Accept": "text/html,application/xhtml+xml"},
+                                 event_hooks={"request": [_meter_request]})
 
     async def _allowed(self, client: httpx.AsyncClient, url: str) -> bool:
         p = urlparse(url)
@@ -279,7 +292,8 @@ class WebFetcher:
             if self._check_public:
                 await assert_public_url(url)
             async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=follow_redirects,
-                                         transport=self._transport, headers={"User-Agent": self._ua}) as client:
+                                         transport=self._transport, headers={"User-Agent": self._ua},
+                                         event_hooks={"request": [_meter_request]}) as client:
                 if not await self._allowed(client, url):
                     return None
                 resp = await client.get(url)

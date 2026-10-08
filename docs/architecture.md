@@ -139,3 +139,15 @@ The LLM is used only for:
 - patch plans.
 
 Prioritization itself is the deterministic weighted score in `core/scoring.py`.
+
+## Usage tracking and budgets
+
+`core/usage.py` keeps a usage meter per run. The orchestrator makes it current for the run and tags each
+agent's work with the agent's name, so the LLM client (tokens, model, cost), the web fetcher (every HTTP
+request, including robots.txt and APIs) and the search wrapper (queries) record usage without extra
+plumbing. Each agent's usage is stored with its result; the runs API sums them.
+
+Budgets (`CIP_RUN_LLM_TOKEN_BUDGET`, `CIP_AGENT_LLM_TOKEN_BUDGET`, `CIP_RUN_WEB_REQUEST_BUDGET`) never
+fail a run: an exhausted LLM budget makes the LLM report itself unavailable, so agents use their
+deterministic fallbacks; an exhausted web budget makes further requests fail like an unreachable site.
+The quality check lists every budget event. On resume, earlier stages' usage counts toward the budget.

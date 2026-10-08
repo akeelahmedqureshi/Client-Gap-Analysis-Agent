@@ -101,6 +101,18 @@ export interface AgentState {
   confidence: number | null;
   finding_count: number;
   evidence_count: number;
+  usage: Usage | null;
+}
+
+export interface Usage {
+  llm_calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  web_requests: number;
+  search_queries: number;
+  models: Record<string, number>;
 }
 
 export interface Run {
@@ -117,6 +129,7 @@ export interface Run {
   monitor_id: string | null;
   parent_run_id: string | null;
   rerun_stages: string[] | null;
+  usage: Usage;
 }
 
 export interface Evidence {

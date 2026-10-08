@@ -44,6 +44,8 @@ from cip.agents.repository import RepositoryAgent
 from cip.agents.sales import OutreachAgent, SalesIntelligenceAgent
 from cip.agents.security_review import SecurityReviewAgent
 from cip.agents.ux_review import UxReviewAgent
+from cip.connectors.research.search import MeteredSearch
+from cip.core import usage
 from cip.core.schemas import AgentResult, AgentStatus, Evidence
 
 log = logging.getLogger(__name__)
@@ -124,6 +126,15 @@ class Orchestrator:
         ``statuses`` holds the persisted status of each agent (missing = pending);
         ``ctx.outputs`` must already contain results of completed agents.
         """
+        if not isinstance(ctx.search, MeteredSearch):
+            ctx.search = MeteredSearch(ctx.search)
+        token = usage.activate(ctx.usage)
+        try:
+            return await self._run(ctx, statuses)
+        finally:
+            usage.deactivate(token)
+
+    async def _run(self, ctx: RunContext, statuses: dict[str, AgentStatus]) -> str:
         for name in self.agents:
             statuses.setdefault(name, AgentStatus.PENDING)
             if statuses[name] in (AgentStatus.RUNNING, AgentStatus.AWAITING_APPROVAL):
@@ -195,6 +206,13 @@ class Orchestrator:
     async def _execute(self, ctx: RunContext, agent: Agent, statuses: dict[str, AgentStatus]) -> None:
         statuses[agent.name] = AgentStatus.RUNNING
         await self.store.set_agent_status(ctx.run_id, agent.name, AgentStatus.RUNNING)
+        token = usage.set_agent(agent.name)
+        try:
+            await self._attempts(ctx, agent, statuses)
+        finally:
+            usage.reset_agent(token)
+
+    async def _attempts(self, ctx: RunContext, agent: Agent, statuses: dict[str, AgentStatus]) -> None:
         last_error = ""
         for attempt in range(1, agent.max_attempts + 1):
             try:
@@ -203,6 +221,7 @@ class Orchestrator:
                     raise TypeError(f"{agent.name} returned {type(result).__name__}, expected AgentResult")
                 status = result.status if result.status in TERMINAL else AgentStatus.COMPLETED
                 result.status = status
+                result.usage = ctx.usage.agent_usage(agent.name)
                 # Normalize to plain JSON types so fresh and resumed runs see identical data.
                 result = AgentResult.model_validate(result.model_dump(mode="json"))
                 # Only evidence that exists in the ledger may be referenced.

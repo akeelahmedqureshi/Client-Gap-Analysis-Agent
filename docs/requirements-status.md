@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 94 |
+| ✅ Completed | 97 |
 | 🟡 Partially completed | 17 |
-| ❌ Incomplete | 17 |
+| ❌ Incomplete | 14 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -186,7 +186,7 @@ _Baseline audit: 2026-10-08._
 | 95 | Pause and resume | ✅ | Pauses between agent waves |
 | 96 | Rerun selected stages; regenerate the report or email | ✅ | New run version reusing unaffected stages |
 | 97 | Duplicate-run prevention | ✅ | One active run per project |
-| 98 | Token and cost budgets | ❌ | |
+| 98 | Token and cost budgets | ✅ | Per run and per agent; graceful fallback |
 
 ## 15. Human review (2)
 
@@ -238,8 +238,8 @@ _Baseline audit: 2026-10-08._
 | 117 | Agent status, duration, attempts, errors | ✅ | |
 | 118 | In-app notifications | 🟡 | Monitoring alerts only |
 | 119 | Email notifications | 🟡 | Monitoring alerts only |
-| 120 | Token, model and cost tracking | ❌ | |
-| 121 | Web-request tracking | ❌ | |
+| 120 | Token, model and cost tracking | ✅ | Per agent and run; OpenRouter cost or configured prices |
+| 121 | Web-request tracking | ✅ | HTTP requests and search queries per agent |
 
 ## 21. Future enhancements — P2 (7)
 

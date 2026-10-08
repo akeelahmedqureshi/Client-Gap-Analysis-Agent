@@ -17,6 +17,8 @@ from typing import Protocol, TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from cip.core import usage
+
 from cip.config import Settings, get_settings
 from cip.core.security.secrets import redact
 
@@ -106,14 +108,26 @@ class OpenRouterClient:
             log.info("Redacted %s secret-like values from LLM prompt", n_redacted)
         messages = [{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}]
 
+        meter = usage.current()
         for attempt in range(2):
+            if meter:
+                try:
+                    meter.check_llm()
+                except usage.BudgetExhausted as exc:
+                    raise LLMUnavailable(str(exc)) from exc
             payload = {
                 "model": self.settings.openrouter_model,
                 "messages": messages,
                 "temperature": self.settings.llm_temperature,
                 "response_format": {"type": "json_object"},
+                "usage": {"include": True},  # OpenRouter reports tokens and cost
             }
             body = await self._post(payload)
+            if meter:
+                u = body.get("usage") or {}
+                cost = u.get("cost")
+                meter.record_llm(body.get("model") or self.settings.openrouter_model, int(u.get("prompt_tokens") or 0),
+                                 int(u.get("completion_tokens") or 0), float(cost) if cost is not None else None)
             try:
                 content = body["choices"][0]["message"]["content"] or ""
             except (KeyError, IndexError, TypeError) as exc:

@@ -58,6 +58,10 @@ reset, role change or deactivation invalidates existing sessions.
 | GET | `/api/runs/{id}/report.md` | viewer | Markdown download |
 | GET | `/api/runs/{id}/report.pdf` | viewer | Client-ready PDF (A4, page numbers), rendered offline in headless Chromium. Returns 503 if no browser is installed. Each export is audited |
 
+Each run and each agent report `usage`: LLM calls, prompt / completion / total tokens, cost in USD (as
+reported by OpenRouter, or estimated from `CIP_LLM_PRICE_*`), tokens per model, web requests and search
+queries.
+
 Lifecycle (BRS 26.2–26.3):
 
 | Method | Path | Role | Description |
