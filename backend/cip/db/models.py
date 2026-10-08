@@ -356,3 +356,30 @@ class SalesDocument(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class ReviewOverride(Base):
+    """A reviewer's correction or decision on a finished run (BRS 17, PRD 10.34).
+
+    ``kind``: capability_status | competitor | gap | recommendation. Pending overrides are applied by
+    creating a new run version (services/review.py) whose reused results carry the corrections and whose
+    downstream stages are re-run, so matrix, gaps, scores, sales output and report all agree.
+    """
+
+    __tablename__ = "review_overrides"
+    __table_args__ = (UniqueConstraint("run_id", "kind", "target_id", "field"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("rvw"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("analysis_runs.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    target_id: Mapped[str] = mapped_column(String(80))
+    # Stable key that survives re-runs: capability id, competitor domain, gap name or recommendation name.
+    target_label: Mapped[str] = mapped_column(String(300), default="")
+    field: Mapped[str] = mapped_column(String(40), default="")
+    value: Mapped[str] = mapped_column(Text)
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | applied
+    applied_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -59,6 +59,8 @@ class RunContext:
     # The organization's approved knowledge-base records (see services/knowledge.py). Internal data:
     # used for deterministic matching only, never sent to the LLM or written to the evidence ledger.
     knowledge: list[dict] = field(default_factory=list)
+    # Human-review overrides applied to this run version (services/review.py).
+    review: list[dict] = field(default_factory=list)
     # LLM / web usage and budgets of this run (core/usage.py).
     usage: UsageMeter = field(default_factory=lambda: UsageMeter.from_settings(get_settings()))
 

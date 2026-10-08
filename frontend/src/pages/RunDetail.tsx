@@ -11,11 +11,12 @@ import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 import { ChangeList, SeverityBadge } from "../components/Changes";
 import SalesTab from "../components/SalesTab";
+import ReviewTab from "../components/ReviewTab";
 import { useAgent } from "../lib/useAgent";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 
 const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
-  "Cost & AI", "Roadmap", "Our Fit", "Sales", "Evidence", "Report"] as const;
+  "Cost & AI", "Roadmap", "Our Fit", "Sales", "Review", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -178,6 +179,8 @@ export default function RunDetailPage() {
         {tab === "Cost & AI" && <CostAiTab runId={runId} enabled={done("business_process")} prioDone={done("opportunity_prioritization")} />}
         {tab === "Our Fit" && <FitTab runId={runId} enabled={done("capability_matching")} />}
         {tab === "Sales" && (done("sales_intelligence") ? <SalesTab runId={runId} canAct={canAct} /> : <Pending />)}
+        {tab === "Review" && <ReviewTab runId={runId} canAct={canAct}
+          finished={["completed", "completed_with_errors", "failed", "cancelled"].includes(r.status)} />}
         {tab === "Evidence" && <EvidenceTab evidence={evidence.data ?? []} />}
         {tab === "Report" && <ReportTab runId={runId} enabled={r.has_report} />}
       </div>

@@ -45,7 +45,7 @@ from cip.agents.sales import OutreachAgent, SalesIntelligenceAgent
 from cip.agents.security_review import SecurityReviewAgent
 from cip.agents.ux_review import UxReviewAgent
 from cip.connectors.research.search import MeteredSearch
-from cip.core import usage
+from cip.core import review, usage
 from cip.core.schemas import AgentResult, AgentStatus, Evidence
 
 log = logging.getLogger(__name__)
@@ -222,8 +222,11 @@ class Orchestrator:
                 status = result.status if result.status in TERMINAL else AgentStatus.COMPLETED
                 result.status = status
                 result.usage = ctx.usage.agent_usage(agent.name)
-                # Normalize to plain JSON types so fresh and resumed runs see identical data.
-                result = AgentResult.model_validate(result.model_dump(mode="json"))
+                # Normalize to plain JSON types so fresh and resumed runs see identical data; reviewers'
+                # overrides of this run (core/review.py) are applied to every agent's output.
+                dumped = result.model_dump(mode="json")
+                result = AgentResult.model_validate(review.patch(agent.name, dumped, ctx.review) if ctx.review
+                                                    else dumped)
                 # Only evidence that exists in the ledger may be referenced.
                 for f in result.findings:
                     f.evidence_ids = ctx.ledger.validate_refs(f.evidence_ids)

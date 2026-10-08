@@ -25,6 +25,7 @@ from cip.db.models import (
     EvidenceRecord,
     Project,
     Report,
+    ReviewOverride,
 )
 from cip.services.knowledge import load_for_run
 from cip.services.tokens import make_token_resolver
@@ -124,6 +125,9 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
         ev_rows = (await s.execute(select(EvidenceRecord).where(EvidenceRecord.run_id == run.id))).scalars().all()
         approvals = (await s.execute(select(Approval).where(Approval.run_id == run.id))).scalars().all()
         knowledge = await load_for_run(s, run.org_id)
+        review = [{"kind": o.kind, "label": o.target_label, "target_id": o.target_id, "field": o.field,
+                   "value": o.value, "note": o.note, "by": o.created_by_email} for o in (await s.execute(select(ReviewOverride).where(
+                       ReviewOverride.run_id == run.id, ReviewOverride.status == "applied"))).scalars()]
     ledger = EvidenceLedger(Evidence(id=e.id, claim=e.claim, source_url=e.source_url, source_type=e.source_type,
                                      extracted_text=e.extracted_text, repository_path=e.repository_path,
                                      line_range=e.line_range, confidence=e.confidence, collected_at=e.collected_at)
@@ -150,7 +154,7 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
         run_id=run.id, project_id=project.id, record=NormalizedRecord.model_validate(project.record),
         ledger=ledger, outputs=outputs, approvals=granted, llm=get_llm(settings), settings=settings,
         scoring=scoring, fetcher=WebFetcher(), search=get_search_provider(settings),
-        token_resolver=make_token_resolver(run.org_id), knowledge=knowledge,
+        token_resolver=make_token_resolver(run.org_id), knowledge=knowledge, review=review,
     )
     # Usage of stages completed in an earlier pass counts toward this run's budgets.
     ctx.usage.preload({name: res.usage for name, res in outputs.items() if res.usage})

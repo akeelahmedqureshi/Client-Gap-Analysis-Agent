@@ -57,6 +57,11 @@ that are not in the facts. Internal-only knowledge is never in the prompt. Peopl
 (with instructions) and approve the email in the **Sales** tab; approval is refused while internal-only
 or security content remains, and other warnings must be acknowledged.
 
+**Human review** (`core/review.py`, BRS 17). Reviewers' overrides of a run are applied by the
+orchestrator to every agent's output (capability statuses in the inventory, excluded competitors, rejected
+gaps and their decisions, recommendation priority / phase / category / impact), keyed by stable labels so
+they also apply after any refresh. The quality check counts them and flags gaps sent back for rework.
+
 **Quality Assurance** (BRS 32, 41, 28, 31). Checks the run before the report and never changes findings:
 
 - **Data:** duplicate capabilities, gaps that reference unknown competitors, scores or confidences out

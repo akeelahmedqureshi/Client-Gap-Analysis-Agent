@@ -93,6 +93,18 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
 | GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
+## Human review
+
+Reviewers correct a finished run (BRS 17). Overrides key on stable labels (capability id, competitor
+domain, gap name, recommendation name) so they survive re-runs; applying them creates a new run version.
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/runs/{id}/review` | viewer | Overrides of the run: kind, target, value, note, who, when, `pending` / `applied` |
+| PUT | `/api/runs/{id}/review` | analyst | `{kind, target_id, field?, value, note?}` (upserts by kind + target + field). Kinds: `capability_status` (value `available` / `partial` / `unknown` / `missing` — the only way to *confirmed missing*), `competitor` (`exclude`), `gap` (`reject` / `approve` / `rework`), `recommendation` (field `priority` / `phase` / `business_category` / `business_impact`) |
+| DELETE | `/api/runs/{id}/review/{override_id}` | analyst | Remove a pending override |
+| POST | `/api/runs/{id}/review/apply` | analyst | → `{run_id, applied, stages}`: a new run version with the overrides written into the reused stages and the affected stages re-run. Applied overrides carry over to every later version |
+
 ## Sales summary and outreach
 
 The run's sales summary and outreach email are created from the agent results the first time they are

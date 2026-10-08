@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 97 |
+| ✅ Completed | 99 |
 | 🟡 Partially completed | 17 |
-| ❌ Incomplete | 14 |
+| ❌ Incomplete | 12 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -192,8 +192,8 @@ _Baseline audit: 2026-10-08._
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 99 | Edit or override competitors, statuses, priorities, roadmap | ❌ | |
-| 100 | Approve, reject or send back individual findings | ❌ | |
+| 99 | Edit or override competitors, statuses, priorities, roadmap | ✅ | Review tab; applied as a new run version |
+| 100 | Approve, reject or send back individual findings | ✅ | Gap approve / reject / request rework |
 
 ## 16. Versioning and reproducibility (4)
 

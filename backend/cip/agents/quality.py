@@ -188,7 +188,8 @@ class QualityAssuranceAgent(Agent):
             if g and not g.get("competitors_with") and g.get("gap_type") in ("missing", "partial") \
                     and g.get("confidence", 0) < LOW_CONFIDENCE:
                 flag("warning", "recommendations", f"“{r['feature']}” rests only on thin evidence of absence.")
-            if r.get("priority") == "high" and r.get("confidence", 1) < ctx.scoring.high_min_confidence:
+            if r.get("priority") == "high" and r.get("confidence", 1) < ctx.scoring.high_min_confidence \
+                    and not r.get("review"):  # a reviewer's deliberate decision is not a scoring error
                 flag("blocking", "recommendations", f"“{r['feature']}” is High priority on low-confidence evidence.")
 
         # --- output quality -------------------------------------------------------------------
@@ -201,6 +202,9 @@ class QualityAssuranceAgent(Agent):
             flag("blocking" if ("internal-only" in p or "security" in p.lower()) else "warning", "outputs",
                  f"Outreach draft: {p}")
 
+        for o in ctx.review:
+            if o["kind"] == "gap" and o["value"] == "rework":
+                flag("warning", "review", f"A reviewer asked for rework of gap {o['target_id']}: {o['note'] or 'no note'}")
         for event in ctx.usage.events:
             flag("warning", "budget", f"{event}: some steps used their deterministic fallback or skipped requests.")
         blocking = [i for i in issues if i["severity"] == "blocking"]
@@ -223,6 +227,7 @@ class QualityAssuranceAgent(Agent):
             "stages_completed": sorted(done), "stages_missing": missing,
             "blocking_issues": len(blocking), "warnings": len(warnings),
             "usage": ctx.usage.summary(),
+            "manual_overrides": len(ctx.review),
         }
         repro = {
             "model": s.openrouter_model if s.llm_enabled else "none (deterministic pipeline)",
