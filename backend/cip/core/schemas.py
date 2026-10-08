@@ -297,6 +297,8 @@ class ComparisonRow(BaseModel):
     # industry_standard | emerging | differentiator | niche | unique_to_client
     market_class: str = "niche"
     must_have: bool = False
+    # Evidence behind each cell (BRS 7.9 drill-down): "client" and competitor id -> evidence ids.
+    evidence: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class GapType(str, Enum):

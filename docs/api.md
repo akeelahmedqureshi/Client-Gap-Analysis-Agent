@@ -134,6 +134,12 @@ Otherwise 403. Viewing results in the app is never gated.
 
 Deletions and purges are written to the audit log, which is never purged.
 
+## Project history
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/projects/{id}/competitor-history` | viewer | Across the project's completed analyses (oldest first, up to 20): `runs[]` (date, client capabilities, industry-standard coverage) and `competitors[]` matched by domain (`points` per run with rank, evidenced capabilities and deep-analysis flag; `new`, `dropped`, `feature_change`, `rank_change`) |
+
 ## Portfolio
 
 | Method | Path | Role | Description |

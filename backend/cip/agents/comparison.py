@@ -54,10 +54,13 @@ class FeatureComparisonAgent(Agent):
         for f in ctx.taxonomy.features:
             client_status = FeatureStatus(client_obs.get(f.id, {}).get("status", "unknown"))
             comp_status: dict[str, FeatureStatus] = {}
+            cell_evidence = {"client": list(client_obs.get(f.id, {}).get("evidence_ids", []))[:8]}
             for c in competitors:
                 ob = next((o for o in c["features"] if o["feature_id"] == f.id), None)
                 # Absence on a handful of marketing pages is not proof of absence.
                 comp_status[c["id"]] = FeatureStatus(ob["status"]) if ob else FeatureStatus.UNKNOWN
+                if ob and ob.get("evidence_ids"):
+                    cell_evidence[c["id"]] = list(ob["evidence_ids"])[:8]
             have = sum(1 for s in comp_status.values() if s in HAS)
             coverage = round(have / len(competitors), 3) if competitors else 0.0
             top10 = sum(1 for feats in land_feats if f.id in feats)
@@ -69,7 +72,8 @@ class FeatureComparisonAgent(Agent):
                     feature_id=f.id, feature_name=f.name, category=f.category_name, client=client_status,
                     competitors=comp_status, competitor_coverage=coverage, top3_count=have,
                     top3_total=len(deep_ids), top10_count=top10, top10_total=len(land_feats),
-                    market_class=cls, must_have=cls == "industry_standard"))
+                    market_class=cls, must_have=cls == "industry_standard",
+                    evidence={k: ctx.ledger.validate_refs(v) for k, v in cell_evidence.items() if v}))
 
         rows.sort(key=lambda r: (r.category, -r.competitor_coverage))
         ahead = [r for r in rows if r.client in HAS and r.competitor_coverage < 0.34 and competitors]

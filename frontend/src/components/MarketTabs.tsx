@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Fragment, useState } from "react";
 import { useAgent } from "../lib/useAgent";
+import { EvidenceList } from "./Explain";
 import { Badge, Card, Empty } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
 
@@ -148,6 +149,7 @@ export function ComparisonTab({ runId, enabled }: { runId: string; enabled: bool
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
   const [cls, setCls] = useState("");
+  const [cell, setCell] = useState<{ feature: string; party: string } | null>(null);
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
@@ -197,8 +199,19 @@ export function ComparisonTab({ runId, enabled }: { runId: string; enabled: bool
               <tr key={row.feature_id} className="border-t">
                 <td className="py-1 text-slate-500">{row.category}</td>
                 <td>{row.feature_name}</td>
-                <td className="text-center" title={STATUS_LABEL[row.client]}>{ICON[row.client]}</td>
-                {d.competitors.map((c: any) => <td key={c.id} className="text-center" title={STATUS_LABEL[row.competitors[c.id] ?? "unknown"]}>{ICON[row.competitors[c.id] ?? "unknown"]}</td>)}
+                {[["client", row.client], ...d.competitors.map((c: any) => [c.id, row.competitors[c.id] ?? "unknown"])].map(([party, st]: any) => {
+                  const n = row.evidence?.[party]?.length ?? 0;
+                  const active = cell?.feature === row.feature_id && cell?.party === party;
+                  return (
+                    <td key={party} className="text-center">
+                      <button disabled={!n} onClick={() => setCell(active ? null : { feature: row.feature_id, party })}
+                        title={`${STATUS_LABEL[st]}${n ? ` — ${n} source(s), click to see them` : ""}`}
+                        className={`rounded px-1 ${n ? "hover:bg-indigo-50 cursor-pointer" : "cursor-default"} ${active ? "ring-2 ring-indigo-400" : ""}`}>
+                        {ICON[st]}{n ? <sup className="text-[9px] text-indigo-600">{n}</sup> : null}
+                      </button>
+                    </td>
+                  );
+                })}
                 <td className="text-center text-xs">{row.top3_count}/{row.top3_total}</td>
                 <td className="text-center text-xs">{row.top10_total ? `${row.top10_count}/${row.top10_total}` : "—"}</td>
                 <td><span className={`text-xs rounded px-1.5 py-0.5 ${CLASS_STYLE[row.market_class] ?? ""}`}>{CLASS_LABEL[row.market_class] ?? row.market_class}</span></td>
@@ -207,7 +220,18 @@ export function ComparisonTab({ runId, enabled }: { runId: string; enabled: bool
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500 mt-2">✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing.
+      {cell && (() => {
+        const row = d.rows.find((r: any) => r.feature_id === cell.feature);
+        const who = cell.party === "client" ? "the client" : d.competitors.find((c: any) => c.id === cell.party)?.name;
+        return (
+          <div className="mt-3 border rounded-lg p-3">
+            <div className="text-sm font-medium mb-2">Evidence: {row?.feature_name} — {who}</div>
+            <EvidenceList ids={row?.evidence?.[cell.party]} />
+          </div>
+        );
+      })()}
+      <p className="text-xs text-slate-500 mt-2">Click a status with a number to see its evidence.
+        ✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing.
         Not publicly identified means no public evidence was found, not that the capability is absent.</p>
     </Card>
   );

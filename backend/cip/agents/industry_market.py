@@ -24,6 +24,7 @@ from collections import Counter
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.core.positioning import audiences
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.relevance import model_signals
@@ -69,23 +70,8 @@ def _kind(text: str) -> str:
     return "trend"
 
 
-AUDIENCE = re.compile(r"\bfor (?:small |busy |modern |independent |growing |all )?([a-z]+(?:[ -][a-z]+)?)\b")
-NOT_AUDIENCE = {"free", "more", "every", "your", "you", "the", "all", "any", "details", "example", "instance", "sale",
-                "less", "life", "today", "now", "years", "minutes", "teams of", "business"}
 MODEL_LABELS = {"subscription": "Subscription (SaaS)", "free_tier": "Freemium", "free_trial": "Free trial",
                 "enterprise_contact": "Sales-led / custom pricing", "open_source": "Open source"}
-
-
-def audiences(texts: list[str], n: int = 3) -> list[str]:
-    """Who the client says its product is *for* ("scheduling software for clinics" -> clinics)."""
-    found = Counter()
-    for t in texts:
-        for m in AUDIENCE.finditer((t or "").lower()):
-            phrase = m.group(1).strip()
-            head = phrase.split()[0]
-            if head not in NOT_AUDIENCE and phrase not in NOT_AUDIENCE and len(head) > 3:
-                found[phrase if phrase.endswith("s") else head] += 1
-    return [p for p, _ in found.most_common(n)]
 
 
 def keywords(*texts: str, n: int = 6) -> list[str]:

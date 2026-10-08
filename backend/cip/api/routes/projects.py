@@ -11,7 +11,7 @@ from cip.api.deps import not_found, require_role
 from cip.connectors.source_control import parse_repo_url
 from cip.db.models import AgentExecution, AnalysisRun, Client, Project, ProjectMember, User
 from cip.db.session import get_session
-from cip.services import audit
+from cip.services import audit, history
 from cip.services.access import project_for, visible_projects
 
 router = APIRouter(prefix="/api", tags=["clients & projects"])
@@ -179,6 +179,14 @@ async def get_project(project_id: str, user: User = Depends(require_role("viewer
     p = await project_for(session, user, project_id)
     c = await session.get(Client, p.client_id)
     return _out(p, c, await _latest_runs(session, [p.id]))
+
+
+@router.get("/projects/{project_id}/competitor-history")
+async def competitor_history(project_id: str, user: User = Depends(require_role("viewer")),
+                             session: AsyncSession = Depends(get_session)) -> dict:
+    """Competitors, their rank and evidenced capability counts across the project's completed analyses."""
+    project = await project_for(session, user, project_id)
+    return await history.competitor_history(session, project.id)
 
 
 @router.get("/projects/{project_id}/access", response_model=AccessOut)

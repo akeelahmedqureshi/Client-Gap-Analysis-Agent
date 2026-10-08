@@ -15,6 +15,7 @@ import ReviewTab from "../components/ReviewTab";
 import { useAgent } from "../lib/useAgent";
 import { useCanExport } from "../lib/useOrg";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
+import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Explain";
 
 const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Roadmap", "Our Fit", "Sales", "Review", "Evidence", "Report"] as const;
@@ -122,7 +123,7 @@ export default function RunDetailPage() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 print:hidden">
             <Badge value={r.status} />
             {done("quality_assurance") && <QualityBadge runId={runId} />}
             {canAct && ["failed", "completed_with_errors"].includes(r.status) && <Button variant="secondary" onClick={resume}>Retry failed agents</Button>}
@@ -183,7 +184,7 @@ export default function RunDetailPage() {
           </div>
         ))}
 
-        <div className="flex flex-wrap gap-1 border-b">
+        <div className="flex flex-wrap gap-1 border-b print:hidden">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-3 py-2 text-sm -mb-px border-b-2 ${tab === t ? "border-indigo-600 text-indigo-700 font-medium" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
@@ -196,7 +197,7 @@ export default function RunDetailPage() {
         {tab === "Changes" && <ChangesTab runId={runId} status={r.status} />}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
-        {tab === "Competitors" && <CompetitorsTab runId={runId} enabled={done("competitor_research")} />}
+        {tab === "Competitors" && <CompetitorsTab runId={runId} projectId={r.project_id} enabled={done("competitor_research")} />}
         {tab === "Security" && <SecurityTab runId={runId} enabled={done("security_review")} />}
         {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
         {tab === "UX" && <UxTab runId={runId} enabled={["completed", "skipped"].includes(r.agents["ux_review"])} />}
@@ -212,7 +213,7 @@ export default function RunDetailPage() {
         {tab === "Review" && <ReviewTab runId={runId} canAct={canAct}
           finished={["completed", "completed_with_errors", "failed", "cancelled"].includes(r.status)} />}
         {tab === "Evidence" && <EvidenceTab evidence={evidence.data ?? []} />}
-        {tab === "Report" && <ReportTab runId={runId} enabled={r.has_report} />}
+        {tab === "Report" && <ReportTab run={r} enabled={r.has_report} />}
       </div>
     </EvidenceContext.Provider>
   );
@@ -428,6 +429,7 @@ function ProjectTab({ runId, enabled, codeDone }: { runId: string; enabled: bool
   const profiles = code.data?.data.profiles ?? [];
   return (
     <div className="space-y-4">
+      <PositioningCards data={features.data?.data} />
       <Card title="Features">
         <table className="w-full text-sm">
           <thead className="text-left text-slate-500"><tr><th>Feature</th><th>Status</th><th>Technology</th><th>Evidence</th></tr></thead>
@@ -469,7 +471,7 @@ function ProjectTab({ runId, enabled, codeDone }: { runId: string; enabled: bool
   );
 }
 
-function CompetitorsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+function CompetitorsTab({ runId, projectId, enabled }: { runId: string; projectId: string; enabled: boolean }) {
   const res = useAgent(runId, "competitor_research", enabled);
   if (!enabled) return <Pending />;
   const d = res.data?.data;
@@ -477,6 +479,7 @@ function CompetitorsTab({ runId, enabled }: { runId: string; enabled: boolean })
   return (
     <div className="space-y-4">
       {d.landscape?.length > 0 && <LandscapeCard landscape={d.landscape} ranking={d.ranking} />}
+      <CompetitorHistory projectId={projectId} runId={runId} />
       <h2 className="font-semibold">Top {d.competitors.length} — deep analysis</h2>
       <div className="grid lg:grid-cols-2 gap-4">
         {d.competitors.map((c: any) => (
@@ -889,6 +892,7 @@ function GapsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
 
 function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const res = useAgent(runId, "opportunity_prioritization", enabled);
+  const [why, setWhy] = useState<string | null>(null);
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
@@ -918,9 +922,11 @@ function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean 
           </thead>
           <tbody>
             {opps.map((o, i) => (
-              <tr key={o.gap_id} className="border-t align-top">
+              <Fragment key={o.gap_id}>
+              <tr className="border-t align-top">
                 <td className="py-1.5">{i + 1}</td>
-                <td className="font-medium">{o.name}<div className="text-xs font-normal text-slate-500">{o.business_category}</div></td>
+                <td className="font-medium">{o.name}<div className="text-xs font-normal text-slate-500">{o.business_category}</div>
+                  <button className="text-xs font-normal text-indigo-700 underline" onClick={() => setWhy(why === o.gap_id ? null : o.gap_id)}>{why === o.gap_id ? "hide why" : "why?"}</button></td>
                 <td className="pr-2"><Badge value={o.priority} /></td>
                 <td>{o.business_opportunity}<BasisTag basis={o.basis} /><div className="text-xs text-slate-500">{o.revenue_opportunity}</div></td>
                 <td className="px-2 text-center">{o.factors.ai_opportunity}</td>
@@ -930,10 +936,12 @@ function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean 
                   <span className="font-mono">{o.score.total}</span>
                 </td>
               </tr>
+              {why === o.gap_id && <tr><td colSpan={7} className="pb-3"><WhyChain runId={runId} item={o} /></td></tr>}
+              </Fragment>
             ))}
           </tbody>
         </table>
-        <p className="text-xs text-slate-500 mt-2">Hover a score for its factor breakdown. Weights: {Object.entries(d.scoring_weights).map(([k, v]) => `${k} ${v}`).join(", ")}</p>
+        <p className="text-xs text-slate-500 mt-2">“why?” shows the chain from opportunity to gap to evidence. Hover a score for its factor breakdown. Weights: {Object.entries(d.scoring_weights).map(([k, v]) => `${k} ${v}`).join(", ")}</p>
       </Card>
     </div>
   );
@@ -1187,18 +1195,56 @@ function EvidenceTab({ evidence }: { evidence: Evidence[] }) {
   );
 }
 
-function ReportTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+function slug(text: string): string {
+  // Same rule as anchor() in agents/reporting.py, so the report's Contents links resolve here and in the PDF.
+  return text.replace(/[_*`]/g, "").trim().toLowerCase().replace(/[^\p{L}\p{N}_\s-]/gu, "").replace(/\s+/g, "-");
+}
+
+function textOf(children: any): string {
+  if (typeof children === "string" || typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(textOf).join("");
+  return children?.props ? textOf(children.props.children) : "";
+}
+
+function ReportTab({ run, enabled }: { run: Run; enabled: boolean }) {
+  const runId = run.run_id;
   const report = useQuery({
     queryKey: ["report", runId],
-    queryFn: () => api.get<{ markdown: string }>(`/api/runs/${runId}/report`),
+    queryFn: () => api.get<{ markdown: string; title: string; created_at: string }>(`/api/runs/${runId}/report`),
     enabled,
   });
   if (!enabled) return <Empty>The report is generated after the "Generate client-facing report" approval.</Empty>;
+  const md = report.data?.markdown ?? "";
+  const sections = [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+  const heading = (Tag: "h2" | "h3") => ({ children }: any) => <Tag id={slug(textOf(children))}>{children}</Tag>;
+  const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
-    <Card>
-      <article className="prose-report text-sm text-slate-800">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.data?.markdown ?? ""}</ReactMarkdown>
-      </article>
-    </Card>
+    <div className="grid lg:grid-cols-[14rem_1fr] gap-4 items-start">
+      <nav className="lg:sticky lg:top-4 text-sm bg-white border rounded-xl p-3 print:hidden">
+        <div className="font-semibold mb-1">Sections</div>
+        <ol className="space-y-0.5">
+          {sections.map((s) => (
+            <li key={s}><button className="text-left text-indigo-700 hover:underline" onClick={() => go(slug(s))}>{s.replace(/_\((estimates)\)_/, "")}</button></li>
+          ))}
+        </ol>
+        <div className="mt-3 pt-2 border-t text-xs text-slate-500 space-y-0.5">
+          <div>Run <code>{runId}</code></div>
+          {run.parent_run_id && <div>Version of <Link className="underline" to={`/runs/${run.parent_run_id}`}>{run.parent_run_id}</Link></div>}
+          {report.data && <div>Generated {new Date(report.data.created_at).toLocaleString()}</div>}
+          {run.config && <div>Config: analysis v{run.config.analysis}, scoring “{run.config.scoring_profile?.name}” v{run.config.scoring_profile?.version}, taxonomy v{run.config.taxonomy}, LLM v{run.config.llm}</div>}
+        </div>
+        <button className="mt-2 text-xs underline" onClick={() => window.print()}>Print view</button>
+      </nav>
+      <Card>
+        <article className="prose-report text-sm text-slate-800">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+            h2: heading("h2"), h3: heading("h3"),
+            a: ({ href, children }: any) => href?.startsWith("#")
+              ? <a href={href} onClick={(e) => { e.preventDefault(); go(href.slice(1)); }}>{children}</a>
+              : <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+          }}>{md}</ReactMarkdown>
+        </article>
+      </Card>
+    </div>
   );
 }

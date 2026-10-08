@@ -15,6 +15,7 @@ from collections import defaultdict
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.core import positioning
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
@@ -183,11 +184,35 @@ class ProductFeatureAgent(Agent):
         counts = defaultdict(int)
         for ob in observations.values():
             counts[ob.status.value] += 1
+
+        # Positioning and workflows (BRS 7.2): verbatim from the client's own pages -----------------
+        client = rec.client.name
+        site_pages = research.get("pages", []) + research.get("project_pages", [])
+        obs_dump = {k: v.model_dump(mode="json") for k, v in observations.items()}
+        who = positioning.audiences([positioning._page_text(p) for p in site_pages])
+        proposition = positioning.value_proposition(site_pages, ledger, client)
+        cases = positioning.use_cases(site_pages, ledger, client, who)
+        problems = positioning.customer_problems(site_pages, ledger, client)
+        flows = positioning.workflows(site_pages, obs_dump, ctx.taxonomy, ledger, client)
+        if proposition:
+            findings.append(Finding(category="positioning", title=f"Value proposition: {proposition['statement'][:150]}",
+                                    detail=proposition.get("supporting") or "", evidence_ids=proposition["evidence_ids"],
+                                    confidence=0.85))
+        for w in flows:
+            findings.append(Finding(
+                category="workflow", title=f"{w['actor'].title()} workflow “{w['name']}”: {w['supported']} of "
+                                           f"{len(w['steps'])} steps supported",
+                detail=("Not publicly identified: " + ", ".join(w["next_steps"])) if w["next_steps"] else "All steps visible.",
+                evidence_ids=[e for s in w["steps"] for e in s["evidence_ids"]][:6], confidence=0.7,
+                basis=Basis.INFERRED))
         return AgentResult(
             findings=findings,
             evidence=[ledger.get(e) for ob in observations.values() for e in ob.evidence_ids if ledger.get(e)],
             confidence=0.8 if sum(coverage.values()) >= 2 else 0.5,
             errors=errors,
             data={"observations": {k: v.model_dump() for k, v in observations.items()},
-                  "inventory": inventory, "coverage": coverage, "status_counts": dict(counts)},
+                  "inventory": inventory, "coverage": coverage, "status_counts": dict(counts),
+                  "positioning": {"value_proposition": proposition, "use_cases": cases, "customer_problems": problems,
+                                  "audiences": who},
+                  "workflows": flows},
         )

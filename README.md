@@ -110,6 +110,10 @@ Platform features:
 - **Configuration (admin, versioned):** analysis settings, named scoring profiles, the capability
   taxonomy, and prompts and models (default and per agent). Every analysis records the versions it used.
   Evidence carries a source-quality tier that feeds confidence.
+- **Explainability:** value proposition, use cases, customer problems and user, customer and business
+  workflows, all quoted from the client's pages; per-cell evidence in the comparison matrix; a "why?" chain
+  from each opportunity to its gap and evidence; competitor history across analyses; and linked report
+  sections with a print view.
 - **Governance:** job functions (sales, business development, product, technical, management) next to
   the permission roles; an export policy by role and job function; structured exports (comparison matrix,
   gaps, opportunities, recommendations and evidence as CSV, plus the full analysis as JSON); deletion of

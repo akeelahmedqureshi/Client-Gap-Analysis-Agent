@@ -176,6 +176,7 @@ export interface Run {
   rerun_stages: string[] | null;
   usage: Usage;
   created_by: string | null;
+  config?: { analysis: number; scoring_profile: { name: string; version: number }; taxonomy: number; llm: number } | null;
 }
 
 export interface Evidence {

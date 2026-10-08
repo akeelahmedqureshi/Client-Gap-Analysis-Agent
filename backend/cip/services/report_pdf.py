@@ -57,7 +57,10 @@ def report_html(markdown_text: str, title: str, architecture: dict | None = None
         return f'\n<div class="diagram">{svg}</div>\n' if svg else ""
 
     markdown_text = _DIAGRAM_BLOCK.sub(swap, markdown_text)
-    body = md_lib.markdown(markdown_text, extensions=["tables", "sane_lists"])
+    from cip.agents.reporting import anchor
+
+    body = md_lib.markdown(markdown_text, extensions=["tables", "sane_lists", "toc"],
+                           extension_configs={"toc": {"slugify": lambda value, separator: anchor(value)}})
     for icon, span in _ICONS.items():
         body = body.replace(icon, span)
     body = re.sub(r"<details>", "<details open>", body)  # collapsed sections must print expanded

@@ -1,0 +1,77 @@
+# User, customer and business workflows (BRS 7.2 "user / customer / business workflows").
+#
+# Each workflow is a sequence of steps; a step is supported when the client publicly offers one of its
+# capabilities (taxonomy ids, from the product-features analysis) and mentioned when only its keywords
+# appear on the client's pages. A workflow is reported only when at least one step is visible, so the
+# analysis never invents journeys the client doesn't have. Missing steps are "not publicly identified",
+# never "missing".
+
+workflows:
+  - id: book_and_attend
+    actor: customer
+    name: Find, book and attend
+    description: How a customer books a service and turns up.
+    steps:
+      - {name: Book online, features: [workflow.scheduling], keywords: ["book online", "book an appointment", "schedule a"]}
+      - {name: Pay or deposit, features: [billing.payments], keywords: ["pay online", "deposit"]}
+      - {name: Receive reminders, features: [comm.sms, comm.email, comm.push, comm.whatsapp], keywords: ["reminder"]}
+      - {name: Reschedule or cancel, features: [ux.self_service_portal], keywords: ["reschedule", "cancel your appointment"]}
+      - {name: Give feedback, features: [], keywords: ["leave a review", "feedback", "survey"]}
+
+  - id: sign_up_and_start
+    actor: user
+    name: Sign up and get started
+    description: From creating an account to a working setup.
+    steps:
+      - {name: Create an account, features: [auth.email_login, auth.oauth], keywords: ["sign up", "create account", "get started"]}
+      - {name: Sign in securely, features: [auth.mfa, auth.sso], keywords: ["two-factor", "single sign-on"]}
+      - {name: Guided setup, features: [ux.onboarding], keywords: ["onboarding", "setup wizard", "getting started guide"]}
+      - {name: Invite the team, features: [workflow.collaboration, auth.rbac], keywords: ["invite your team", "team members"]}
+
+  - id: get_help
+    actor: customer
+    name: Get help
+    description: How a customer finds answers or reaches support.
+    steps:
+      - {name: Find answers, features: [ux.self_service_portal, ai.rag, ai.search], keywords: ["help center", "faq", "knowledge base"]}
+      - {name: Ask a question, features: [comm.in_app_chat, ai.assistant], keywords: ["contact us", "live chat", "contact support"]}
+      - {name: Track a request, features: [], keywords: ["submit a ticket", "support ticket", "track your request"]}
+
+  - id: buy_and_pay
+    actor: customer
+    name: Choose, buy and pay
+    description: From comparing plans to paying invoices.
+    steps:
+      - {name: Compare plans, features: [], keywords: ["pricing", "plans", "per month"]}
+      - {name: Pay online, features: [billing.payments], keywords: ["checkout", "pay online"]}
+      - {name: Subscribe and renew, features: [billing.subscriptions], keywords: ["subscription", "billed annually"]}
+      - {name: Receive invoices, features: [billing.invoicing], keywords: ["invoice"]}
+
+  - id: measure_and_decide
+    actor: business
+    name: Measure and decide
+    description: How the business sees performance and acts on it.
+    steps:
+      - {name: Collect usage data, features: [analytics.product_analytics], keywords: ["usage analytics"]}
+      - {name: Monitor KPIs, features: [analytics.dashboard], keywords: ["dashboard", "real-time insights"]}
+      - {name: Share reports, features: [analytics.reports], keywords: ["reports", "export to"]}
+      - {name: Anticipate, features: [ai.predictive, ai.recommendations], keywords: ["forecast", "predict"]}
+
+  - id: connect_and_automate
+    actor: business
+    name: Connect systems and automate
+    description: How the product fits into the rest of the business's tools.
+    steps:
+      - {name: Connect tools, features: [platform.integrations_marketplace, platform.crm_integration], keywords: ["integrations", "integrates with"]}
+      - {name: Use the API, features: [platform.public_api], keywords: ["api", "developer docs"]}
+      - {name: React to events, features: [platform.webhooks], keywords: ["webhook"]}
+      - {name: Automate routine work, features: [workflow.automation, ai.automation], keywords: ["automate", "automation"]}
+
+  - id: govern_and_comply
+    actor: business
+    name: Govern and comply
+    description: Controls an organization needs before adopting the product widely.
+    steps:
+      - {name: Control access, features: [auth.rbac, auth.sso], keywords: ["permissions", "roles"]}
+      - {name: Keep an audit trail, features: [security.audit_log], keywords: ["audit log", "activity log"]}
+      - {name: Meet compliance, features: [security.compliance], keywords: ["hipaa", "gdpr", "soc 2", "iso 27001"]}

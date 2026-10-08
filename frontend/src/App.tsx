@@ -46,7 +46,7 @@ function Shell() {
   });
   return (
     <div className="min-h-screen flex">
-      <aside className="w-56 shrink-0 bg-slate-900 text-slate-200 flex flex-col">
+      <aside className="w-56 shrink-0 bg-slate-900 text-slate-200 flex flex-col print:hidden">
         <div className="px-4 py-5 font-bold text-white leading-tight">
           Client Intelligence
           <div className="text-xs font-normal text-slate-400">Gap analysis platform</div>

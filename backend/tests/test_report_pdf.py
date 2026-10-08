@@ -117,5 +117,7 @@ async def test_report_lists_render_as_lists_in_strict_markdown(make_ctx):
     ctx = make_ctx()
     await run_all(ctx)
     html = report_pdf.report_html(ctx.data("report")["markdown"], "r")
-    summary = html.split("<h2>1. Executive Summary</h2>")[1].split("<h2>")[0]
+    # Headings carry ids so the linked contents work in the PDF too.
+    assert '<h2 id="1-executive-summary">1. Executive Summary</h2>' in html and 'href="#1-executive-summary"' in html
+    summary = html.split('<h2 id="1-executive-summary">1. Executive Summary</h2>')[1].split("<h2")[0]
     assert summary.count("<li>") >= 6  # key findings + major opportunities are real list items

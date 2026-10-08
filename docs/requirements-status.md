@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 118 |
-| 🟡 Partially completed | 5 |
-| ❌ Incomplete | 5 |
+| ✅ Completed | 124 |
+| 🟡 Partially completed | 0 |
+| ❌ Incomplete | 4 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -58,9 +58,9 @@ _Baseline audit: 2026-10-08._
 | 22 | Identity, industry, business model, revenue model, headquarters, size | ✅ | Grounded in sources |
 | 23 | Products, services, target customers, geography | ✅ | |
 | 24 | Capability inventory with evidence and confidence | ✅ | |
-| 25 | Value proposition, use cases, customer problems | 🟡 | A description only |
+| 25 | Value proposition, use cases, customer problems | ✅ | Extracted verbatim from the client's pages (headline promise, solution/industry pages, pain statements), each with an evidence quote; Project tab and report section 3 |
 | 26 | Four statuses and the "Not publicly identified" rule | ✅ | No signal is "not publicly identified"; "confirmed missing" needs proof |
-| 27 | User, customer and business workflows | ❌ | |
+| 27 | User, customer and business workflows | ✅ | Workflow catalogue (`core/workflows.yaml`) mapped onto the client's capabilities and page mentions; steps supported / mentioned / not publicly identified |
 
 ## 4. Industry and market (3)
 
@@ -91,7 +91,7 @@ _Baseline audit: 2026-10-08._
 | 40 | Mapping each found feature onto that list | ✅ | |
 | 41 | Comparison matrix | ✅ | |
 | 42 | Capability list editable in the UI, with versions | ✅ | Configuration → Capability taxonomy: categories, capabilities, keywords/synonyms, code signals; validated, versioned, restorable; runs keep their version |
-| 43 | Matrix search, filter and export | 🟡 | Search, filters and CSV export; no per-cell evidence drill-down |
+| 43 | Matrix search, filter and export | ✅ | Search, filters, CSV export and per-cell evidence (click a status to see its sources) |
 
 ## 7. Gaps and common capabilities (6)
 
@@ -151,7 +151,7 @@ _Baseline audit: 2026-10-08._
 | 70 | Fact / inferred / estimate labels | ✅ | |
 | 71 | LLM claims must quote their source word for word | ✅ | `core/grounding.py` |
 | 72 | Evidence view with filters | ✅ | |
-| 73 | Drill-down from recommendation to gap to evidence | 🟡 | "N sources" links only |
+| 73 | Drill-down from recommendation to gap to evidence | ✅ | “why?” on each opportunity: score breakdown → gap (competitors, market class) → evidence with quotes, source tier and date |
 | 74 | Source-quality tiers | ✅ | Five BRS tiers on every evidence item; configurable factors scale gap confidence; tier mix in QA and the Evidence tab |
 | 75 | Detection of conflicting sources | ✅ | Targeted checks: CSV vs website industry, website vs app store, CSV features vs public evidence |
 | 76 | Freshness states (fresh / aging / stale) | ✅ | Configurable thresholds; stale sources flagged |
@@ -217,7 +217,7 @@ _Baseline audit: 2026-10-08._
 | 106 | Report built from the stored analysis data | ✅ | |
 | 107 | Markdown and PDF export | ✅ | |
 | 108 | The 15 required sections | ✅ | Plus appendices |
-| 109 | Section navigation, print view, version display | 🟡 | Contents line, run/version and PDF print; no clickable navigation |
+| 109 | Section navigation, print view, version display | ✅ | Linked contents in Markdown and PDF; section sidebar in the Report tab; print view; run, version and configuration shown |
 | 110 | Structured exports (matrix CSV, opportunities CSV, JSON) | ✅ | Matrix, gaps, opportunities, recommendations and evidence CSV (formula-safe) plus full analysis JSON |
 | 111 | Completeness indicator and low-confidence warnings | ✅ | |
 
@@ -247,7 +247,7 @@ _Baseline audit: 2026-10-08._
 |---|---|---|---|
 | 122 | Continuous competitor monitoring | ✅ | |
 | 123 | Market-change alerts (Slack, email, in-app) | ✅ | |
-| 124 | Historical competitor benchmarking | 🟡 | Run-to-run changes only |
+| 124 | Historical competitor benchmarking | ✅ | Competitors' rank and evidenced capabilities across a project's analyses, with the client's capability and standards coverage; new and dropped competitors |
 | 125 | CRM integration and automatic opportunity creation | ❌ | |
 | 126 | Email and marketing system integration | ❌ | |
 | 127 | Multi-language analysis | ❌ | |

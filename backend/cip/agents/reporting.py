@@ -7,6 +7,8 @@ estimates are explicitly labelled.
 
 from __future__ import annotations
 
+import re
+
 from datetime import datetime, timezone
 from cip.core.urls import urlparse
 
@@ -104,7 +106,14 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "leadership": [{**p, "cite": cite(p.get("evidence_ids"))} for p in research.get("leadership", [])],
         "contacts": profile.get("contacts", []),
     }
+    pos = features.get("positioning") or {}
+    vp = pos.get("value_proposition")
     sections["project_analysis"] = {
+        "value_proposition": {**vp, "cite": cite(vp.get("evidence_ids"))} if vp else None,
+        "use_cases": [{**u, "cite": cite(u.get("evidence_ids"))} for u in pos.get("use_cases", [])],
+        "customer_problems": [{**x, "cite": cite(x.get("evidence_ids"))} for x in pos.get("customer_problems", [])],
+        "workflows": [{**w, "cite": cite([e for st in w["steps"] for e in st["evidence_ids"]], 3)}
+                      for w in features.get("workflows", [])],
         "features": [{**f, "cite": cite(f.get("evidence_ids"))} for f in features.get("inventory", [])],
         "coverage": features.get("coverage", {}),
         "repositories": [{
@@ -251,6 +260,22 @@ def _md_list(items: list[str]) -> str:
     return "\n" + ("\n".join(f"- {i}" for i in items if i) or "- _None identified_")
 
 
+def anchor(heading: str) -> str:
+    """Link target of a report heading; the UI and the PDF renderer derive heading ids the same way."""
+    text = re.sub(r"[_*`]", "", heading).strip().lower()
+    return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text))
+
+
+APPENDICES = [("A. Technical Patch Plan", "Appendix A. Technical Patch Plan _(estimates)_"),
+              ("B. Analysis Quality", "Appendix B. Analysis Quality & Reproducibility"),
+              ("C. Evidence", "Appendix C. Evidence Appendix")]
+HEADING_SUFFIX = {12: " _(estimates)_", 15: " _(estimates)_"}  # sections whose headings flag estimates
+
+
+def section_anchor(number: int, title: str) -> str:
+    return anchor(f"{number}. {title}{HEADING_SUFFIX.get(number, '')}")
+
+
 CONTENTS = ["Executive Summary", "Client Overview", "Client Website & Product Analysis", "Industry & Market Analysis",
             "Competitor Landscape", "Top 3 Competitor Deep Analysis", "Feature Comparison Matrix",
             "Feature Gap Analysis", "Common Competitor Features", "Business Cost-Reduction Opportunities",
@@ -287,8 +312,8 @@ def render_markdown(report: dict) -> str:
     out += ["> **Legend** — `[E#]` cites the Evidence Appendix. Items marked _(estimate)_ are AI-generated "
             "estimates or hypotheses, and _(assumption)_ marks statements about internal processes that are not "
             "publicly observable. Not publicly identified ≠ absent.", "",
-            "**Contents:** " + " · ".join(f"{i}. {t}" for i, t in enumerate(CONTENTS, 1))
-            + " · Appendices: A. Technical Patch Plan · B. Analysis Quality · C. Evidence", ""]
+            "**Contents:** " + " · ".join(f"[{i}. {t}](#{section_anchor(i, t)})" for i, t in enumerate(CONTENTS, 1))
+            + " · Appendices: " + " · ".join(f"[{label}](#{anchor(heading)})" for label, heading in APPENDICES), ""]
 
     # 1 ---------------------------------------------------------------------------------------
     pc = es.get("priority_counts") or {}
@@ -344,7 +369,21 @@ def render_markdown(report: dict) -> str:
                           f"**Business model:** {ind.get('business_model') or 'not publicly identified'}"]), ""]
 
     # 3 ---------------------------------------------------------------------------------------
-    out += ["## 3. Client Website & Product Analysis", "### Capability inventory",
+    out += ["## 3. Client Website & Product Analysis"]
+    if pa.get("value_proposition") or pa.get("use_cases") or pa.get("customer_problems"):
+        vp = pa.get("value_proposition")
+        out += ["### Value proposition, use cases and customer problems",
+                _md_list(([f"**Value proposition:** “{vp['statement']}” {vp['cite']}".strip()] if vp else [])
+                         + [f"**Use case:** {u['name']} {u['cite']}".strip() for u in pa["use_cases"]]
+                         + [f"**Problem addressed:** “{x['statement']}” {x['cite']}".strip()
+                            for x in pa["customer_problems"]]), ""]
+    if pa.get("workflows"):
+        mark = {"supported": "✅", "mentioned": "🟡", "not_identified": "❔"}
+        out += ["### User, customer and business workflows", "| Workflow | Actor | Steps | Evidence |", "|---|---|---|---|"]
+        out += [f"| {w['name']} | {w['actor']} | " + " → ".join(f"{mark[st['status']]} {st['name']}" for st in w["steps"])
+                + f" | {w['cite'].strip() or '—'} |" for w in pa["workflows"]]
+        out += ["", "_✅ capability offered · 🟡 mentioned on the site · ❔ not publicly identified._", ""]
+    out += ["### Capability inventory",
             "| Feature | Status | Technology | Evidence |", "|---|---|---|---|"]
     for f in pa["features"]:
         out.append(f"| {f['name']} | {STATUS_ICON.get(f['status'], '')} {f['status']} | "
