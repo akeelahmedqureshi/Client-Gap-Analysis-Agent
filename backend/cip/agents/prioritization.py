@@ -13,6 +13,8 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.agents.business_process import process_by_id
+from cip.core.categories import attributes, business_category
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import AgentResult, Basis, Finding, Opportunity, Recommendation
 from cip.core.scoring import (
@@ -22,6 +24,7 @@ from cip.core.scoring import (
     clamp_factor,
     complexity_label,
     normalized,
+    priority_label,
     score_opportunity,
 )
 
@@ -148,7 +151,31 @@ strategic_alignment, ai_opportunity, technical_feasibility, complexity, risk) wi
 provided context. These are estimates and will be labelled as such."""
 
 
+# Cost-saving and productivity baselines (BRS 7.16) for taxonomy features: category default, feature override.
+OPERATIONAL_BY_CATEGORY: dict[str, tuple[float, float]] = {
+    "authentication": (1, 1), "communication": (2, 3), "ai": (3, 3), "analytics": (2, 4), "billing": (3, 3),
+    "scheduling": (3, 4), "integrations": (3, 3), "experience": (1, 2), "trust": (1, 1),
+}
+OPERATIONAL_BY_FEATURE: dict[str, tuple[float, float]] = {
+    "ai.automation": (5, 5), "ai.document_processing": (5, 5), "ai.assistant": (4, 3), "workflow.automation": (4, 5),
+    "billing.invoicing": (4, 4), "ux.self_service_portal": (4, 3), "comm.sms": (3, 3), "analytics.reports": (3, 4),
+    "platform.crm_integration": (2, 4), "platform.webhooks": (3, 3), "workflow.scheduling": (3, 4),
+}
+OPERATIONAL_BY_TYPE: dict[str, tuple[float, float]] = {
+    "technology": (2, 4), "security": (1, 1), "pricing": (1, 1), "ux": (1, 2),
+}
+
+
 def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, float]:
+    if gap.get("process_id") and (proc := process_by_id(gap["process_id"])):
+        # Process opportunities: factors from the process catalog; demand from evidence of pain.
+        base = dict(proc.factors)
+        base["market_demand"] = 3.0 if gap.get("confidence", 0) >= 0.6 else 2.0
+        base["competitive_gap"] = 1.5
+        base["ai_opportunity"] = 4.0 if proc.ai else 1.0
+        base["technical_feasibility"] = 3.5 if stack else 3.0
+        base["time_to_value"] = max(1.0, min(5.0, 5.5 - base.get("complexity", 3)))
+        return {k: clamp_factor(v) for k, v in base.items()}
     tf = ctx.taxonomy.get(gap["feature_id"]) if gap.get("feature_id") else None
     base = dict(tf.defaults) if tf else dict(TECH_GAP_FACTORS.get(gap["name"])
                                               or PRICING_GAP_FACTORS.get(gap["name"])
@@ -170,6 +197,13 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
     if not stack:
         feasibility -= 0.5  # stack unknown => more uncertainty
     base["technical_feasibility"] = feasibility
+    if "cost_saving" not in base or "productivity" not in base:
+        cost, prod = (OPERATIONAL_BY_FEATURE.get(tf.id) or OPERATIONAL_BY_CATEGORY.get(tf.category_id, (2, 2))
+                      if tf else OPERATIONAL_BY_TYPE.get(gap["gap_type"], (2, 2)))
+        base.setdefault("cost_saving", cost)
+        base.setdefault("productivity", prod)
+    base.setdefault("time_to_value", max(1.0, min(5.0, 5.5 - base.get("complexity", 3)
+                                                  + (0.5 if gap["gap_type"] in ("pricing", "ux") else 0))))
     explicit = APP_GAP_FACTORS.get(gap["name"]) or UX_GAP_FACTORS.get(gap["name"]) or {}
     if "market_demand" in explicit:
         # Quality gaps evidenced by reviews or audits: demand comes from that evidence, not competitor coverage.
@@ -200,8 +234,13 @@ def hiring_signal_for(gap: dict, signals: list[dict]) -> dict | None:
     return None
 
 
-def default_narrative(gap: dict) -> dict[str, str]:
+def default_narrative(gap: dict, process: dict | None = None) -> dict[str, str]:
     t = gap["gap_type"]
+    if t == "process" and process:
+        return {"business_opportunity": process["proposed_solution"],
+                "potential_users": "Operations, support and customer-facing teams",
+                "revenue_opportunity": process["revenue_opportunity"],
+                "user_impact_text": process["customer_impact"]}
     if t == "technology":
         return {"business_opportunity": f"Reduce delivery risk and operating cost by addressing: {gap['name']}.",
                 "potential_users": "Engineering and operations teams",
@@ -276,6 +315,8 @@ class PrioritizationAgent(Agent):
         signals = ctx.data("client_research").get("hiring", {}).get("signals", [])
         # Features customers ask for in app-store reviews (2+ reviews): evidence of demand.
         requested = {r["feature_id"]: r for r in ctx.data("app_store").get("requests", []) if r["count"] >= 2}
+        processes = {o["process_id"]: o for o in ctx.data("business_process").get("opportunities", [])}
+        n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
         scored: list[tuple[float, dict, Opportunity, Recommendation]] = []
         for g in gaps:
             factors = baseline_factors(ctx, g, stack)
@@ -288,7 +329,8 @@ class PrioritizationAgent(Agent):
             request = requested.get(g.get("feature_id") or "")
             if request:
                 factors["market_demand"] = clamp_factor(factors.get("market_demand", 0) + 1)
-            narrative = default_narrative(g)
+            process = processes.get(g.get("process_id") or "")
+            narrative = default_narrative(g, process)
             approach = ""
             llm = llm_by_gap.get(g["id"])
             if llm:
@@ -307,18 +349,25 @@ class PrioritizationAgent(Agent):
             if request:
                 narrative["business_opportunity"] += (
                     f" {request['count']} recent App Store reviews of the client's app ask for it.")
-            score = score_opportunity(factors, ctx.scoring)
+            confidence = float(g.get("confidence", 0.5))
+            score = score_opportunity(factors, ctx.scoring, confidence)
+            phase = assign_phase(factors, ctx.scoring)
+            priority = priority_label(score, ctx.scoring, confidence)
+            category = business_category(g, factors, phase=phase, priority=priority,
+                                         coverage=len(g.get("competitors_with", [])) / n_comp, process=process)
+            attrs = attributes(factors, complexity_label(factors.get("complexity", 3)))
             opp = Opportunity(gap_id=g["id"], name=g["name"], business_opportunity=narrative["business_opportunity"],
                               potential_users=narrative["potential_users"],
                               revenue_opportunity=narrative["revenue_opportunity"], factors=factors,
-                              basis=Basis.ESTIMATE)
+                              basis=Basis.ESTIMATE, priority=priority, business_category=category, attributes=attrs)
             deps = []
             if g["gap_type"] == "ai":
                 deps.append("LLM provider access (OpenRouter) and data-governance review")
             if (g.get("feature_id") or "") == "auth.sso":
                 deps.append("Identity provider test tenants (Okta / Entra ID)")
             rec = Recommendation(
-                gap_id=g["id"], feature=g["name"], phase=assign_phase(factors, ctx.scoring),
+                gap_id=g["id"], feature=g["name"], phase=phase, priority=priority, business_category=category,
+                attributes=attrs, confidence=confidence,
                 problem=g["description"], opportunity=narrative["business_opportunity"],
                 business_impact=narrative["revenue_opportunity"], user_impact=narrative["user_impact_text"],
                 technical_approach=approach or f"Implement {g['name']} within the existing "
@@ -326,6 +375,8 @@ class PrioritizationAgent(Agent):
                 dependencies=deps, complexity=complexity_label(factors.get("complexity", 3)),
                 expected_outcome=(f"{g['name']} in place; engineering risk reduced."
                                   if g["gap_type"] == "technology" else
+                                  f"{g['name']} in place: {process['expected_benefit']}"
+                                  if process else
                                   f"{g['name']} available to users; parity with "
                                   f"{len(g.get('competitors_with', []))} competitor(s)."
                                   if g.get("competitors_with") else

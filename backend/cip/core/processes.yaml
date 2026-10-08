@@ -1,0 +1,258 @@
+# Business-process catalog for cost-reduction, automation and AI opportunity analysis (BRS 7.12-7.13).
+#
+# A process is considered present at the client when public signals show it: keywords on the client's
+# pages, capabilities it offers (taxonomy ids) or app-store review themes. Internal processes are not
+# publicly observable, so `current_process` and `inefficiency` are always labelled as ASSUMPTIONS.
+#
+#   signals.keywords      phrases on the client's public pages that show the process exists
+#   signals.features      client capabilities (available/partial) that imply the process
+#   signals.review_themes app-review themes (connectors/research/appstore.py) that show pain in it
+#   solution_features     taxonomy capabilities that implement the improvement; when the client already
+#                         has all of them publicly, the opportunity is not raised
+#   benefits              qualitative levels (low | medium | high); never invented percentages
+#   factors               baseline 0-5 scores for prioritization (complexity/risk are penalties)
+#   ai / automation       whether the improvement is an AI and/or automation opportunity
+#   industries            industries where the process is especially relevant (raises confidence)
+#
+# Text may use {client} and {product}.
+
+processes:
+  - id: scheduling
+    area: Scheduling
+    name: Automated scheduling, reminders and rescheduling
+    signals:
+      keywords: ["appointment", "book online", "booking", "schedule a", "reservation", "book a visit", "bookings"]
+      features: ["workflow.scheduling"]
+      review_themes: ["notifications"]
+    industries: ["health", "clinic", "dental", "salon", "fitness", "education", "hospitality", "services"]
+    current_process: "Bookings are confirmed, reminded and rescheduled by staff, by phone or email."
+    inefficiency: "Manual confirmations and reminders take staff time, and missed appointments leave unused capacity."
+    improvement: "Automated multi-channel reminders (SMS and email), self-service rescheduling and waitlist backfill."
+    how_it_works: "Booking events trigger reminder sequences; replies confirm, cancel or reschedule automatically and free slots are offered to the waitlist."
+    customer_impact: "Fewer missed appointments and easier rescheduling for customers."
+    revenue: "Recovered capacity from fewer no-shows and backfilled cancellations."
+    solution_features: ["comm.sms", "workflow.automation"]
+    benefits: {resource_saving: medium, time_reduction: high, error_reduction: medium}
+    ai: false
+    automation: true
+    factors: {business_value: 4, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, cost_saving: 4, productivity: 4, complexity: 2, risk: 1}
+
+  - id: customer_support
+    area: Customer support
+    name: AI-assisted customer support and self-service
+    signals:
+      keywords: ["support", "help center", "faq", "contact us", "customer service", "live chat", "submit a ticket", "helpdesk"]
+      features: ["comm.in_app_chat", "ux.self_service_portal"]
+      review_themes: ["support", "login"]
+    industries: []
+    current_process: "Customer questions arrive by email, phone or chat and are answered one by one by the support team."
+    inefficiency: "Repetitive questions consume support time, and answers are slower outside business hours."
+    improvement: "An AI support assistant that answers common questions from approved help content, with ticket triage and hand-off to people."
+    how_it_works: "A retrieval-based assistant answers from the help center and product documentation, classifies the remaining requests and routes them with context to the right person."
+    customer_impact: "Instant answers at any hour; faster resolution for complex issues."
+    revenue: "Retention from better support; support capacity freed for higher-value accounts."
+    solution_features: ["ai.assistant", "ux.self_service_portal"]
+    benefits: {resource_saving: high, time_reduction: high, error_reduction: low}
+    ai: true
+    automation: true
+    factors: {business_value: 4, user_impact: 4, revenue_potential: 2, strategic_alignment: 4, cost_saving: 5, productivity: 4, complexity: 3, risk: 2}
+
+  - id: lead_processing
+    area: Lead processing
+    name: Automated lead capture, qualification and routing
+    signals:
+      keywords: ["request a demo", "book a demo", "contact sales", "get a quote", "request a quote", "talk to sales", "free consultation", "get in touch"]
+      features: []
+      review_themes: []
+    industries: []
+    current_process: "Website enquiries arrive by form or email and are qualified and assigned by hand."
+    inefficiency: "Slow manual qualification delays the first response, and leads can be missed or sit with the wrong person."
+    improvement: "Automatic capture of enquiries into the CRM with AI lead scoring, instant acknowledgement and routing to the right salesperson."
+    how_it_works: "Form and email enquiries are parsed into CRM records, enriched with public company data, scored against past wins and routed with a same-minute reply."
+    customer_impact: "Prospects get an immediate, relevant response."
+    revenue: "Higher conversion from faster follow-up on the best-fit leads."
+    solution_features: ["platform.crm_integration", "ai.automation"]
+    benefits: {resource_saving: medium, time_reduction: high, error_reduction: medium}
+    ai: true
+    automation: true
+    factors: {business_value: 4, user_impact: 2, revenue_potential: 5, strategic_alignment: 4, cost_saving: 3, productivity: 4, complexity: 2, risk: 1}
+
+  - id: sales_followups
+    area: Sales follow-ups
+    name: Automated nurturing and personalised follow-ups
+    signals:
+      keywords: ["newsletter", "subscribe", "webinar", "free trial", "start your trial", "sign up for updates", "whitepaper", "download the guide"]
+      features: []
+      review_themes: []
+    industries: []
+    current_process: "Follow-ups with trial users and subscribers are sent manually or as generic newsletters."
+    inefficiency: "Generic or late follow-ups lose prospects, and manual follow-up does not scale."
+    improvement: "Behaviour-triggered nurture sequences with AI-personalised content and sales alerts for high-intent prospects."
+    how_it_works: "Product and email activity trigger tailored sequences; an intent score alerts sales when a prospect is ready to talk."
+    customer_impact: "Relevant, timely communication instead of generic newsletters."
+    revenue: "More trials and subscribers converted to customers."
+    solution_features: ["ai.recommendations", "platform.crm_integration"]
+    benefits: {resource_saving: medium, time_reduction: medium, error_reduction: low}
+    ai: true
+    automation: true
+    factors: {business_value: 3, user_impact: 2, revenue_potential: 4, strategic_alignment: 3, cost_saving: 2, productivity: 3, complexity: 2, risk: 1}
+
+  - id: onboarding
+    area: Customer onboarding
+    name: Guided, automated customer onboarding
+    signals:
+      keywords: ["get started", "onboarding", "sign up", "create account", "setup guide", "implementation", "getting started"]
+      features: ["auth.email_login"]
+      review_themes: ["login", "usability"]
+    industries: []
+    current_process: "New customers are set up with help from staff through calls, emails and manual configuration."
+    inefficiency: "Manual setup slows time-to-value and ties up customer-success staff."
+    improvement: "Self-guided onboarding with in-app checklists, automated welcome sequences and data import."
+    how_it_works: "Sign-up triggers a guided checklist and email sequence; templates and importers replace manual setup; stalled accounts alert a person."
+    customer_impact: "Faster first success with the product."
+    revenue: "Higher activation and lower early churn."
+    solution_features: ["ux.onboarding", "comm.email"]
+    benefits: {resource_saving: medium, time_reduction: high, error_reduction: medium}
+    ai: false
+    automation: true
+    factors: {business_value: 3, user_impact: 4, revenue_potential: 3, strategic_alignment: 3, cost_saving: 3, productivity: 3, complexity: 2, risk: 1}
+
+  - id: billing_reconciliation
+    area: Back-office operations
+    name: Automated invoicing, payment collection and reconciliation
+    signals:
+      keywords: ["invoice", "billing", "payment", "pay online", "subscription", "pricing", "per month"]
+      features: ["billing.payments", "billing.subscriptions"]
+      review_themes: ["pricing"]
+    industries: []
+    current_process: "Invoices, payment reminders and reconciliation with accounting are handled manually or in spreadsheets."
+    inefficiency: "Manual billing and reconciliation take finance time and cause late payments and errors."
+    improvement: "Automated invoicing and dunning, online payment links and automatic reconciliation with the accounting system."
+    how_it_works: "Usage or bookings generate invoices automatically; payment reminders escalate on schedule; payments are matched to invoices and synced to accounting."
+    customer_impact: "Simpler, more transparent billing and payment."
+    revenue: "Faster cash collection and fewer billing disputes."
+    solution_features: ["billing.invoicing", "billing.payments"]
+    benefits: {resource_saving: high, time_reduction: high, error_reduction: high}
+    ai: false
+    automation: true
+    factors: {business_value: 4, user_impact: 2, revenue_potential: 3, strategic_alignment: 3, cost_saving: 4, productivity: 4, complexity: 3, risk: 2}
+
+  - id: document_processing
+    area: Document processing
+    name: Intelligent document processing
+    signals:
+      keywords: ["forms", "documents", "upload", "intake", "claims", "application form", "contracts", "paperwork", "pdf", "records"]
+      features: []
+      review_themes: []
+    industries: ["health", "insurance", "finance", "legal", "logistics", "real estate", "government", "education"]
+    current_process: "Forms and documents are read and their data typed into systems by staff."
+    inefficiency: "Re-keying document data is slow, repetitive and error-prone."
+    improvement: "AI document processing that classifies documents, extracts the data and validates it before it enters the system."
+    how_it_works: "Uploaded or emailed documents are classified, fields are extracted with OCR and language models, low-confidence values go to a person for review, and the data is posted to the system of record."
+    customer_impact: "Faster processing of customer forms and requests."
+    revenue: "Capacity to handle more volume without adding staff."
+    solution_features: ["ai.document_processing"]
+    benefits: {resource_saving: high, time_reduction: high, error_reduction: high}
+    ai: true
+    automation: true
+    factors: {business_value: 4, user_impact: 3, revenue_potential: 2, strategic_alignment: 4, cost_saving: 5, productivity: 5, complexity: 3, risk: 2}
+
+  - id: data_entry
+    area: Manual data entry
+    name: Integrated data capture instead of re-keying
+    signals:
+      keywords: ["spreadsheet", "excel", "csv import", "manual entry", "registration form", "data entry", "import your data"]
+      features: []
+      review_themes: ["sync"]
+    industries: []
+    current_process: "Data is copied between systems and spreadsheets by hand."
+    inefficiency: "Duplicate entry wastes time and causes inconsistent records."
+    improvement: "Digital forms and system integrations (APIs, webhooks) so data is captured once and flows automatically."
+    how_it_works: "Forms write directly to the system of record; integrations and webhooks sync changes between tools; validation catches errors at entry."
+    customer_impact: "Fewer mistakes in customer records and requests."
+    revenue: "Lower operating cost per transaction."
+    solution_features: ["platform.public_api", "platform.webhooks", "platform.integrations_marketplace"]
+    benefits: {resource_saving: medium, time_reduction: medium, error_reduction: high}
+    ai: false
+    automation: true
+    factors: {business_value: 3, user_impact: 2, revenue_potential: 2, strategic_alignment: 3, cost_saving: 4, productivity: 4, complexity: 3, risk: 2}
+
+  - id: reporting
+    area: Reporting
+    name: Automated reporting and natural-language analytics
+    signals:
+      keywords: ["reports", "reporting", "dashboard", "analytics", "kpi", "insights", "metrics"]
+      features: ["analytics.dashboard", "analytics.reports"]
+      review_themes: []
+    industries: []
+    current_process: "Reports are assembled periodically from exports and spreadsheets."
+    inefficiency: "Manual report preparation is time-consuming and insights arrive late."
+    improvement: "Scheduled automated reports, anomaly alerts and natural-language questions over the data."
+    how_it_works: "Data is consolidated into a reporting layer; reports are generated and delivered on schedule; anomaly detection flags changes; users ask questions in plain language."
+    customer_impact: "Customers and staff get timely, self-service insight."
+    revenue: "Analytics can be packaged as a premium tier."
+    solution_features: ["analytics.reports", "ai.predictive"]
+    benefits: {resource_saving: medium, time_reduction: high, error_reduction: medium}
+    ai: true
+    automation: true
+    factors: {business_value: 3, user_impact: 3, revenue_potential: 3, strategic_alignment: 3, cost_saving: 3, productivity: 4, complexity: 3, risk: 1}
+
+  - id: communication
+    area: Communication
+    name: Event-driven customer notifications
+    signals:
+      keywords: ["notification", "reminder", "status update", "alerts", "track your", "we will email you", "updates"]
+      features: ["comm.email", "comm.push", "comm.sms"]
+      review_themes: ["notifications"]
+    industries: []
+    current_process: "Customers are updated about status changes by staff, or have to call to ask."
+    inefficiency: "Status questions and manual updates take staff time and frustrate customers."
+    improvement: "Automatic notifications on key events across email, SMS and push, with customer preferences."
+    how_it_works: "System events (booked, shipped, due, changed) trigger templated messages on the customer's preferred channel."
+    customer_impact: "Customers always know the status without asking."
+    revenue: "Higher satisfaction and repeat business."
+    solution_features: ["comm.sms", "comm.push"]
+    benefits: {resource_saving: medium, time_reduction: medium, error_reduction: low}
+    ai: false
+    automation: true
+    factors: {business_value: 3, user_impact: 4, revenue_potential: 2, strategic_alignment: 3, cost_saving: 3, productivity: 3, complexity: 2, risk: 1}
+
+  - id: content_management
+    area: Content management
+    name: AI-assisted content production
+    signals:
+      keywords: ["blog", "news", "articles", "resources", "case studies", "insights", "guides"]
+      features: []
+      review_themes: []
+    industries: []
+    current_process: "Website, blog and marketing content is researched and written from scratch by the team."
+    inefficiency: "Content production is slow, so publishing is irregular."
+    improvement: "AI-assisted drafting, repurposing and SEO optimisation with human editorial review."
+    how_it_works: "Briefs generate first drafts from approved sources; drafts are repurposed into posts and emails; editors review before publishing."
+    customer_impact: "More regular, useful content for customers and prospects."
+    revenue: "More inbound leads from consistent content."
+    solution_features: []
+    benefits: {resource_saving: medium, time_reduction: high, error_reduction: low}
+    ai: true
+    automation: false
+    factors: {business_value: 2, user_impact: 1, revenue_potential: 3, strategic_alignment: 2, cost_saving: 3, productivity: 4, complexity: 1, risk: 2}
+
+  - id: internal_approvals
+    area: Internal approvals
+    name: Rule-based approval workflows
+    signals:
+      keywords: ["approval", "approve", "workflow", "sign-off", "review process", "purchase order"]
+      features: ["workflow.collaboration"]
+      review_themes: []
+    industries: []
+    current_process: "Approvals move through email and chat, with status tracked by hand."
+    inefficiency: "Approvals stall in inboxes, and there is no clear audit trail."
+    improvement: "Rule-based approval workflows with automatic routing, reminders and an audit trail."
+    how_it_works: "Requests are routed by amount, type and role; reminders and escalations run on timers; every decision is logged."
+    customer_impact: "Faster turnaround on customer requests that need approval."
+    revenue: "Shorter cycle times on deals and orders."
+    solution_features: ["workflow.automation", "security.audit_log"]
+    benefits: {resource_saving: medium, time_reduction: high, error_reduction: medium}
+    ai: false
+    automation: true
+    factors: {business_value: 3, user_impact: 2, revenue_potential: 2, strategic_alignment: 3, cost_saving: 3, productivity: 4, complexity: 2, risk: 1}

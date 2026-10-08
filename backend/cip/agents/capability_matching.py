@@ -19,7 +19,7 @@ from cip.core.schemas import AgentResult, Basis, Finding
 class CapabilityMatchingAgent(Agent):
     name = "capability_matching"
     description = "Match prioritised opportunities to our own capabilities, projects and case studies"
-    after = ("opportunity_prioritization",)
+    after = ("opportunity_prioritization", "business_process")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         records = [r for r in ctx.knowledge if is_matchable(r)]
@@ -45,31 +45,40 @@ class CapabilityMatchingAgent(Agent):
         stack = {t["name"] for p in ctx.data("code_analysis").get("profiles", []) for t in p.get("technologies", [])}
         stack |= set(ctx.record.project.technology)
 
+        processes = {p["process_id"]: p for p in ctx.data("business_process").get("opportunities", [])}
+        rec_by_gap = {r["gap_id"]: r for r in recommendations}
+        # Every scored opportunity is matched (recommendations first), so the sales summary can use the
+        # best AI / automation / cost-saving opportunity even when it is outside the roadmap's top N.
+        opps = sorted(prio.get("opportunities", []),
+                      key=lambda o: (o["gap_id"] not in rec_by_gap, -o["score"]["total"]))
         matches, unmatched, findings = [], [], []
         by_record: dict[str, dict] = {}
-        for rec in recommendations:
-            gap = gaps.get(rec["gap_id"], {"id": rec["gap_id"], "name": rec["feature"]})
-            need = need_from_gap(gap, ctx.taxonomy)
-            need.id = rec["id"]
+        for o in opps:
+            rec = rec_by_gap.get(o["gap_id"])
+            gap = gaps.get(o["gap_id"], {"id": o["gap_id"], "name": o["name"], "gap_type": o.get("gap_type")})
+            need = need_from_gap(gap, ctx.taxonomy, processes.get(gap.get("process_id") or ""))
             found = match_need(need, records, ctx.taxonomy, industry=industry, stack=stack)
             if not found:
-                unmatched.append(rec["feature"])
+                if rec:
+                    unmatched.append(rec["feature"])
                 continue
-            matches.append({"recommendation_id": rec["id"], "gap_id": rec["gap_id"], "need": rec["feature"],
-                            "phase": rec.get("phase"), "matches": [m.to_dict() for m in found]})
+            matches.append({"recommendation_id": rec["id"] if rec else None, "gap_id": o["gap_id"], "need": o["name"],
+                            "phase": o.get("phase"), "priority": o.get("priority"),
+                            "matches": [m.to_dict() for m in found]})
             best = found[0]
-            findings.append(Finding(
-                category="capability_matching", title=f"{rec['feature']}: {best.title}",
-                detail="; ".join(best.reasons) + ("" if best.client_facing else " (internal only)"),
-                evidence_ids=rec.get("evidence_ids", [])[:3], confidence=best.confidence, basis=Basis.INFERRED))
+            if rec:
+                findings.append(Finding(
+                    category="capability_matching", title=f"{rec['feature']}: {best.title}",
+                    detail="; ".join(best.reasons) + ("" if best.client_facing else " (internal only)"),
+                    evidence_ids=rec.get("evidence_ids", [])[:3], confidence=best.confidence, basis=Basis.INFERRED))
             for m in found:
                 entry = by_record.setdefault(m.record_id, {"record_id": m.record_id, "title": m.title,
                                                            "kind": m.kind, "client_facing": m.client_facing,
                                                            "needs": []})
-                entry["needs"].append(rec["feature"])
+                entry["needs"].append(o["name"])
 
         demand = sorted(by_record.values(), key=lambda e: (-len(e["needs"]), e["title"]))
-        covered = len(matches) / len(recommendations) if recommendations else 0.0
+        covered = (sum(1 for m in matches if m["recommendation_id"]) / len(recommendations)) if recommendations else 0.0
         return AgentResult(
             confidence=round(0.4 + 0.5 * covered, 3),
             findings=findings,

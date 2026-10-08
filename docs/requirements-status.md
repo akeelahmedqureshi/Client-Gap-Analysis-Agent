@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 62 |
-| 🟡 Partially completed | 31 |
-| ❌ Incomplete | 35 |
+| ✅ Completed | 71 |
+| 🟡 Partially completed | 25 |
+| ❌ Incomplete | 32 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -99,8 +99,8 @@ _Baseline audit: 2026-10-08._
 |---|---|---|---|
 | 44 | Gap list with competitors that have it, count, evidence and confidence | ✅ | |
 | 45 | How common each capability is among competitors | ✅ | |
-| 46 | Business attributes per gap | 🟡 | Recorded on the opportunity |
-| 47 | The 8 business gap categories | 🟡 | 7 technical types instead |
+| 46 | Business attributes per gap | ✅ | Relevance, customer value, competitive importance, revenue, efficiency, time to value, complexity |
+| 47 | The 8 business gap categories | ✅ | Plus a separate risk & compliance category for security |
 | 48 | Standard / emerging / differentiator / niche; must-have versus optional | 🟡 | Differentiators only |
 | 49 | Frequency among the Top 3 compared with the Top 10 | ❌ | |
 
@@ -108,10 +108,10 @@ _Baseline audit: 2026-10-08._
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 50 | AI opportunity analysis | 🟡 | No dedicated analysis |
-| 51 | Fields per opportunity (problem, solution, how it works, cost, productivity) | 🟡 | |
-| 52 | Business-process and cost-reduction analysis | ❌ | |
-| 53 | Automation opportunity analysis | ❌ | |
+| 50 | AI opportunity analysis | ✅ | AI only as the improvement to an observed process or with competitor evidence |
+| 51 | Fields per opportunity (problem, solution, how it works, cost, productivity) | ✅ | Cost & AI tab |
+| 52 | Business-process and cost-reduction analysis | ✅ | `business_process` agent; assumptions labelled |
+| 53 | Automation opportunity analysis | ✅ | |
 
 ## 9. Scoring, prioritisation and roadmap (7)
 
@@ -120,10 +120,10 @@ _Baseline audit: 2026-10-08._
 | 54 | Deterministic weighted score, with an explanation | ✅ | `core/scoring.py` |
 | 55 | Weights adjustable for each run | ✅ | |
 | 56 | Roadmap timeline plus patch plans | ✅ | |
-| 57 | BRS factors: cost saving, productivity, time to value, evidence confidence | 🟡 | |
-| 58 | High / Medium / Low priority label | 🟡 | Roadmap phases only |
+| 57 | BRS factors: cost saving, productivity, time to value, evidence confidence | ✅ | Confidence scales the benefit part of the score |
+| 58 | High / Medium / Low priority label | ✅ | |
 | 59 | Saved, versioned scoring profiles | ❌ | |
-| 60 | Low-confidence findings blocked from top priority | ❌ | |
+| 60 | Low-confidence findings blocked from top priority | ✅ | Confidence < 0.5 is never High; sales leads need ≥ 0.5 |
 
 ## 10. Internal knowledge base and matching (4)
 

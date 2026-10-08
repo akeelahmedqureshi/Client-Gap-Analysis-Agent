@@ -279,6 +279,7 @@ class GapType(str, Enum):
     AI = "ai"
     PRICING = "pricing"
     SECURITY = "security"
+    PROCESS = "process"  # cost-reduction / automation opportunity in a business process (BRS 7.12)
 
 
 class Gap(BaseModel):
@@ -292,6 +293,7 @@ class Gap(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     basis: Basis = Basis.INFERRED
+    process_id: str | None = None  # set for process gaps (see agents/business_process.py)
 
 
 class Opportunity(BaseModel):
@@ -303,12 +305,19 @@ class Opportunity(BaseModel):
     # factor name -> score (0..5). Factors are defined by the scoring config.
     factors: dict[str, float]
     basis: Basis = Basis.ESTIMATE
+    priority: Literal["high", "medium", "low"] = "medium"
+    business_category: str = ""
+    attributes: dict[str, str] = Field(default_factory=dict)
 
 
 class ScoreBreakdown(BaseModel):
     total: float
     contributions: dict[str, float]
     weights: dict[str, float]
+    # Set when evidence confidence scaled the score (see core/scoring.py).
+    raw_total: float | None = None
+    confidence: float | None = None
+    confidence_factor: float | None = None
 
 
 Phase = Literal["phase_1_quick_wins", "phase_2_growth", "phase_3_major", "phase_4_strategic"]
@@ -330,6 +339,10 @@ class Recommendation(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     score: ScoreBreakdown
     basis: Basis = Basis.ESTIMATE
+    priority: Literal["high", "medium", "low"] = "medium"
+    business_category: str = ""
+    attributes: dict[str, str] = Field(default_factory=dict)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class ImplementationPlan(BaseModel):

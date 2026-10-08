@@ -46,11 +46,12 @@ facts whose quote can't be found are kept only at low confidence. Every finding 
 | 6 | Competitor Research: discovery, website verification, classification, feature extraction | `agents/competitor_research.py` |
 | 7 | Feature Comparison: client vs. competitors matrix | `agents/comparison.py` |
 | 8 | Gap Analysis: missing, partial, technology, UX and AI gaps | `agents/gap_analysis.py` |
-| 9 | Opportunity & Prioritization: transparent weighted scoring, phase assignment | `agents/prioritization.py`, `core/scoring.py` |
+| 9 | Opportunity & Prioritization: transparent weighted scoring scaled by evidence confidence, High/Medium/Low priority, business categories, phase assignment | `agents/prioritization.py`, `core/scoring.py` |
 | 10 | Enhancement Planning: frontend/backend/DB/API/AI/infra/security/testing plan per recommendation | `agents/planning.py` |
 | 11 | Report: Markdown and JSON report with an evidence appendix | `agents/reporting.py` |
 | 12 | Capability Matching: opportunities → approved knowledge-base capabilities, projects and case studies | `agents/capability_matching.py`, `core/matching.py` |
 | 13 | Sales Intelligence and Outreach: sales-ready summary and a claim-checked personalised email, reviewed and approved in the UI | `agents/sales.py`, `core/outreach.py` |
+| 14 | Business Process: cost-reduction, automation and AI opportunities in observed business processes, with assumptions labelled | `agents/business_process.py`, `core/processes.yaml` |
 
 Platform features:
 
@@ -73,7 +74,8 @@ Platform features:
 - **Web UI** (React, TypeScript, Tailwind, React Query) with screens for Dashboard, Upload
   (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules), Knowledge
   Base (capabilities and case studies with approval workflow and version history) and Run detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
-  security, UX, competitors, pricing, apps, comparison, gaps, opportunity matrix, roadmap and patch plans,
+  security, UX, competitors, pricing, apps, comparison, gaps, opportunity matrix with priorities and
+  categories, cost & AI (process opportunities), roadmap and patch plans,
   our fit (knowledge-base matches), sales summary and outreach email (edit, regenerate, approve,
   export), evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.

@@ -19,15 +19,12 @@ API (``api/routes/sales.py``).
 from __future__ import annotations
 
 from cip.agents.base import Agent, RunContext
+from cip.core.categories import AUTOMATION_FEATURES
 from cip.core.outreach import Fact, OutreachInput, generate_email
 from cip.core.schemas import AgentResult, Basis, Finding
 
 MIN_CLAIM_CONFIDENCE = 0.5
 CLIENT_GAP_TYPES = ("missing", "partial", "ai", "ux", "pricing")
-AUTOMATION_FEATURES = {
-    "ai.automation", "workflow.automation", "workflow.scheduling", "comm.sms", "comm.push", "comm.email",
-    "billing.invoicing", "ai.document_processing", "platform.webhooks", "platform.crm_integration",
-}
 COST_SAVING_FEATURES = {
     "ai.assistant", "ai.automation", "workflow.automation", "ai.document_processing", "billing.invoicing",
     "ux.self_service_portal", "ux.onboarding", "workflow.scheduling",
@@ -56,6 +53,7 @@ def _join(names: list[str]) -> str:
 
 def _opp_view(o: dict, rec: dict | None, gap: dict) -> dict:
     return {"gap_id": o["gap_id"], "name": o["name"], "summary": o.get("business_opportunity", ""),
+            "priority": o.get("priority"), "category": o.get("business_category"),
             "impact": rec.get("business_impact", "") if rec else "",
             "revenue": o.get("revenue_opportunity", ""), "score": o["score"]["total"],
             "phase": PHASE_LABEL.get(rec["phase"]) if rec else None,
@@ -145,13 +143,24 @@ class SalesIntelligenceAgent(Agent):
                     return _opp_view(o, recs.get(o["gap_id"]), g)
             return None
 
-        ai_opp = best(lambda o, g: g["gap_type"] == "ai" or (g.get("feature_id") or "").startswith("ai."))
-        automation_opp = best(lambda o, g: g.get("feature_id") in AUTOMATION_FEATURES
-                              or "automat" in g["name"].lower())
-        has_cost_factor = any("cost_saving" in o.get("factors", {}) for o in opps)
-        if has_cost_factor:
-            cost_opp = best(lambda o, g: o["factors"].get("cost_saving", 0) >= 3)
-        else:
+        processes = {p["process_id"]: p for p in ctx.data("business_process").get("opportunities", [])}
+
+        def is_ai(g: dict) -> bool:
+            proc = processes.get(g.get("process_id") or "")
+            return g["gap_type"] == "ai" or (g.get("feature_id") or "").startswith("ai.") or bool(proc and proc["ai"])
+
+        # BRS 7.13: AI needs a business justification — an observed business process or competitor evidence.
+        ai_opp = best(lambda o, g: is_ai(g) and (g.get("process_id") or g.get("competitors_with"))) \
+            or best(lambda o, g: is_ai(g))
+        automation_opp = best(lambda o, g: not is_ai(g) and (
+            g["gap_type"] == "process" or g.get("feature_id") in AUTOMATION_FEATURES or "automat" in g["name"].lower()))
+        cost_opp = None
+        for o in sorted(opps, key=lambda o: (-o.get("factors", {}).get("cost_saving", 0), -o["score"]["total"])):
+            g = gaps.get(o["gap_id"])
+            if g and g["gap_type"] != "security" and o.get("factors", {}).get("cost_saving", 0) >= 3.5:
+                cost_opp = _opp_view(o, recs.get(o["gap_id"]), g)
+                break
+        if cost_opp is None:
             cost_opp = best(lambda o, g: g.get("feature_id") in COST_SAVING_FEATURES)
         revenue_opp = None
         by_revenue = sorted(opps, key=lambda o: (-o.get("factors", {}).get("revenue_potential", 0), -o["score"]["total"]))

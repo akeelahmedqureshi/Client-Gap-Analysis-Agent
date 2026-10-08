@@ -23,9 +23,10 @@ Each `Finding` has a `basis`:
 | `pricing_analysis` | after client_research, competitor_research | — | `client` and per-competitor pricing (plans, monthly prices, models, trial, free tier, annual discount, enterprise tier), `market` statistics, client `position`, pricing `gaps` |
 | `app_store` | after client_research, competitor_research | (covered by `external_research`) | `client_apps[]` / `competitor_apps[]` (verified store listings: rating, ratings count, version, last release), `client_reviews` (sentiment, themes with quotes), `requests[]` (features asked for in reviews), `competitor_review_themes[]`, `market`, app `gaps` |
 | `ux_review` | after client_research, competitor_research | (covered by `external_research`) | `client` and `companies[]` (pages audited, scores per category, website practices), `issues[]` (merged across pages, WCAG reference, pages, markup evidence), `market`, UX `gaps`, `notes` |
+| `business_process` | after client_research, product_features, app_store | — | `opportunities[]` (process, observed signals + evidence, assumed current process and inefficiency, BRS 7.12/7.13 fields, `ai`, `automation`, confidence), `in_place[]`, `ai_opportunities[]`, `automation_opportunities[]` |
 | `feature_comparison` | after product_features, competitor_research | — | `rows[]` (client status and each competitor's status per taxonomy feature, coverage) |
-| `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store, ux_review | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security), `existing[]` |
-| `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown), `recommendations[]` (top N with phase), `roadmap` |
+| `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store, ux_review, business_process | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security / process), `existing[]` |
+| `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown with evidence-confidence factor, `priority`, `business_category`, `attributes`), `recommendations[]` (top N with phase and priority), `roadmap` |
 | `enhancement_planning` | after opportunity_prioritization | — | `plans[]` (ImplementationPlan) |
 | `capability_matching` | after opportunity_prioritization | — | `matches[]` (per recommendation: up to 3 knowledge-base records with confidence, reasons, `client_facing`, `reference_allowed`), `by_record[]` (demand per record), `unmatched[]`, `knowledge_base` (record ids + versions used) |
 | `sales_intelligence` | after capability_matching | — | `pain_points[]` (source, evidence, `internal_only`), `top_gaps[]` (claim-safe, with competitors and coverage), `top_improvements[]`, `ai_opportunity`, `automation_opportunity`, `cost_saving_opportunity`, `revenue_opportunity`, `conversation_angle`, `relevant_capabilities[]` / `internal_capabilities[]` / `case_studies[]`, `contact`, `next_step`, `claim_safety`, `outreach_input` |
@@ -164,9 +165,40 @@ low-confidence evidence.
 1. Baseline factors come from the taxonomy defaults, competitor coverage (market demand and
    competitive gap) and feasibility.
 2. The LLM may adjust each factor by at most ±1 and writes the narratives, all labelled `estimate`.
-3. Score = Σ wᵢ·benefitᵢ − w_c·complexity − w_r·risk, with configurable weights.
-4. Phases: complexity ≤ 2 → Phase 1; ≤ 3 → Phase 2; ≤ 4 and not a large AI bet → Phase 3; otherwise
+3. Score = (Σ wᵢ·benefitᵢ) × (1 − 0.4 + 0.4·evidence confidence) − w_c·complexity − w_r·risk, with
+   configurable weights (BRS 15). Benefits include the BRS 7.16 dimensions: competitive importance,
+   customer value, revenue, **cost saving**, **productivity**, **time to value** and strategic importance.
+   Cost saving and productivity come from the taxonomy category (with feature overrides) or the process
+   catalog; time to value from complexity.
+4. Priority (BRS 7.14): **High** at normalized score ≥ 0.58, **Medium** ≥ 0.46, otherwise **Low**. A
+   finding with confidence below 0.5 is never High, so weak evidence cannot drive the top
+   recommendations.
+5. Business category (BRS 7.10, `core/categories.py`): critical competitive gap (most competitors have
+   it and it is High), AI opportunity, automation opportunity, strategic / long-term (Phase 4), revenue
+   opportunity, customer experience gap, operational efficiency gap or high-value product gap; security
+   findings are a separate risk & compliance gap. Each opportunity also gets Low/Medium/High labels for
+   business relevance, customer value, competitive importance, revenue impact, efficiency impact and time
+   to value.
+6. Phases: complexity ≤ 2 → Phase 1; ≤ 3 → Phase 2; ≤ 4 and not a large AI bet → Phase 3; otherwise
    Phase 4.
+
+**Business Process** (`business_process`). Cost-reduction, automation and AI opportunities in the
+client's business processes (BRS 7.12–7.13), from the catalog in `core/processes.yaml` (scheduling,
+customer support, lead processing, sales follow-ups, onboarding, invoicing and reconciliation, document
+processing, data entry, reporting, communication, content and approvals).
+
+- **Observed vs assumed.** A process counts only when public evidence shows it exists: the client's
+  pages mention it (quoted in the ledger), it offers a capability that implies it, or its app reviews
+  complain about it. How the process runs today and where it is inefficient are *assumptions* from the
+  catalog, labelled as such, with basis `estimate`.
+- **Not already in place.** If the client publicly offers every capability of the improvement, the
+  process is listed as *in place* instead.
+- **Fields.** Each opportunity has the BRS 7.12 and 7.13 fields: likely current process, inefficiency,
+  business problem (plus review evidence), proposed solution, how it works, resource saving,
+  processing-time and error/rework reduction (qualitative levels, never invented percentages),
+  productivity, customer impact, revenue opportunity, complexity and confidence.
+- **AI only with a business reason.** AI is suggested only as the improvement to an observed process.
+  Opportunities become `process` gaps and are scored and prioritised like every other gap.
 
 **Security Review** (`security_review`, after client research and code analysis). It is passive
 only; see docs/security.md. It checks the live site's posture, looks up dependencies on OSV.dev and

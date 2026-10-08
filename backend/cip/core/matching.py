@@ -36,6 +36,8 @@ class Need:
     ai: bool = False
     automation: bool = False
     text: str = ""
+    # Further capabilities that satisfy the need (e.g. a process improvement's solution capabilities).
+    feature_ids: tuple[str, ...] = ()
 
 
 @dataclass
@@ -57,7 +59,8 @@ class Match:
 
 
 def _tokens(text: str) -> set[str]:
-    return {w for w in _WORD.findall(text.lower()) if len(w) > 2 and w not in _STOP}
+    # A light stem (first 6 letters) so "automated" matches "automation" and "scheduling" matches "schedule".
+    return {w[:6] for w in _WORD.findall(text.lower()) if len(w) > 2 and w not in _STOP}
 
 
 def _norm(values: list[str] | None) -> set[str]:
@@ -72,15 +75,23 @@ def is_client_facing(record: dict) -> bool:
     return record.get("status") == "approved" and record.get("visibility") == "client_facing"
 
 
-def need_from_gap(gap: dict, taxonomy: Taxonomy) -> Need:
+def need_from_gap(gap: dict, taxonomy: Taxonomy, process: dict | None = None) -> Need:
+    """``process``: the business-process opportunity behind a process gap (agents/business_process.py)."""
     tf = taxonomy.get(gap["feature_id"]) if gap.get("feature_id") else None
     text = f"{gap.get('name', '')} {gap.get('description', '')}"
+    extra: tuple[str, ...] = ()
+    if process:
+        from cip.agents.business_process import process_by_id
+
+        definition = process_by_id(process["process_id"])
+        extra = definition.solution_features if definition else ()
     return Need(
         id=gap.get("id", ""), name=gap.get("name", ""), feature_id=tf.id if tf else None,
         category_id=tf.category_id if tf else None,
-        ai=bool(tf and tf.ai) or gap.get("gap_type") == "ai",
-        automation=any(h in text.lower() for h in AUTOMATION_HINTS) or (tf is not None and tf.id == "ai.automation"),
-        text=text,
+        ai=bool(tf and tf.ai) or gap.get("gap_type") == "ai" or bool(process and process.get("ai")),
+        automation=any(h in text.lower() for h in AUTOMATION_HINTS) or (tf is not None and tf.id == "ai.automation")
+        or bool(process and process.get("automation")),
+        text=text, feature_ids=extra,
     )
 
 
@@ -91,9 +102,14 @@ def score_record(need: Need, record: dict, taxonomy: Taxonomy, *, industry: str 
     relevance = 0.0
     tf = taxonomy.get(need.feature_id) if need.feature_id else None
 
+    solution = next((f for f in need.feature_ids if f.lower() in tags), None)
     if need.feature_id and need.feature_id.lower() in tags:
         relevance += 0.55
         reasons.append(f"Tagged with the required capability ({tf.name if tf else need.feature_id})")
+    elif solution:
+        sf = taxonomy.get(solution)
+        relevance += 0.45
+        reasons.append(f"Tagged with a capability the improvement needs ({sf.name if sf else solution})")
     elif need.category_id and need.category_id.lower() in tags:
         relevance += 0.3
         reasons.append(f"Tagged with the capability area ({tf.category_name if tf else need.category_id})")
@@ -104,7 +120,8 @@ def score_record(need: Need, record: dict, taxonomy: Taxonomy, *, industry: str 
     shared = sorted(need_words & record_words)
     if shared:
         relevance += min(0.35, 0.12 * len(shared))
-        reasons.append("Describes related work: " + ", ".join(shared[:5]))
+        words = [w for w in _WORD.findall(f"{record.get('title', '')} {' '.join(tags)}".lower()) if w[:6] in shared]
+        reasons.append("Describes related work: " + ", ".join(dict.fromkeys(words or shared))[:80])
     if relevance == 0:
         return None  # not relevant to the capability itself: industry/tech overlap alone is not enough
 

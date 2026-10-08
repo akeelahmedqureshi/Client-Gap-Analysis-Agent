@@ -13,7 +13,7 @@ import { ChangeList, SeverityBadge } from "../components/Changes";
 import SalesTab from "../components/SalesTab";
 
 const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
-  "Roadmap", "Our Fit", "Sales", "Evidence", "Report"] as const;
+  "Cost & AI", "Roadmap", "Our Fit", "Sales", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -138,6 +138,7 @@ export default function RunDetailPage() {
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
         {tab === "Roadmap" && <RoadmapTab runId={runId} enabled={done("enhancement_planning")} />}
+        {tab === "Cost & AI" && <CostAiTab runId={runId} enabled={done("business_process")} prioDone={done("opportunity_prioritization")} />}
         {tab === "Our Fit" && <FitTab runId={runId} enabled={done("capability_matching")} />}
         {tab === "Sales" && (done("sales_intelligence") ? <SalesTab runId={runId} canAct={canAct} /> : <Pending />)}
         {tab === "Evidence" && <EvidenceTab evidence={evidence.data ?? []} />}
@@ -702,8 +703,15 @@ function ComparisonTab({ runId, enabled }: { runId: string; enabled: boolean }) 
   );
 }
 
+const GAP_TITLES: Record<string, string> = {
+  ai: "AI", ux: "UX", process: "Process (cost & automation)", missing: "Missing", partial: "Partial",
+  technology: "Technology", pricing: "Pricing", security: "Security",
+};
+
 function GapsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const res = useAgent(runId, "gap_analysis", enabled);
+  const prio = useAgent(runId, "opportunity_prioritization", enabled);
+  const byGap = new Map<string, any>((prio.data?.data.opportunities ?? []).map((o: any) => [o.gap_id, o]));
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
@@ -717,14 +725,25 @@ function GapsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
         </div>
       </Card>
       {Object.entries(groups).map(([type, gaps]) => (
-        <Card key={type} title={`${type === "ai" ? "AI" : type === "ux" ? "UX" : type[0].toUpperCase() + type.slice(1)} gaps (${gaps.length})`}>
+        <Card key={type} title={`${GAP_TITLES[type] ?? type} gaps (${gaps.length})`}>
           <ul className="space-y-2 text-sm">
-            {gaps.map((g) => (
-              <li key={g.id}>
-                <span className="font-medium">{g.name}</span><BasisTag basis={g.basis} /> <Confidence value={g.confidence} /> <EvidenceRefs ids={g.evidence_ids} />
-                <div className="text-slate-600">{g.description}</div>
-              </li>
-            ))}
+            {gaps.map((g) => {
+              const o = byGap.get(g.id);
+              return (
+                <li key={g.id}>
+                  <span className="font-medium">{g.name}</span><BasisTag basis={g.basis} /> <Confidence value={g.confidence} />{" "}
+                  {o && <><Badge value={o.priority} /> <span className="text-xs text-slate-500">{o.business_category}</span></>}{" "}
+                  <EvidenceRefs ids={g.evidence_ids} />
+                  <div className="text-slate-600">{g.description}</div>
+                  {o?.attributes && (
+                    <div className="text-xs text-slate-500">
+                      relevance {o.attributes.business_relevance} · customer value {o.attributes.customer_value} · revenue {o.attributes.revenue_impact} ·
+                      efficiency {o.attributes.efficiency_impact} · complexity {o.attributes.complexity}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Card>
       ))}
@@ -759,17 +778,19 @@ function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean 
       <Card title="Scored opportunities">
         <table className="w-full text-sm">
           <thead className="text-left text-slate-500">
-            <tr><th className="py-1 pr-2">#</th><th className="pr-2">Opportunity</th><th className="pr-2">Business opportunity</th><th className="px-2">AI</th><th className="px-2">Complexity</th><th className="px-2">Score</th></tr>
+            <tr><th className="py-1 pr-2">#</th><th className="pr-2">Opportunity</th><th className="pr-2">Priority</th><th className="pr-2">Business opportunity</th><th className="px-2">AI</th><th className="px-2">Complexity</th><th className="px-2">Score</th></tr>
           </thead>
           <tbody>
             {opps.map((o, i) => (
               <tr key={o.gap_id} className="border-t align-top">
                 <td className="py-1.5">{i + 1}</td>
-                <td className="font-medium">{o.name}</td>
+                <td className="font-medium">{o.name}<div className="text-xs font-normal text-slate-500">{o.business_category}</div></td>
+                <td className="pr-2"><Badge value={o.priority} /></td>
                 <td>{o.business_opportunity}<BasisTag basis={o.basis} /><div className="text-xs text-slate-500">{o.revenue_opportunity}</div></td>
                 <td className="px-2 text-center">{o.factors.ai_opportunity}</td>
                 <td className="px-2 text-center">{o.factors.complexity}</td>
-                <td className="px-2" title={Object.entries(o.score.contributions).map(([k, v]) => `${k}: ${v}`).join("\n")}>
+                <td className="px-2" title={Object.entries(o.score.contributions).map(([k, v]) => `${k}: ${v}`).join("\n")
+                  + (o.score.confidence_factor ? `\nevidence confidence ${o.score.confidence} → ×${o.score.confidence_factor} on benefits` : "")}>
                   <span className="font-mono">{o.score.total}</span>
                 </td>
               </tr>
@@ -812,6 +833,76 @@ function ArchitectureCard({ arch }: { arch: any }) {
           ? ` ${arch.new_components.length} new component(s) from the roadmap are highlighted in green.` : ""}
       </p>
     </Card>
+  );
+}
+
+const LEVEL: Record<string, string> = { high: "text-emerald-700", medium: "text-sky-700", low: "text-slate-500" };
+
+function CostAiTab({ runId, enabled, prioDone }: { runId: string; enabled: boolean; prioDone: boolean }) {
+  const res = useAgent(runId, "business_process", enabled);
+  const prio = useAgent(runId, "opportunity_prioritization", prioDone);
+  const gaps = useAgent(runId, "gap_analysis", prioDone);
+  const [filter, setFilter] = useState<"all" | "ai" | "automation">("all");
+  if (!enabled) return <Pending />;
+  const d = res.data?.data;
+  if (!d) return null;
+  const gapByProcess = new Map<string, string>((gaps.data?.data.gaps ?? []).filter((g: any) => g.process_id).map((g: any) => [g.process_id, g.id]));
+  const oppByGap = new Map<string, any>((prio.data?.data.opportunities ?? []).map((o: any) => [o.gap_id, o]));
+  const items: any[] = d.opportunities.filter((o: any) => filter === "all" || o[filter]);
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{d.disclaimer}</div>
+      <div className="flex gap-2 text-sm">
+        {(["all", "ai", "automation"] as const).map((f) => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`rounded-full px-3 py-1 border ${filter === f ? "bg-indigo-600 text-white border-indigo-600" : "bg-white"}`}>
+            {f === "all" ? `All (${d.opportunities.length})` : f === "ai" ? `AI (${d.ai_opportunities.length})` : `Automation (${d.automation_opportunities.length})`}
+          </button>
+        ))}
+      </div>
+      {items.length === 0 && <Card title="No opportunities"><Empty>No business process with an open improvement was observed.</Empty></Card>}
+      {items.map((o) => {
+        const s = oppByGap.get(gapByProcess.get(o.process_id) ?? "");
+        return (
+          <Card key={o.id} title={`${o.area}: ${o.name}`}
+            actions={<div className="flex items-center gap-2">
+              {s && <><Badge value={s.priority} /><span className="text-xs text-slate-500">score {s.score.total}</span></>}
+              {o.ai && <span className="text-xs rounded bg-violet-100 text-violet-800 px-1.5">AI</span>}
+              {o.automation && <span className="text-xs rounded bg-cyan-100 text-cyan-800 px-1.5">Automation</span>}
+              <Confidence value={o.confidence} />
+            </div>}>
+            <div className="grid gap-4 md:grid-cols-2 text-sm">
+              <div className="space-y-2">
+                <div><div className="text-xs font-semibold text-slate-500">Observed (public evidence)</div>
+                  <ul className="list-disc ml-5">{o.observed.map((x: string) => <li key={x}>{x}</li>)}</ul>
+                  <EvidenceRefs ids={o.evidence_ids} /></div>
+                <div><div className="text-xs font-semibold text-slate-500">Likely current process <span className="text-amber-700">(assumption)</span></div>{o.current_process}</div>
+                <div><div className="text-xs font-semibold text-slate-500">Business problem <span className="text-amber-700">(assumption)</span></div>{o.business_problem}</div>
+              </div>
+              <div className="space-y-2">
+                <div><div className="text-xs font-semibold text-slate-500">Proposed solution</div>{o.proposed_solution}<BasisTag basis="estimate" /></div>
+                <div><div className="text-xs font-semibold text-slate-500">How it works</div>{o.how_it_works}</div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {[["Resource saving", o.cost_reduction], ["Processing time", o.time_reduction], ["Errors / rework", o.error_reduction]].map(([l, v]) => (
+                    <div key={l} className="rounded border p-1.5"><div className="text-slate-500">{l}</div><div className={`font-medium capitalize ${LEVEL[v]}`}>{v}</div></div>
+                  ))}
+                </div>
+                <div className="text-xs text-slate-600">Productivity: <b>{o.productivity}</b> · Complexity: <b>{o.complexity}/5</b>
+                  {o.missing_capabilities.length > 0 && <> · Needs: {o.missing_capabilities.join(", ")}</>}</div>
+                <div><div className="text-xs font-semibold text-slate-500">Customer impact</div>{o.customer_impact}</div>
+                <div><div className="text-xs font-semibold text-slate-500">Revenue opportunity</div>{o.revenue_opportunity}</div>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+      {d.in_place.length > 0 && (
+        <Card title="Already in place">
+          <p className="text-sm text-slate-600">{d.in_place.map((p: any) => p.name).join(" · ")}</p>
+        </Card>
+      )}
+      <p className="text-xs text-slate-500">{d.method}</p>
+    </div>
   );
 }
 

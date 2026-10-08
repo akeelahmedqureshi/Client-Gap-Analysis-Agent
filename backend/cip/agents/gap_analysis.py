@@ -27,9 +27,9 @@ TECH_GAP_RULES: list[tuple[str, str, str, str]] = [
 
 class GapAnalysisAgent(Agent):
     name = "gap_analysis"
-    description = "Identify missing, partial, technology, UX and AI gaps"
+    description = "Identify missing, partial, technology, UX, AI, pricing, security and process gaps"
     after = ("feature_comparison", "code_analysis", "pricing_analysis", "security_review", "app_store",
-             "ux_review")
+             "ux_review", "business_process")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         ledger = ctx.ledger
@@ -150,6 +150,13 @@ class GapAnalysisAgent(Agent):
                 same.competitors_with = list(dict.fromkeys(same.competitors_with + g.competitors_with))
             else:
                 gaps.append(g)
+        # Cost-reduction / automation opportunities in business processes (assumption-based) ----------
+        for o in ctx.data("business_process").get("opportunities", []):
+            gaps.append(Gap(
+                name=o["name"], category="Operations", gap_type=GapType.PROCESS, process_id=o["process_id"],
+                description=f"{o['area']}: {o['business_problem']} Improvement: {o['proposed_solution']} "
+                            "(The current process and its inefficiency are assumptions.)",
+                evidence_ids=o["evidence_ids"][:6], confidence=o["confidence"], basis=Basis.ESTIMATE))
         if apps.get("client_has_app") and "ux.mobile_app" in ctx.taxonomy:
             # A verified store listing proves the client has an app, whatever the website text says.
             gaps = [g for g in gaps if g.feature_id != "ux.mobile_app"]
