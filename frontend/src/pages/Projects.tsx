@@ -16,7 +16,14 @@ export default function ProjectsPage() {
     queryKey: ["projects", clientId],
     queryFn: () => api.get<Project[]>(`/api/projects${clientId ? `?client_id=${clientId}` : ""}`),
   });
-  const [starting, setStarting] = useState<Project | null>(null);
+  const [starting, setStarting] = useState<Project[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
   const [editingAccess, setEditingAccess] = useState<Project | null>(null);
   const [editingRepos, setEditingRepos] = useState<Project | null>(null);
   const [monitoring, setMonitoring] = useState<Project | null>(null);
@@ -27,18 +34,32 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Projects</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Projects</h1>
+        {me.data?.role !== "viewer" && selected.size > 0 && (
+          <Button onClick={() => setStarting((projects.data ?? []).filter((p) => selected.has(p.id)))}>
+            Analyze selected ({selected.size})
+          </Button>
+        )}
+      </div>
       <Card>
         {projects.data?.length ? (
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500">
-              <tr><th className="py-1">Project</th><th>Client</th><th>Technology</th><th>Sources</th><th>Latest analysis</th><th /></tr>
+              <tr>
+                <th className="py-1 w-6">
+                  <input type="checkbox" aria-label="Select all projects"
+                    checked={!!projects.data?.length && selected.size === projects.data.length}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(projects.data!.map((p) => p.id)) : new Set())} />
+                </th>
+                <th className="py-1">Project</th><th>Client</th><th>Technology</th><th>Sources</th><th>Latest analysis</th><th /></tr>
             </thead>
             <tbody>
               {projects.data.map((p) => {
                 const s = p.record.sources;
                 return (
                   <tr key={p.id} className="border-t align-top">
+                    <td className="py-2"><input type="checkbox" aria-label={`Select ${p.name}`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} /></td>
                     <td className="py-2">
                       <div className="font-medium">{p.name}{p.restricted && <span className="ml-2 text-xs rounded bg-slate-200 px-1.5 py-0.5" title="Visible only to admins and members">🔒 restricted</span>}</div>
                       <div className="text-xs text-slate-500 max-w-md">{p.description}</div>
@@ -63,7 +84,7 @@ export default function ProjectsPage() {
                       {me.data?.role !== "viewer" && <Button variant="secondary" onClick={() => setEditingRepos(p)}>Repos</Button>}
                       {isAdmin && <Button variant="secondary" onClick={() => setEditingAccess(p)}>Access</Button>}
                       {me.data?.role !== "viewer" && <Button variant="secondary" onClick={() => setMonitoring(p)}>Monitor</Button>}
-                      {me.data?.role !== "viewer" && <Button onClick={() => setStarting(p)}>Analyze</Button>}
+                      {me.data?.role !== "viewer" && <Button onClick={() => setStarting([p])}>Analyze</Button>}
                     </td>
                   </tr>
                 );
@@ -74,7 +95,7 @@ export default function ProjectsPage() {
           <Empty>No projects. <Link to="/upload" className="underline">Upload a CSV</Link>.</Empty>
         )}
       </Card>
-      {starting && <StartRunDialog project={starting} onClose={() => setStarting(null)} />}
+      {starting && <StartRunDialog projects={starting} onClose={() => setStarting(null)} />}
       {editingAccess && <ProjectAccessDialog project={editingAccess} onClose={() => setEditingAccess(null)} />}
       {editingRepos && <RepositoriesDialog project={editingRepos} onClose={() => setEditingRepos(null)} />}
       {monitoring && <MonitorDialog project={monitoring} onClose={() => setMonitoring(null)} />}

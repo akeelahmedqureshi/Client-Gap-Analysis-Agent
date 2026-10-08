@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 88 |
-| 🟡 Partially completed | 19 |
-| ❌ Incomplete | 21 |
+| ✅ Completed | 94 |
+| 🟡 Partially completed | 17 |
+| ❌ Incomplete | 17 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -48,7 +48,7 @@ _Baseline audit: 2026-10-08._
 | 17 | Preview with per-row errors | ✅ | |
 | 18 | Select all or individual rows | ✅ | |
 | 19 | Invalid rows blocked from import | ✅ | |
-| 20 | One analysis job per selected client | 🟡 | Runs start one project at a time; no "analyse all selected" |
+| 20 | One analysis job per selected client | ✅ | Projects → select → *Analyze selected*; `/api/runs/bulk` |
 | 21 | Check for unreachable, redirecting or parked domains | ❌ | |
 
 ## 3. Client business and product analysis (6)
@@ -181,11 +181,11 @@ _Baseline audit: 2026-10-08._
 | 90 | Runs survive restarts | ✅ | |
 | 91 | LLM output checked against a schema, with a retry | ✅ | |
 | 92 | Approval gates | ✅ | |
-| 93 | Full status model (completed with warnings, partial, needs review, cancelled) | 🟡 | Completeness states added; cancel not yet |
-| 94 | Cancel a run | ❌ | |
-| 95 | Pause and resume | ❌ | |
-| 96 | Rerun selected stages; regenerate the report or email | ❌ | |
-| 97 | Duplicate-run prevention | ❌ | |
+| 93 | Full status model (completed with warnings, partial, needs review, cancelled) | ✅ | Run: queued, running, awaiting approval, paused, cancelled, completed (with errors), failed; analysis: complete, with warnings, partial, needs review |
+| 94 | Cancel a run | ✅ | |
+| 95 | Pause and resume | ✅ | Pauses between agent waves |
+| 96 | Rerun selected stages; regenerate the report or email | ✅ | New run version reusing unaffected stages |
+| 97 | Duplicate-run prevention | ✅ | One active run per project |
 | 98 | Token and cost budgets | ❌ | |
 
 ## 15. Human review (2)

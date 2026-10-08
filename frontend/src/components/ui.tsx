@@ -37,6 +37,8 @@ const STATUS_STYLES: Record<string, string> = {
   awaiting_approval: "bg-amber-100 text-amber-800",
   completed_with_errors: "bg-orange-100 text-orange-800",
   skipped: "bg-slate-100 text-slate-500",
+  paused: "bg-amber-100 text-amber-800",
+  cancelled: "bg-slate-200 text-slate-600",
   missing: "bg-rose-100 text-rose-800",
   failed: "bg-rose-100 text-rose-800",
   rejected: "bg-rose-100 text-rose-800",

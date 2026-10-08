@@ -82,6 +82,12 @@ class DbRunStore:
                     s.add(report)
             await s.commit()
 
+    async def control(self, run_id: str) -> str | None:
+        """'cancelled' or 'paused' when a person asked the run to stop (see api/routes/runs.py)."""
+        async with db.sessionmaker()() as s:
+            status = (await s.execute(select(AnalysisRun.status).where(AnalysisRun.id == run_id))).scalar_one_or_none()
+        return status if status in ("cancelled", "paused") else None
+
     async def save_evidence(self, run_id: str, evidence: list[Evidence]) -> None:
         # Parallel agents share one ledger: decide what is new only while holding the lock.
         async with self._lock:
@@ -160,8 +166,16 @@ class AnalysisRunner:
     def __init__(self) -> None:
         self._tasks: dict[str, asyncio.Task] = {}
         self._rerun: set[str] = set()
+        self._slots: asyncio.Semaphore | None = None
         # Optional hook to customise the run context (e.g. inject connectors in tests).
         self.context_hook = None
+
+    def cancel(self, run_id: str) -> None:
+        """Stop an in-process run immediately (Celery runs stop at their next wave of agents)."""
+        self._rerun.discard(run_id)
+        task = self._tasks.get(run_id)
+        if task and not task.done():
+            task.cancel()
 
     def is_running(self, run_id: str) -> bool:
         t = self._tasks.get(run_id)
@@ -244,6 +258,15 @@ class AnalysisRunner:
         return ids
 
     async def execute(self, run_id: str) -> str:
+        # Inline mode: at most CIP_MAX_CONCURRENT_RUNS analyses at once; the rest wait as "queued".
+        if self.mode != "celery":
+            if self._slots is None:
+                self._slots = asyncio.Semaphore(max(1, get_settings().max_concurrent_runs))
+            async with self._slots:
+                return await self._execute(run_id)
+        return await self._execute(run_id)
+
+    async def _execute(self, run_id: str) -> str:
         async with db.sessionmaker()() as s:
             run = await s.get(AnalysisRun, run_id)
             project = await s.get(Project, run.project_id)

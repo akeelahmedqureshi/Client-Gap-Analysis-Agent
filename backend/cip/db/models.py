@@ -162,6 +162,9 @@ class AnalysisRun(Base):
     # What changed since the previous completed run of the project (see services/changes.py).
     baseline_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     changes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Partial re-run (a new version of an earlier run): which run it was derived from and what was re-run.
+    parent_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    rerun_stages: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 

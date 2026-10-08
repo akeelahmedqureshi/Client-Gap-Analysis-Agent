@@ -128,9 +128,14 @@ class Orchestrator:
             statuses.setdefault(name, AgentStatus.PENDING)
             if statuses[name] in (AgentStatus.RUNNING, AgentStatus.AWAITING_APPROVAL):
                 statuses[name] = AgentStatus.PENDING  # resumed after a crash or an approval
+        if control := await self._control(ctx.run_id):
+            return await self._stop(ctx, statuses, control)
         await self.store.set_run_status(ctx.run_id, "running")
 
         while True:
+            # Cancel / pause requests are honoured between waves: running agents finish their step first.
+            if control := await self._control(ctx.run_id):
+                return await self._stop(ctx, statuses, control)
             ready: list[Agent] = []
             blocked_on_approval = False
             for name, agent in self.agents.items():
@@ -174,6 +179,18 @@ class Orchestrator:
                 return status
 
             await asyncio.gather(*(self._execute(ctx, a, statuses) for a in ready))
+
+    async def _control(self, run_id: str) -> str | None:
+        check = getattr(self.store, "control", None)
+        return await check(run_id) if check else None
+
+    async def _stop(self, ctx: RunContext, statuses: dict[str, AgentStatus], control: str) -> str:
+        if control == "cancelled":
+            for n, s in statuses.items():
+                if s in (AgentStatus.PENDING, AgentStatus.AWAITING_APPROVAL):
+                    statuses[n] = AgentStatus.SKIPPED
+                    await self.store.set_agent_status(ctx.run_id, n, AgentStatus.SKIPPED, error="run cancelled")
+        return control  # the run keeps its cancelled / paused status
 
     async def _execute(self, ctx: RunContext, agent: Agent, statuses: dict[str, AgentStatus]) -> None:
         statuses[agent.name] = AgentStatus.RUNNING

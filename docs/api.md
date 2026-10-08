@@ -58,7 +58,19 @@ reset, role change or deactivation invalidates existing sessions.
 | GET | `/api/runs/{id}/report.md` | viewer | Markdown download |
 | GET | `/api/runs/{id}/report.pdf` | viewer | Client-ready PDF (A4, page numbers), rendered offline in headless Chromium. Returns 503 if no browser is installed. Each export is audited |
 
-Run statuses: `queued`, `running`, `awaiting_approval`, `completed`, `completed_with_errors`, `failed`.
+Lifecycle (BRS 26.2–26.3):
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| POST | `/api/runs` | analyst | 409 when the project already has an active (queued, running, waiting or paused) run; the message names that run |
+| POST | `/api/runs/bulk` | analyst | `{project_ids[] (≤100), approve_gates?, scoring_weights?}` → `{runs[], skipped[{project_id, reason, run_id?}]}`: one independent run per project; projects with an active run are skipped. In-process runs execute at most `CIP_MAX_CONCURRENT_RUNS` (3) at a time; the rest wait as `queued` |
+| POST | `/api/runs/{id}/cancel` | analyst | Stops the run: remaining stages are skipped (completed ones kept). In-process runs stop immediately, Celery runs before their next wave |
+| POST | `/api/runs/{id}/pause` | analyst | Stops after the agents already running finish their step; `/resume` continues |
+| POST | `/api/runs/{id}/resume` | analyst | Continues a paused or cancelled run and retries failed or skipped stages |
+| POST | `/api/runs/{id}/rerun` | analyst | `{stages: [industry\|competitors\|opportunities\|sales\|outreach\|report\|<agent>]}` → a **new run version** (`parent_run_id`, `rerun_stages`) that reuses every other completed stage, its evidence and approval decisions, and re-runs the selected stages plus everything downstream. The earlier run is unchanged |
+| GET | `/api/runs/rerun-stages` | viewer | The named refresh presets and their agents |
+
+Run statuses: `queued`, `running`, `awaiting_approval`, `paused`, `cancelled`, `completed`, `completed_with_errors`, `failed`.
 
 Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`, `skipped`.
 

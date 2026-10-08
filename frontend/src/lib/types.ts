@@ -115,6 +115,8 @@ export interface Run {
   approvals: Approval[];
   has_report: boolean;
   monitor_id: string | null;
+  parent_run_id: string | null;
+  rerun_stages: string[] | null;
 }
 
 export interface Evidence {

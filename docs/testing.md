@@ -188,6 +188,12 @@ Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC
       reproducibility) and C (evidence). Re-run with external research rejected: the report opens with
       *Analysis status: Partially complete* and lists the stages that did not complete.
 
+- [ ] **Run controls**: on a finished run choose **Refresh… → Competitor research**: a new run opens,
+      marked *version of run_…*; the Pipeline tab shows the earlier stages reused (same start times) and
+      competitor research onwards re-run. Start an analysis of a project that is already running: the
+      dialog offers to open the existing run. **Cancel** a waiting run: the remaining stages are skipped.
+- [ ] **Projects**: tick several projects → **Analyze selected**: one run per project.
+
 ### 3.4 Knowledge base and capability matching
 
 - [ ] **Knowledge Base → Add record**: type *Reusable solution*, title *Workflow automation platform*,

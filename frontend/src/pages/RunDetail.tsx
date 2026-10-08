@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Evidence, KnowledgeMatch, Run, RunChanges, User } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
@@ -22,6 +22,7 @@ const ACTIVE = new Set(["queued", "running"]);
 
 export default function RunDetailPage() {
   const { runId = "" } = useParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("Pipeline");
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
@@ -52,6 +53,25 @@ export default function RunDetailPage() {
     }
   }
 
+  async function control(action: "cancel" | "pause") {
+    if (action === "cancel" && !confirm("Cancel this analysis? Completed stages are kept; the rest is skipped.")) return;
+    try {
+      await api.post(`/api/runs/${runId}/${action}`);
+      qc.invalidateQueries({ queryKey: ["run", runId] });
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function refresh(stage: string) {
+    try {
+      const next = await api.post<Run>(`/api/runs/${runId}/rerun`, { stages: [stage] });
+      navigate(`/runs/${next.run_id}`);
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   async function resume() {
     try {
       await api.post(`/api/runs/${runId}/resume`);
@@ -71,12 +91,33 @@ export default function RunDetailPage() {
             <div className="text-sm text-slate-500 font-mono">
               {r.run_id}
               {r.monitor_id && <span className="ml-2 font-sans rounded bg-indigo-50 text-indigo-700 px-1.5 py-0.5 text-xs">⟳ scheduled</span>}
+              {r.parent_run_id && (
+                <span className="ml-2 font-sans text-xs">
+                  version of <Link className="underline" to={`/runs/${r.parent_run_id}`}>{r.parent_run_id}</Link>
+                  {r.rerun_stages?.length ? ` · refreshed ${r.rerun_stages.join(", ").replaceAll("_", " ")}` : ""}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge value={r.status} />
             {done("quality_assurance") && <QualityBadge runId={runId} />}
             {canAct && ["failed", "completed_with_errors"].includes(r.status) && <Button variant="secondary" onClick={resume}>Retry failed agents</Button>}
+            {canAct && ["paused", "cancelled"].includes(r.status) && <Button variant="secondary" onClick={resume}>Resume</Button>}
+            {canAct && ["queued", "running"].includes(r.status) && <Button variant="secondary" onClick={() => control("pause")}>Pause</Button>}
+            {canAct && ["queued", "running", "awaiting_approval", "paused"].includes(r.status) && <Button variant="danger" onClick={() => control("cancel")}>Cancel</Button>}
+            {canAct && ["completed", "completed_with_errors", "failed", "cancelled"].includes(r.status) && (
+              <select className="border rounded-lg px-2 py-1.5 text-sm" value="" onChange={(e) => e.target.value && refresh(e.target.value)}
+                title="Re-run selected stages as a new version; everything else is reused">
+                <option value="">Refresh…</option>
+                <option value="industry">Industry research</option>
+                <option value="competitors">Competitor research</option>
+                <option value="opportunities">AI, automation & cost opportunities</option>
+                <option value="sales">Sales summary & outreach</option>
+                <option value="outreach">Outreach email</option>
+                <option value="report">Report</option>
+              </select>
+            )}
             {r.has_report && (
               <>
                 <Button onClick={() => api.download(`/api/runs/${runId}/report.pdf`, `report-${runId}.pdf`).catch(setError)}>

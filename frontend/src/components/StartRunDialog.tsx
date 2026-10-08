@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { Link, useNavigate } from "react-router-dom";
+import { ApiError, api } from "../lib/api";
 import type { ApprovalPreview, Project, Run } from "../lib/types";
 import { Button, ErrorText } from "./ui";
 
@@ -9,8 +9,18 @@ interface ScoringConfig {
   weights: Record<string, number>;
 }
 
-export default function StartRunDialog({ project, onClose }: { project: Project; onClose: () => void }) {
+interface BulkResult {
+  runs: Run[];
+  skipped: { project_id: string; reason: string; run_id?: string }[];
+}
+
+/** Start an analysis of one project, or one independent analysis per selected project. */
+export default function StartRunDialog({ projects, onClose }: { projects: Project[]; onClose: () => void }) {
   const navigate = useNavigate();
+  const project = projects[0];
+  const bulk = projects.length > 1;
+  const [existing, setExisting] = useState<string | null>(null);
+  const [result, setResult] = useState<BulkResult | null>(null);
   const preview = useQuery({
     queryKey: ["approval-preview", project.id],
     queryFn: () => api.get<ApprovalPreview[]>(`/api/runs/approval-preview?project_id=${project.id}`),
@@ -31,7 +41,15 @@ export default function StartRunDialog({ project, onClose }: { project: Project;
 
   async function start() {
     setBusy(true);
+    setError(null);
     try {
+      if (bulk) {
+        setResult(await api.post<BulkResult>("/api/runs/bulk", {
+          project_ids: projects.map((p) => p.id), approve_gates: [...approved], scoring_weights: weights,
+        }));
+        setBusy(false);
+        return;
+      }
       const run = await api.post<Run>("/api/runs", {
         project_id: project.id,
         approve_gates: [...approved],
@@ -39,7 +57,10 @@ export default function StartRunDialog({ project, onClose }: { project: Project;
       });
       navigate(`/runs/${run.run_id}`);
     } catch (e) {
-      setError(e);
+      // An analysis of this project is already in progress: offer to open it instead.
+      const id = e instanceof ApiError && e.status === 409 ? /run_[a-z0-9]+/.exec(e.message)?.[0] : undefined;
+      if (id) setExisting(id);
+      else setError(e);
       setBusy(false);
     }
   }
@@ -48,9 +69,10 @@ export default function StartRunDialog({ project, onClose }: { project: Project;
     <div className="fixed inset-0 z-10 bg-black/40 grid place-items-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b">
-          <h2 className="text-lg font-semibold">Start analysis: {project.name}</h2>
+          <h2 className="text-lg font-semibold">{bulk ? `Start ${projects.length} analyses` : `Start analysis: ${project.name}`}</h2>
           <p className="text-sm text-slate-500">
             Review what the agents will access. Steps you don't pre-approve will pause the run and wait for approval.
+            {bulk && " Each project gets its own independent analysis; the targets below are for the first project."}
           </p>
         </div>
         <div className="p-5 space-y-3">
@@ -84,11 +106,31 @@ export default function StartRunDialog({ project, onClose }: { project: Project;
               ))}
             </div>
           )}
+          {existing && (
+            <p className="text-sm rounded border border-amber-300 bg-amber-50 p-2">
+              An analysis of this project is already in progress. <Link className="underline" to={`/runs/${existing}`}>Open it</Link>.
+            </p>
+          )}
+          {result && (
+            <div className="text-sm rounded border p-2 space-y-1">
+              <div>Started {result.runs.length} analysis(es).</div>
+              {result.skipped.map((s) => {
+                const name = projects.find((p) => p.id === s.project_id)?.name ?? s.project_id;
+                return <div key={s.project_id} className="text-slate-600">Skipped {name}: {s.reason}{s.run_id && <> — <Link className="underline" to={`/runs/${s.run_id}`}>open</Link></>}</div>;
+              })}
+            </div>
+          )}
           <ErrorText error={error} />
         </div>
         <div className="px-5 py-3 border-t flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={start} disabled={busy}>Start analysis</Button>
+          {result ? (
+            <Button onClick={() => navigate("/runs")}>View analysis runs</Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={onClose}>Cancel</Button>
+              <Button onClick={start} disabled={busy}>{bulk ? `Start ${projects.length} analyses` : "Start analysis"}</Button>
+            </>
+          )}
         </div>
       </div>
     </div>
