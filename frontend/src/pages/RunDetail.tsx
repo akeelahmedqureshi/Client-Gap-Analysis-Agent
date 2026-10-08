@@ -130,7 +130,7 @@ export default function RunDetailPage() {
             {canAct && ["queued", "running"].includes(r.status) && <Button variant="secondary" onClick={() => control("pause")}>Pause</Button>}
             {canAct && ["queued", "running", "awaiting_approval", "paused"].includes(r.status) && <Button variant="danger" onClick={() => control("cancel")}>Cancel</Button>}
             {canAct && ["completed", "completed_with_errors", "failed", "cancelled"].includes(r.status) && (
-              <select className="border rounded-lg px-2 py-1.5 text-sm" value="" onChange={(e) => e.target.value && refresh(e.target.value)}
+              <select className="border rounded-lg px-2 py-1.5 text-sm w-32" value="" onChange={(e) => e.target.value && refresh(e.target.value)}
                 title="Re-run selected stages as a new version; everything else is reused">
                 <option value="">Refresh…</option>
                 <option value="industry">Industry research</option>
@@ -142,7 +142,7 @@ export default function RunDetailPage() {
               </select>
             )}
             {canExport && FINISHED.includes(r.status) && (
-              <select className="border rounded-lg px-2 py-1.5 text-sm" value="" title="Download structured data"
+              <select className="border rounded-lg px-2 py-1.5 text-sm w-32" value="" title="Download structured data"
                 onChange={(e) => e.target.value && api.download(`/api/runs/${runId}/export/${e.target.value}`, `${e.target.value.replace(".", `-${runId}.`)}`).catch(setError)}>
                 <option value="">Export…</option>
                 {EXPORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -226,6 +226,8 @@ function usageText(u: Usage | null | undefined): string {
   if (u.llm_calls) parts.push(`${fmt(u.total_tokens)} LLM tokens (${u.llm_calls} call${u.llm_calls === 1 ? "" : "s"})`);
   if (u.web_requests) parts.push(`${fmt(u.web_requests)} web requests`);
   if (u.search_queries) parts.push(`${u.search_queries} searches`);
+  if (u.cache_hits) parts.push(`${fmt(u.cache_hits)} cached page${u.cache_hits === 1 ? "" : "s"}`);
+  if (u.web_failures) parts.push(`${u.web_failures} failed fetch${u.web_failures === 1 ? "" : "es"}`);
   return parts.join(" · ");
 }
 
@@ -251,6 +253,16 @@ function Pipeline({ run }: { run: Run }) {
               <div className="text-slate-500">{a.description}</div>
               {a.status === "completed" && (
                 <div className="text-xs text-slate-400">{a.finding_count} findings · {a.evidence_count} evidence items{a.attempts > 1 ? ` · ${a.attempts} attempts` : ""}{a.usage ? ` · ${usageText(a.usage)}` : ""}</div>
+              )}
+              {!!a.usage?.failures?.length && (
+                <details className="text-xs text-slate-500">
+                  <summary className="cursor-pointer">Fetch failures ({a.usage.failures.length})</summary>
+                  <ul className="ml-4 list-disc">
+                    {a.usage.failures.map((f, j) => (
+                      <li key={j} className="break-all">{f.reason.replaceAll("_", " ")}{f.attempts > 1 ? ` after ${f.attempts} attempts` : ""} — {f.url}</li>
+                    ))}
+                  </ul>
+                </details>
               )}
               {a.error && <div className="text-xs text-rose-700">{a.error}</div>}
             </div>
@@ -336,14 +348,33 @@ function ChangesTab({ runId, status }: { runId: string; status: string }) {
   );
 }
 
+const DOMAIN_STATUS: Record<string, string> = {
+  ok: "reachable", redirected: "redirects to another domain", parked: "parked / for sale", unreachable: "unreachable",
+  blocked: "blocked (robots.txt or non-public address)",
+};
+
 function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const res = useAgent(runId, "client_research", enabled);
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
   const p = d.profile;
+  const check = d.domain_check;
+  const pdfs = [...(d.pages ?? []), ...(d.project_pages ?? [])].filter((x: any) => x.kind === "pdf");
+  const cachedPages = [...(d.pages ?? []), ...(d.project_pages ?? [])].filter((x: any) => x.fetched_at);
   return (
     <div className="grid lg:grid-cols-2 gap-4">
+      {check && check.status !== "ok" && (
+        <div className="lg:col-span-2 border border-amber-300 bg-amber-50 rounded-xl p-3 text-sm text-amber-900">
+          Website check: <b>{DOMAIN_STATUS[check.status] ?? check.status}</b>{check.detail && ` — ${check.detail}`}
+        </div>
+      )}
+      {(pdfs.length > 0 || cachedPages.length > 0) && (
+        <div className="lg:col-span-2 text-xs text-slate-500">
+          {pdfs.length > 0 && <>Read {pdfs.length} PDF document{pdfs.length === 1 ? "" : "s"}: {pdfs.map((x: any) => x.title || x.url).join(", ")}. </>}
+          {cachedPages.length > 0 && <>{cachedPages.length} page(s) came from the research cache (fetched {new Date(Math.min(...cachedPages.map((x: any) => Date.parse(x.fetched_at)))).toLocaleString()} or later).</>}
+        </div>
+      )}
       <Card title={p.name}>
         <p className="text-sm">{p.description ?? <Empty>No public description found.</Empty>} <EvidenceRefs ids={p.evidence_ids} /></p>
         <CompanyFacts profile={p} />

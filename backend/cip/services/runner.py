@@ -12,6 +12,7 @@ from cip.agents.base import ApprovalRequest, RunContext
 from cip.agents.orchestrator import Orchestrator
 from cip.config import get_settings
 from cip.connectors.research.search import get_search_provider
+from cip.connectors.research.cache import DbPageCache
 from cip.connectors.research.web import WebFetcher
 from cip.core.evidence import EvidenceLedger
 from cip.core.llm import get_llm
@@ -153,7 +154,10 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
     ctx = RunContext(
         run_id=run.id, project_id=project.id, record=NormalizedRecord.model_validate(project.record),
         ledger=ledger, outputs=outputs, approvals=granted, llm=get_llm(settings), settings=settings,
-        scoring=scoring, fetcher=WebFetcher(), search=get_search_provider(settings),
+        scoring=scoring, search=get_search_provider(settings),
+        # Pages are shared across the organization's runs; a partial re-run ("Refresh …") fetches fresh.
+        fetcher=WebFetcher(cache=DbPageCache(run.org_id, settings.research_cache_ttl_hours)
+                           if settings.research_cache_ttl_hours > 0 else None, refresh=bool(run.parent_run_id)),
         token_resolver=make_token_resolver(run.org_id), knowledge=knowledge, review=review,
     )
     # Usage of stages completed in an earlier pass counts toward this run's budgets.

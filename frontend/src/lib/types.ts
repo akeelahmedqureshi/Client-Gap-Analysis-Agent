@@ -70,6 +70,7 @@ export interface NormalizedRecord {
   sources: { github: string[]; gitlab: string[]; linkedin: string[]; social: string[]; websites: string[] };
   issues: string[];
   duplicate_of_row: number | null;
+  domain_check?: DomainCheck | null;
 }
 
 export interface UploadResult {
@@ -145,7 +146,18 @@ export interface Usage {
   cost_usd: number;
   web_requests: number;
   search_queries: number;
+  cache_hits?: number;
+  web_failures?: number;
+  failures?: { url: string; reason: string; attempts: number }[];
   models: Record<string, number>;
+}
+
+export interface DomainCheck {
+  url: string;
+  status: "ok" | "redirected" | "parked" | "unreachable" | "blocked";
+  final_url: string | null;
+  http_status: number | null;
+  detail: string;
 }
 
 export interface Run {

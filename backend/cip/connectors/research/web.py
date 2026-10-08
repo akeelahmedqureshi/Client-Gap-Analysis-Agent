@@ -10,13 +10,15 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import ipaddress
 import json
 import logging
 import re
 import socket
-from contextlib import nullcontext
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
+from datetime import datetime
 from cip.core import usage
 from cip.core.urls import is_valid_http_url, urldefrag, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
@@ -26,6 +28,7 @@ from bs4 import BeautifulSoup
 
 from cip.config import get_settings
 from cip.connectors.research.browser import BrowserRenderer, looks_script_rendered
+from cip.connectors.research.cache import CachedPage, PageCache
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +41,11 @@ PRIORITY_HINTS = tuple(p.strip("/") for p in PRIORITY_PATHS if p != "/")
 SKIP_EXTENSIONS = (".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".zip", ".mp4", ".mp3",
                    ".css", ".js", ".ico", ".xml", ".json", ".woff", ".woff2", ".dmg", ".exe")
 MAX_BODY_BYTES = 3_000_000
+RETRY_STATUS = {429, 500, 502, 503, 504}
+QUIET_STATUS = {404, 410}  # a page that doesn't exist is an answer, not a fetch failure
+# PDFs worth reading when found on a site (brochures, datasheets, pricing sheets, case studies…).
+PDF_HINTS = ("pric", "brochure", "datasheet", "data-sheet", "product", "feature", "overview", "case", "whitepaper",
+             "white-paper", "security", "compliance", "solution", "catalog", "spec")
 
 
 class UnsafeURL(ValueError):
@@ -61,6 +69,9 @@ class Page:
     rendered: bool = False  # True when the content came from the headless browser
     structured_data: list[dict] = field(default_factory=list)  # schema.org JSON-LD objects
     link_texts: list[tuple[str, str]] = field(default_factory=list)  # (same-site url, anchor text)
+    content_type: str = "html"  # html | pdf
+    cached: bool = False  # served from the research cache
+    fetched_at: datetime | None = None  # set for cached pages: when the page was really fetched
 
 
 def normalize_url(url: str) -> str:
@@ -198,12 +209,82 @@ async def _meter_request(request: httpx.Request) -> None:
     try:
         meter.record_web()
     except usage.BudgetExhausted as exc:
-        raise httpx.RequestError(str(exc), request=request) from exc
+        raise BudgetRequestError(str(exc), request=request) from exc
+
+
+class BudgetRequestError(httpx.RequestError):
+    """The run's web request budget is spent: never retried."""
+
+
+class FetchFailed(Exception):
+    def __init__(self, reason: str, attempts: int = 1) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.attempts = attempts
+
+
+def unsafe_reason(exc: UnsafeURL) -> str:
+    text = str(exc)
+    return "unresolvable" if text.startswith("Cannot resolve") else \
+        "unsupported_url" if text.startswith("Unsupported") else "blocked_address"
+
+
+def _retry_after(resp: httpx.Response) -> float | None:
+    value = resp.headers.get("retry-after", "")
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
+
+
+def extract_pdf(data: bytes, max_pages: int, max_chars: int = 200_000) -> tuple[str, str]:
+    """(title, text) of a PDF. Encrypted or malformed files yield empty text."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(data))
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception:  # noqa: BLE001
+            return "", ""
+    title = ""
+    try:
+        title = str((reader.metadata or {}).get("/Title") or "").strip()
+    except Exception:  # noqa: BLE001
+        pass
+    parts: list[str] = []
+    size = 0
+    for page in reader.pages[:max_pages]:
+        text = page.extract_text() or ""
+        parts.append(text)
+        size += len(text)
+        if size >= max_chars:
+            break
+    return title[:300], " ".join(" ".join(parts).split())[:max_chars]
+
+
+def is_pdf(url: str, content_type: str) -> bool:
+    return "pdf" in content_type.lower() or (urlparse(url).path.lower().endswith(".pdf")
+                                             and "octet-stream" in content_type.lower())
 
 
 class WebFetcher:
+    """Fetches public pages for the agents of one run.
+
+    Politeness and resilience: at most ``crawler_domain_concurrency`` requests per domain at once, spaced by
+    ``crawler_domain_delay_seconds`` on the live network, and timeouts, connection errors, 429 and 5xx are
+    retried (``crawler_retries``, exponential backoff, ``Retry-After`` honoured up to 10 s). Every fetch that
+    still fails is recorded with its reason (``failures`` and the run's usage meter); a missing page (404/410)
+    is not a failure.
+
+    With a ``cache`` (services/runner.py passes the organization's research cache) pages are reused across
+    agents and runs; ``refresh=True`` (partial re-runs) skips cache reads but still stores what it fetches.
+    ``cached_at`` maps each URL served from the cache to when it was really fetched.
+    """
+
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None, check_public: bool = True,
-                 rendering: str | None = None, renderer: BrowserRenderer | None = None) -> None:
+                 rendering: str | None = None, renderer: BrowserRenderer | None = None,
+                 cache: PageCache | None = None, refresh: bool = False) -> None:
         s = get_settings()
         self._transport = transport
         self._check_public = check_public and transport is None
@@ -213,16 +294,103 @@ class WebFetcher:
         # A mocked transport can't be seen by a real browser, so rendering defaults off for it.
         self.rendering = rendering or ("never" if transport is not None else s.browser_rendering)
         self.renderer = renderer or (BrowserRenderer(s, self._check_public) if self.rendering != "never" else None)
+        self.cache = cache
+        self.refresh = refresh
+        self.cached_at: dict[str, datetime] = {}
+        # Per agent (core/usage.py tags the running agent): URLs served from the cache, and fetched live.
+        self._cached_by: dict[str, dict[str, datetime]] = {}
+        self._live: dict[str, set[str]] = {}
+        # Run-wide: the cache date of a URL any agent read from the cache, else None (only seen live).
+        self._first: dict[str, datetime | None] = {}
+        self.failures: list[dict] = []
+        self._slots: dict[str, asyncio.Semaphore] = {}
+        self._next_at: dict[str, float] = {}
+        self._concurrency = max(1, s.crawler_domain_concurrency)
+        # Spacing and backoff only matter against real servers; mocked transports run at full speed.
+        self._delay = s.crawler_domain_delay_seconds if transport is None else 0.0
+        self._backoff = s.crawler_retry_backoff_seconds if transport is None else 0.0
+        self._retries = max(0, s.crawler_retries)
+        self._max_pdfs = s.crawler_max_pdfs
+        self._pdf_bytes = s.pdf_max_bytes
+        self._pdf_pages = s.pdf_max_pages
 
     @property
     def live(self) -> bool:
         """True when requests go to the real network (no injected transport) — a real browser can follow."""
         return self._transport is None
 
-    def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=self._timeout, follow_redirects=True, transport=self._transport,
-                                 headers={"User-Agent": self._ua, "Accept": "text/html,application/xhtml+xml"},
+    def _client(self, follow_redirects: bool = True, accept: str = "text/html,application/xhtml+xml") \
+            -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=self._timeout, follow_redirects=follow_redirects, transport=self._transport,
+                                 headers={"User-Agent": self._ua, "Accept": accept},
                                  event_hooks={"request": [_meter_request]})
+
+    # --- politeness, retries, failure states ------------------------------------------------------
+    def record_failure(self, url: str, reason: str, attempts: int = 1) -> None:
+        if len(self.failures) < 200:
+            self.failures.append({"url": url, "domain": registrable_domain(url), "reason": reason,
+                                  "attempts": attempts})
+        meter = usage.current()
+        if meter is not None:
+            meter.record_web_failure(url, reason, attempts)
+        log.info("fetch failed for %s: %s (attempts: %s)", url, reason, attempts)
+
+    def cache_date(self, url: str, agent: str | None = None) -> datetime | None:
+        """When ``url``'s content was really fetched, if ``agent`` (default: the running agent) read it only
+        from the cache."""
+        agent = usage.current_agent() if agent is None else agent
+        key = url.rstrip("/")
+        if key in self._live.get(agent, ()):
+            return None
+        if key in self._cached_by.get(agent, {}):
+            return self._cached_by[agent][key]
+        # Evidence derived from an earlier agent's pages: dated by the cached copy if the run used one.
+        return self._first.get(key)
+
+    def _mark_live(self, *urls: str) -> None:
+        keys = {u.rstrip("/") for u in urls}
+        self._live.setdefault(usage.current_agent(), set()).update(keys)
+        for k in keys:
+            self._first.setdefault(k, None)
+
+    def last_failure(self, url: str) -> dict | None:
+        return next((f for f in reversed(self.failures) if f["url"] == url), None)
+
+    @asynccontextmanager
+    async def _slot(self, url: str):
+        domain = registrable_domain(url)
+        sem = self._slots.setdefault(domain, asyncio.Semaphore(self._concurrency))
+        async with sem:
+            if self._delay:
+                now = asyncio.get_running_loop().time()
+                start = max(now, self._next_at.get(domain, 0.0))
+                self._next_at[domain] = start + self._delay
+                if start > now:
+                    await asyncio.sleep(start - now)
+            yield
+
+    async def _request(self, client: httpx.AsyncClient, method: str, url: str, **kw) -> tuple[httpx.Response, int]:
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                async with self._slot(url):
+                    resp = await client.request(method, url, **kw)
+            except BudgetRequestError as exc:
+                raise FetchFailed("budget_exhausted", attempt) from exc
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+                if attempt > self._retries:
+                    reason = "timeout" if isinstance(exc, httpx.TimeoutException) else "connection_error"
+                    raise FetchFailed(reason, attempt) from exc
+                await asyncio.sleep(self._backoff * 2 ** (attempt - 1))
+                continue
+            except httpx.HTTPError as exc:
+                raise FetchFailed(type(exc).__name__, attempt) from exc
+            if resp.status_code in RETRY_STATUS and attempt <= self._retries:
+                wait = _retry_after(resp) if self._backoff else None
+                await asyncio.sleep(min(wait, 10.0) if wait is not None else self._backoff * 2 ** (attempt - 1))
+                continue
+            return resp, attempt
 
     async def _allowed(self, client: httpx.AsyncClient, url: str) -> bool:
         p = urlparse(url)
@@ -230,103 +398,181 @@ class WebFetcher:
         if origin not in self._robots:
             rp: RobotFileParser | None = RobotFileParser()
             try:
-                resp = await client.get(origin + "/robots.txt")
+                resp, _ = await self._request(client, "GET", origin + "/robots.txt")
                 if resp.status_code == 200:
                     rp.parse(resp.text.splitlines())
                 else:
                     rp = None
-            except httpx.HTTPError:
+            except FetchFailed as exc:
+                if exc.reason == "budget_exhausted":
+                    raise
                 rp = None
             self._robots[origin] = rp
         rp = self._robots[origin]
         return True if rp is None else rp.can_fetch(self._ua, url)
 
+    # --- cache ------------------------------------------------------------------------------------
+    async def _from_cache(self, url: str) -> tuple[Page, str] | None:
+        if self.cache is None or self.refresh:
+            return None
+        hit = await self.cache.get(url)
+        if hit is None:
+            return None
+        if hit.kind == "pdf":
+            page, html = Page(url=hit.final_url, status=hit.status, title=hit.title, text=hit.body,
+                              content_type="pdf"), ""
+        else:
+            page, html = parse_html(hit.final_url, hit.status, hit.body), hit.body
+            page.rendered = hit.rendered
+        page.cached, page.fetched_at = True, hit.fetched_at
+        self.cached_at[url] = self.cached_at[hit.final_url] = hit.fetched_at
+        mine = self._cached_by.setdefault(usage.current_agent(), {})
+        mine[url.rstrip("/")] = mine[hit.final_url.rstrip("/")] = hit.fetched_at
+        for k in (url.rstrip("/"), hit.final_url.rstrip("/")):
+            if self._first.get(k) is None:  # when unsure, the older (cached) date wins: never overstate freshness
+                self._first[k] = hit.fetched_at
+        meter = usage.current()
+        if meter is not None:
+            meter.record_cache_hit()
+        return page, html
+
+    async def _store(self, url: str, page: Page, body: str) -> None:
+        if self.cache is not None:
+            await self.cache.put(CachedPage(url=url, final_url=page.url, status=page.status, kind=page.content_type,
+                                            body=body, title=page.title, rendered=page.rendered))
+
+    # --- fetching ---------------------------------------------------------------------------------
     async def fetch(self, url: str, client: httpx.AsyncClient | None = None) -> Page | None:
         got = await self.fetch_with_html(url, client)
         return got[0] if got else None
 
     async def fetch_with_html(self, url: str, client: httpx.AsyncClient | None = None) -> tuple[Page, str] | None:
-        """Like ``fetch`` but also returns the HTML the page was parsed from (rendered HTML if rendered)."""
+        """Like ``fetch`` but also returns the HTML the page was parsed from (rendered HTML if rendered).
+        PDFs come back as a text-only ``Page`` (``content_type="pdf"``) with empty HTML."""
         url = normalize_url(url)
+        cached = await self._from_cache(url)
+        if cached is not None:
+            return cached
         own = client is None
         client = client or self._client()
         try:
             if self._check_public:
                 await assert_public_url(url)
             if not await self._allowed(client, url):
-                log.info("robots.txt disallows %s", url)
+                self.record_failure(url, "robots_disallowed")
                 return None
-            resp = await client.get(url)
+            resp, attempts = await self._request(client, "GET", url)
             ctype = resp.headers.get("content-type", "")
-            if resp.status_code >= 400 or "html" not in ctype:
+            if resp.status_code >= 400:
+                if resp.status_code not in QUIET_STATUS:
+                    self.record_failure(url, f"http_{resp.status_code}", attempts)
                 return None
             if self._check_public and str(resp.url) != url:
                 await assert_public_url(str(resp.url))
+            if is_pdf(str(resp.url), ctype):
+                page = await self._pdf_page(url, resp)
+                return (page, "") if page else None
+            if "html" not in ctype:
+                return None
             body = resp.text[:MAX_BODY_BYTES]
             page = parse_html(str(resp.url), resp.status_code, body)
-            return await self._maybe_render(page, body)
-        except (httpx.HTTPError, UnsafeURL) as exc:
-            log.info("fetch failed for %s: %s", url, exc)
+            page, html = await self._maybe_render(page, body)
+            self._mark_live(url, page.url)
+            await self._store(url, page, html)
+            return page, html
+        except FetchFailed as exc:
+            self.record_failure(url, exc.reason, exc.attempts)
+            return None
+        except UnsafeURL as exc:
+            self.record_failure(url, unsafe_reason(exc))
+            return None
+        except httpx.HTTPError as exc:
+            self.record_failure(url, type(exc).__name__)
             return None
         finally:
             if own:
                 await client.aclose()
 
+    async def _pdf_page(self, url: str, resp: httpx.Response) -> Page | None:
+        if not self._max_pdfs:
+            return None
+        declared = resp.headers.get("content-length", "")
+        if (declared.isdigit() and int(declared) > self._pdf_bytes) or len(resp.content) > self._pdf_bytes:
+            self.record_failure(url, "too_large")
+            return None
+        try:
+            title, text = await asyncio.wait_for(
+                asyncio.to_thread(extract_pdf, resp.content, self._pdf_pages), timeout=30)
+        except Exception:  # noqa: BLE001 - malformed or hostile PDFs are skipped, never crash research
+            self.record_failure(url, "unreadable_pdf")
+            return None
+        if not text:
+            self.record_failure(url, "unreadable_pdf")
+            return None
+        name = urlparse(str(resp.url)).path.rsplit("/", 1)[-1]
+        page = Page(url=str(resp.url), status=resp.status_code, title=title or name, text=text, content_type="pdf")
+        self._mark_live(url, page.url)
+        await self._store(url, page, text)
+        return page
+
+    async def _simple(self, method: str, url: str, accept: str, **kw) -> httpx.Response | None:
+        try:
+            if self._check_public:
+                await assert_public_url(url)
+            async with self._client(accept=accept) as client:
+                resp, attempts = await self._request(client, method, url, **kw)
+            if resp.status_code >= 400 and resp.status_code not in QUIET_STATUS:
+                self.record_failure(url, f"http_{resp.status_code}", attempts)
+            return resp
+        except FetchFailed as exc:
+            self.record_failure(url, exc.reason, exc.attempts)
+        except UnsafeURL as exc:
+            self.record_failure(url, unsafe_reason(exc))
+        return None
+
     async def get_json(self, url: str, headers: dict | None = None) -> dict | list | None:
         """GET a public JSON API (job boards, GitHub search). Same SSRF guard; returns None on any failure."""
+        resp = await self._simple("GET", url, "application/json", headers=headers or {})
         try:
-            if self._check_public:
-                await assert_public_url(url)
-            async with self._client() as client:
-                resp = await client.get(url, headers={"Accept": "application/json", **(headers or {})})
-            if resp.status_code >= 400:
-                return None
-            return resp.json()
-        except (httpx.HTTPError, UnsafeURL, ValueError) as exc:
-            log.info("JSON fetch failed for %s: %s", url, exc)
+            return resp.json() if resp is not None and resp.status_code < 400 else None
+        except ValueError:
             return None
 
-    async def fetch_raw(self, url: str, follow_redirects: bool = True) -> tuple[int, httpx.Headers, str, str] | None:
-        """(status, headers, final_url, body) for passive security checks; SSRF-guarded, robots-aware."""
+    async def fetch_raw(self, url: str, follow_redirects: bool = True, evidence: bool = True) \
+            -> tuple[int, httpx.Headers, str, str] | None:
+        """(status, headers, final_url, body) for passive security checks; SSRF-guarded, robots-aware.
+        ``evidence=False`` for probes whose response is never cited (domain checks)."""
         try:
             if self._check_public:
                 await assert_public_url(url)
-            async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=follow_redirects,
-                                         transport=self._transport, headers={"User-Agent": self._ua},
-                                         event_hooks={"request": [_meter_request]}) as client:
+            async with self._client(follow_redirects=follow_redirects, accept="*/*") as client:
                 if not await self._allowed(client, url):
+                    self.record_failure(url, "robots_disallowed")
                     return None
-                resp = await client.get(url)
+                resp, _ = await self._request(client, "GET", url)
             if self._check_public and follow_redirects and str(resp.url) != url:
                 await assert_public_url(str(resp.url))
+            if evidence:
+                self._mark_live(url, str(resp.url))
             return resp.status_code, resp.headers, str(resp.url), resp.text[:20_000]
-        except (httpx.HTTPError, UnsafeURL) as exc:
-            log.info("raw fetch failed for %s: %s", url, exc)
-            return None
+        except FetchFailed as exc:
+            self.record_failure(url, exc.reason, exc.attempts)
+        except UnsafeURL as exc:
+            self.record_failure(url, unsafe_reason(exc))
+        return None
 
     async def post_json(self, url: str, payload: dict) -> dict | list | None:
         """POST to a public JSON API (e.g. OSV.dev). Same SSRF guard; None on failure."""
+        resp = await self._simple("POST", url, "application/json", json=payload)
         try:
-            if self._check_public:
-                await assert_public_url(url)
-            async with self._client() as client:
-                resp = await client.post(url, json=payload, headers={"Accept": "application/json"})
-            return resp.json() if resp.status_code < 400 else None
-        except (httpx.HTTPError, UnsafeURL, ValueError) as exc:
-            log.info("JSON POST failed for %s: %s", url, exc)
+            return resp.json() if resp is not None and resp.status_code < 400 else None
+        except ValueError:
             return None
 
     async def get_text(self, url: str, headers: dict | None = None, max_chars: int = 200_000) -> str | None:
         """GET a public text resource (e.g. a README via the GitHub API). Same SSRF guard."""
-        try:
-            if self._check_public:
-                await assert_public_url(url)
-            async with self._client() as client:
-                resp = await client.get(url, headers=headers or {})
-            return resp.text[:max_chars] if resp.status_code < 400 else None
-        except (httpx.HTTPError, UnsafeURL) as exc:
-            log.info("text fetch failed for %s: %s", url, exc)
-            return None
+        resp = await self._simple("GET", url, "*/*", headers=headers or {})
+        return resp.text[:max_chars] if resp is not None and resp.status_code < 400 else None
 
     async def _maybe_render(self, page: Page, raw_html: str) -> tuple[Page, str]:
         if self.renderer is None or not (
@@ -359,12 +605,20 @@ class WebFetcher:
             [origin + path for path in PRIORITY_PATHS if path != "/" and path not in prefer]
         seen: set[str] = set()
         pages: list[Page] = []
+        pdfs = 0
+
+        def skip(u: str) -> bool:
+            low = u.lower()
+            if low.endswith(".pdf"):  # only a few PDFs that look like product or pricing material
+                return pdfs >= self._max_pdfs or not any(h in urlparse(low).path for h in PDF_HINTS)
+            return low.endswith(SKIP_EXTENSIONS)
+
         async with self._client() as client:
             while queue and len(pages) < max_pages:
                 batch = []
                 while queue and len(batch) < 4:
                     u = queue.pop(0).rstrip("/") or origin
-                    if u in seen or u.lower().endswith(SKIP_EXTENSIONS):
+                    if u in seen or skip(u):
                         continue
                     seen.add(u)
                     batch.append(u)
@@ -375,13 +629,16 @@ class WebFetcher:
                     if page.url.rstrip("/") in {pg.url.rstrip("/") for pg in pages}:
                         continue
                     pages.append(page)
+                    pdfs += page.content_type == "pdf"
                     # Discovered links: priority-looking ones jump the queue.
                     for link in page.links:
                         key = link.rstrip("/")
-                        if key in seen or key.lower().endswith(SKIP_EXTENSIONS):
+                        if key in seen or skip(key):
                             continue
                         path = urlparse(link).path.lower()
-                        if any(h in path for h in PRIORITY_HINTS):
+                        if path.endswith(".pdf"):
+                            queue.append(link)  # after the HTML pages
+                        elif any(h in path for h in PRIORITY_HINTS):
                             queue.insert(0, link)
                         elif path.count("/") <= 2:
                             queue.append(link)

@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cip.agents.csv_intake import parse_csv
+from cip.connectors.research.domain import check_many, is_problem
+from cip.connectors.research.web import WebFetcher
 from cip.api.deps import not_found, require_role
 from cip.core.schemas import NormalizedRecord
 from cip.db.models import Client, CsvUpload, Project, User
@@ -19,6 +21,12 @@ from cip.services.storage import LocalObjectStore
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_DOMAIN_CHECKS = 200
+
+
+def domain_fetcher() -> WebFetcher:
+    """Tests replace this with a fetcher on a mocked transport."""
+    return WebFetcher(rendering="never")
 
 
 class UploadOut(BaseModel):
@@ -30,6 +38,7 @@ class UploadOut(BaseModel):
     errors: list[str]
     warnings: list[str]
     records: list[NormalizedRecord]
+    domain_checks: dict[int, dict] = {}
 
 
 class ImportIn(BaseModel):
@@ -61,9 +70,7 @@ async def upload_csv(request: Request, file: UploadFile = File(...), user: User 
     audit.record(session, request, user, "upload.created", "upload", upload.id, filename=filename,
                  rows=len(parsed.records))
     await session.commit()
-    return UploadOut(id=upload.id, filename=filename, valid=parsed.valid, column_mapping=parsed.column_mapping,
-                     unmapped_columns=parsed.unmapped_columns, errors=parsed.errors, warnings=parsed.warnings,
-                     records=parsed.records)
+    return _out(upload, parsed)
 
 
 @router.get("/{upload_id}", response_model=UploadOut)
@@ -73,9 +80,43 @@ async def get_upload(upload_id: str, user: User = Depends(require_role("viewer")
     if not upload or upload.org_id != user.org_id:
         raise not_found("Upload")
     parsed = parse_csv(LocalObjectStore().get(upload.storage_key))
+    return _out(upload, parsed)
+
+
+def _checks(upload: CsvUpload) -> dict[int, dict]:
+    return {int(k): v for k, v in (upload.domain_checks or {}).items()}
+
+
+def _out(upload: CsvUpload, parsed) -> UploadOut:
+    checks = _checks(upload)
+    for rec in parsed.records:
+        rec.domain_check = checks.get(rec.row_number)
     return UploadOut(id=upload.id, filename=upload.filename, valid=parsed.valid,
                      column_mapping=parsed.column_mapping, unmapped_columns=parsed.unmapped_columns,
-                     errors=parsed.errors, warnings=parsed.warnings, records=parsed.records)
+                     errors=parsed.errors, warnings=parsed.warnings, records=parsed.records, domain_checks=checks)
+
+
+def _record_url(rec: NormalizedRecord) -> str | None:
+    return rec.client.domain or rec.project.url
+
+
+@router.post("/{upload_id}/check-domains", response_model=UploadOut)
+async def check_domains(upload_id: str, request: Request, user: User = Depends(require_role("analyst")),
+                        session: AsyncSession = Depends(get_session)) -> UploadOut:
+    """Request each row's homepage once and classify it: ok, redirected, parked, unreachable or blocked.
+    Problem rows are flagged in the preview (not blocked); the person decides whether to import them."""
+    upload = await session.get(CsvUpload, upload_id)
+    if not upload or upload.org_id != user.org_id:
+        raise not_found("Upload")
+    parsed = parse_csv(LocalObjectStore().get(upload.storage_key))
+    urls = {r.row_number: u for r in parsed.records[:MAX_DOMAIN_CHECKS] if (u := _record_url(r))}
+    results = await check_many(domain_fetcher(), urls)
+    upload.domain_checks = {str(k): v for k, v in results.items()}
+    problems = sum(1 for v in results.values() if is_problem(v))
+    audit.record(session, request, user, "upload.domains_checked", "upload", upload.id, rows=len(results),
+                 problems=problems)
+    await session.commit()
+    return _out(upload, parsed)
 
 
 def _client_key(rec: NormalizedRecord) -> str:
@@ -89,6 +130,9 @@ async def import_upload(upload_id: str, body: ImportIn, request: Request, user: 
     if not upload or upload.org_id != user.org_id:
         raise not_found("Upload")
     parsed = parse_csv(LocalObjectStore().get(upload.storage_key))
+    checks = _checks(upload)
+    for rec in parsed.records:
+        rec.domain_check = checks.get(rec.row_number)
     if not parsed.valid:
         raise HTTPException(422, {"errors": parsed.errors})
     created: list[str] = []

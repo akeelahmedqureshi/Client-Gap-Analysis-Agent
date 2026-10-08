@@ -27,6 +27,8 @@ from cip.connectors.research.enrichment import (
 )
 from cip.agents.pricing_analysis import record_pricing
 from cip.connectors.research.pricing import extract_pricing
+from cip.connectors.research.domain import check_domain
+from cip.connectors.research.domain import summary as domain_summary
 from cip.connectors.research.web import Page, registrable_domain
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
@@ -90,7 +92,8 @@ def page_doc(p: Page) -> SourceDoc:
 
 def page_summary(p: Page) -> dict:
     return {"url": p.url, "title": p.title, "description": p.description, "headings": p.headings[:40],
-            "text": p.text[:PAGE_TEXT_LIMIT], "scripts": p.scripts[:40], "generator": p.generator}
+            "text": p.text[:PAGE_TEXT_LIMIT], "scripts": p.scripts[:40], "generator": p.generator,
+            "kind": p.content_type, "fetched_at": p.fetched_at.isoformat() if p.fetched_at else None}
 
 
 def discover_contacts(pages: list[Page], company_domain: str | None) -> tuple[list[Contact], int]:
@@ -226,6 +229,17 @@ class ClientResearchAgent(Agent):
             found = await SearchCompanyProvider(ctx.search).search_company(rec.client.name)
             domain = found.domain if found else None
 
+        # Is the site reachable, redirecting elsewhere or parked? (BRS 7.1 validations)
+        site_check = await check_domain(ctx.fetcher, domain) if domain else None
+        check_findings: list[Finding] = []
+        if site_check and site_check["status"] != "ok":
+            check_findings.append(Finding(
+                category="research", title=f"Website {domain_summary(site_check)}",
+                detail={"redirected": "Research follows the site it redirects to; confirm it is the same company.",
+                         "parked": "The domain does not host a business site; website findings will be thin.",
+                         }.get(site_check["status"], "Website findings are limited; analysis relies on other sources."),
+                confidence=0.9))
+
         composite = CompositeCompanyResearch(providers)
         companies, product_candidates, people, errors = await composite.research(rec.client.name, domain)
         pages: list[Page] = [p for c in companies for p in c.pages]
@@ -239,16 +253,17 @@ class ClientResearchAgent(Agent):
         if not all_pages and not companies:
             return AgentResult(
                 status="completed", confidence=0.1, errors=errors,
-                findings=[Finding(category="research", title="No public website could be retrieved",
+                findings=[*check_findings,
+                          Finding(category="research", title="No public website could be retrieved",
                                   detail="Client domain unknown or unreachable; downstream analysis will rely "
                                          "on CSV and repository data.", confidence=0.9)],
                 data={"profile": CompanyProfile(name=rec.client.name, domain=domain).model_dump(),
-                      "pages": [], "project_pages": []},
+                      "pages": [], "project_pages": [], "domain_check": site_check},
             )
 
         ledger = ctx.ledger
         profile = CompanyProfile(name=rec.client.name, domain=domain or (companies[0].domain if companies else None))
-        findings: list[Finding] = []
+        findings: list[Finding] = list(check_findings)
         evidence_ids: list[str] = []
 
         home = all_pages[0] if all_pages else None
@@ -387,7 +402,7 @@ class ClientResearchAgent(Agent):
                                                *(e for p in profile.products for e in p.evidence_ids),
                                                *(e for le in leadership for e in le["evidence_ids"])}
                       if ledger.get(i)],
-            confidence=0.8 if pages else 0.5,
+            confidence=(0.8 if pages else 0.5) * (0.5 if site_check and site_check["status"] == "parked" else 1),
             errors=errors,
             data={
                 "profile": profile.model_dump(),
@@ -399,5 +414,6 @@ class ClientResearchAgent(Agent):
                 "pages": [page_summary(p) for p in pages],
                 "project_pages": [page_summary(p) for p in project_pages],
                 "home_snippet": snippet(home.text if home else None),
+                "domain_check": site_check,
             },
         )

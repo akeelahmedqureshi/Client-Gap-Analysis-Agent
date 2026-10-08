@@ -129,6 +129,7 @@ class NormalizedRecord(BaseModel):
     sources: SourceLinks = Field(default_factory=SourceLinks)
     issues: list[str] = Field(default_factory=list)
     duplicate_of_row: int | None = None
+    domain_check: dict | None = None  # set by "Check domains" in the upload preview (status, detail, final_url)
 
 
 # --------------------------------------------------------------------------

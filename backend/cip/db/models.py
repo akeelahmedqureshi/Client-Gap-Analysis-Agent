@@ -94,6 +94,8 @@ class CsvUpload(Base):
     row_count: Mapped[int] = mapped_column(Integer, default=0)
     errors: Mapped[list] = mapped_column(default=list)
     warnings: Mapped[list] = mapped_column(default=list)
+    # Row number -> domain check (services: connectors/research/domain.py), from "Check domains" in the preview.
+    domain_checks: Mapped[dict] = mapped_column(default=dict)
     uploaded_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -411,3 +413,25 @@ class Notification(Base):
     delivery: Mapped[list] = mapped_column(default=list)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class ResearchCacheEntry(Base):
+    """A fetched public page shared by the agents and runs of one organization (PRD 21).
+
+    Keyed by organization and URL; ``fetched_at`` is when it was really fetched, so evidence taken from it
+    keeps its true age. Expired entries are deleted by the scheduler.
+    """
+
+    __tablename__ = "research_cache"
+    __table_args__ = (UniqueConstraint("org_id", "url_hash"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    url_hash: Mapped[str] = mapped_column(String(64))
+    url: Mapped[str] = mapped_column(String(2000))
+    final_url: Mapped[str] = mapped_column(String(2000))
+    status: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(10))  # html | pdf
+    title: Mapped[str] = mapped_column(String(500), default="")
+    body: Mapped[str] = mapped_column(Text)  # HTML (rendered if it was rendered) or extracted PDF text
+    rendered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

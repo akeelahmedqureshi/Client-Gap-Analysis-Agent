@@ -60,6 +60,20 @@ class Settings(BaseSettings):
     crawler_max_pages: int = 15
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"
+    # Politeness and resilience per domain (BRS 20; PRD 10.24): concurrent requests to one domain, minimum
+    # gap between them (live network only), and retries with backoff for timeouts, 429 and 5xx.
+    crawler_domain_concurrency: int = 2
+    crawler_domain_delay_seconds: float = 0.25
+    crawler_retries: int = 2
+    crawler_retry_backoff_seconds: float = 0.5
+    # PDFs (brochures, datasheets, pricing sheets) found on a site are read as text (BRS 20).
+    crawler_max_pdfs: int = 2
+    pdf_max_bytes: int = 10_000_000
+    pdf_max_pages: int = 30
+    # Shared research cache (PRD 21): fetched pages are reused across agents and runs of the organization
+    # for this many hours (0 = off). Partial re-runs ("Refresh …") always fetch fresh pages. Evidence from a
+    # cached page is dated when the page was fetched, so its age is never hidden.
+    research_cache_ttl_hours: float = 24.0
     max_competitors: int = 10           # Top-N competitive landscape (BRS 7.5)
     deep_competitors: int = 3           # of which deep-analysed (BRS 7.7)
     competitor_light_pages: int = 2     # pages fetched to verify and rank a candidate

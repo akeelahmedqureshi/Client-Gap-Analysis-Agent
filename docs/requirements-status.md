@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 109 |
-| 🟡 Partially completed | 10 |
-| ❌ Incomplete | 9 |
+| ✅ Completed | 113 |
+| 🟡 Partially completed | 9 |
+| ❌ Incomplete | 6 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -49,7 +49,7 @@ _Baseline audit: 2026-10-08._
 | 18 | Select all or individual rows | ✅ | |
 | 19 | Invalid rows blocked from import | ✅ | |
 | 20 | One analysis job per selected client | ✅ | Projects → select → *Analyze selected*; `/api/runs/bulk` |
-| 21 | Check for unreachable, redirecting or parked domains | ❌ | |
+| 21 | Check for unreachable, redirecting or parked domains | ✅ | *Check domains* in the upload preview (problem rows deselected, result kept with the project); repeated at the start of client research |
 
 ## 3. Client business and product analysis (6)
 
@@ -166,9 +166,9 @@ _Baseline audit: 2026-10-08._
 | 80 | Rendering JavaScript-heavy pages | ✅ | |
 | 81 | Redirects, robots.txt, timeouts, internal-address blocking | ✅ | |
 | 82 | No duplicate URLs or evidence | ✅ | |
-| 83 | Per-domain rate limit, retries, recorded failure states | 🟡 | Failures logged and warned only |
-| 84 | Research cache shared across agents and runs | ❌ | |
-| 85 | PDF sources | ❌ | Skipped |
+| 83 | Per-domain rate limit, retries, recorded failure states | ✅ | Per-domain concurrency and spacing; retries with backoff and Retry-After; each failed fetch recorded with its reason per agent and shown on the Pipeline tab |
+| 84 | Research cache shared across agents and runs | ✅ | Organization-scoped page cache with a TTL; evidence from cached pages keeps the original fetch date; partial re-runs fetch fresh |
+| 85 | PDF sources | ✅ | Product, pricing and case-study PDFs found on a site are read as text (size and page limits) |
 
 ## 14. Orchestration and run lifecycle (13)
 

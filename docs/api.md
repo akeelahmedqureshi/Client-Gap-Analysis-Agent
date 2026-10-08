@@ -33,6 +33,7 @@ reset, role change or deactivation invalidates existing sessions.
 |---|---|---|---|
 | POST | `/api/uploads` | analyst | Multipart `file`. Validates and returns a preview (`records`, `column_mapping`, `errors`, `warnings`) |
 | GET | `/api/uploads/{id}` | viewer | Preview again |
+| POST | `/api/uploads/{id}/check-domains` | analyst | Requests each row's homepage once and classifies it: `ok`, `redirected` (answers on another domain), `parked` (for-sale or parking page), `unreachable` or `blocked` (robots.txt or non-public address). Results are kept with the upload (`domain_checks`, `records[].domain_check`) and copied into imported projects' records. Problem rows are flagged, not blocked |
 | POST | `/api/uploads/{id}/import` | analyst | `{rows?: int[], include_duplicates?: bool}`. Creates clients (de-duplicated by domain or name) and projects |
 | GET | `/api/clients` | viewer | Clients with project counts |
 | GET | `/api/clients/{id}` | viewer | Client detail: visible projects, the latest researched company profile, and the top 3 recommendations from the latest run of each project |

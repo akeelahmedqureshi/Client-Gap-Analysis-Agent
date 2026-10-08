@@ -149,11 +149,14 @@ async def scheduler_loop() -> None:
             ids = await tick()
             if ids:
                 log.info("Monitoring started runs: %s", ids)
+            from cip.connectors.research.cache import purge_expired
             from cip.services.governance import purge_all
 
             purged = {k: v for k, v in (await purge_all()).items() if v}
             if purged:
                 log.info("Retention purged runs: %s", purged)
+            if s.research_cache_ttl_hours > 0:
+                await purge_expired(s.research_cache_ttl_hours)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - keep the loop alive (e.g. database briefly unavailable)

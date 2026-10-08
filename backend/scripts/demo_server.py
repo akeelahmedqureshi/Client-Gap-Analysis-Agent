@@ -104,6 +104,8 @@ def main() -> None:
         ctx.source_control_factory = lambda ref, token: FakeSourceControl(ref, token)
 
     runner.context_hook = use_fakes
+    from cip.api.routes import uploads
+    uploads.domain_fetcher = lambda: WebFetcher(transport=web_transport(sites))  # "Check domains" in the preview
 
     @app.post("/demo/change", include_in_schema=False)
     async def change() -> dict:

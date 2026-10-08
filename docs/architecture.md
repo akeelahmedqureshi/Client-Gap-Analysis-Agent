@@ -100,6 +100,28 @@ run finishes   ─▶ services/changes.py diff vs previous completed run ─▶ 
   is shown in the app; webhook and email notifications go out when the alert reaches the monitor's
   `min_severity`.
 
+## Research layer
+
+`connectors/research/web.py` (`WebFetcher`) is the only way agents reach the web:
+
+- **Safety:** SSRF guard (public addresses only, re-checked after redirects), robots.txt and a body size cap.
+- **Politeness:** at most `CIP_CRAWLER_DOMAIN_CONCURRENCY` requests per domain at once, spaced by
+  `CIP_CRAWLER_DOMAIN_DELAY_SECONDS`.
+- **Retries:** timeouts, connection errors, 429 and 5xx are retried with exponential backoff
+  (`Retry-After` honoured up to 10 s). A spent web budget is never retried.
+- **Failure states:** every fetch that still fails is recorded with its reason (`timeout`, `http_503`,
+  `robots_disallowed`, `blocked_address`, `unreadable_pdf`…) on the run's usage meter, per agent. The
+  Pipeline tab lists them. A 404 is an answer, not a failure.
+- **PDFs:** a site's product, pricing, brochure or case-study PDFs (`CIP_CRAWLER_MAX_PDFS`) are read as
+  text with pypdf, within size and page limits.
+- **Shared cache** (`connectors/research/cache.py`): successful pages are stored per organization for
+  `CIP_RESEARCH_CACHE_TTL_HOURS` and reused by every agent and run. Partial re-runs read fresh pages. Evidence
+  taken from a cached page is dated when the page was really fetched (the orchestrator re-dates it per
+  agent), so stale content is never presented as current. The scheduler deletes expired entries.
+- **Domain checks** (`connectors/research/domain.py`) classify a client's site as reachable,
+  redirected, parked, unreachable or blocked. They run in the upload preview and again at the start of
+  client research.
+
 ## Data model
 
 `Organization → Client → Project → AnalysisRun → {AgentExecution, Evidence, Approval, Report}`

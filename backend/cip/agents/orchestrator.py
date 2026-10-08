@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timezone
 from typing import Protocol
 
 from cip.agents.app_store import AppStoreAgent
@@ -216,6 +217,7 @@ class Orchestrator:
         last_error = ""
         for attempt in range(1, agent.max_attempts + 1):
             try:
+                before = {e.id for e in ctx.ledger.all()}
                 result = await agent.run(ctx)
                 if not isinstance(result, AgentResult):  # contract enforcement
                     raise TypeError(f"{agent.name} returned {type(result).__name__}, expected AgentResult")
@@ -230,6 +232,16 @@ class Orchestrator:
                 # Only evidence that exists in the ledger may be referenced.
                 for f in result.findings:
                     f.evidence_ids = ctx.ledger.validate_refs(f.evidence_ids)
+                # Evidence read from a cached page is dated when the page was fetched, never "now" (PRD 21).
+                if getattr(ctx.fetcher, "cached_at", None):
+                    for ev in ctx.ledger.all():
+                        if ev.id in before:
+                            continue
+                        when = ctx.fetcher.cache_date(ev.source_url, agent.name)
+                        collected = ev.collected_at if ev.collected_at.tzinfo else \
+                            ev.collected_at.replace(tzinfo=timezone.utc)
+                        if when is not None and when < collected:
+                            ev.collected_at = when
                 ctx.outputs[agent.name] = result
                 await self.store.save_evidence(ctx.run_id, ctx.ledger.all())
                 await self.store.set_agent_status(ctx.run_id, agent.name, status, result=result, attempts=attempt)

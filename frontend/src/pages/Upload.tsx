@@ -5,6 +5,10 @@ import { api } from "../lib/api";
 import type { UploadResult } from "../lib/types";
 import { Badge, Button, Card, ErrorText } from "../components/ui";
 
+const DOMAIN_STATUS: Record<string, string> = {
+  ok: "✓ reachable", redirected: "↪ redirects", parked: "parked / for sale", unreachable: "unreachable", blocked: "blocked",
+};
+
 export default function UploadPage() {
   const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
@@ -25,6 +29,23 @@ export default function UploadPage() {
       const res = await api.post<UploadResult>("/api/uploads", fd);
       setUpload(res);
       setSelected(new Set(res.records.filter((r) => !r.duplicate_of_row).map((r) => r.row_number)));
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkDomains() {
+    if (!upload) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.post<UploadResult>(`/api/uploads/${upload.id}/check-domains`);
+      setUpload(res);
+      // Rows whose site is parked, unreachable or blocked are deselected; the person can still tick them.
+      const bad = new Set(res.records.filter((r) => ["parked", "unreachable", "blocked"].includes(r.domain_check?.status ?? "")).map((r) => r.row_number));
+      setSelected(new Set([...selected].filter((n) => !bad.has(n))));
     } catch (e) {
       setError(e);
     } finally {
@@ -66,7 +87,14 @@ export default function UploadPage() {
       {upload && (
         <Card
           title={<>2. Preview — {upload.filename} <Badge value={upload.valid ? "completed" : "failed"} className="ml-2" /></>}
-          actions={<Button onClick={doImport} disabled={!upload.valid || busy || selected.size === 0}>Import {selected.size} project(s)</Button>}
+          actions={
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={checkDomains} disabled={busy} title="Request each homepage once to find unreachable, redirecting or parked domains">
+                {busy ? "Working…" : "Check domains"}
+              </Button>
+              <Button onClick={doImport} disabled={!upload.valid || busy || selected.size === 0}>Import {selected.size} project(s)</Button>
+            </div>
+          }
         >
           {upload.errors.map((e) => <p key={e} className="text-sm text-rose-700">✖ {e}</p>)}
           {upload.warnings.map((w) => <p key={w} className="text-sm text-amber-700">⚠ {w}</p>)}
@@ -77,7 +105,7 @@ export default function UploadPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-slate-500">
-                <tr><th /><th>Row</th><th>Client</th><th>Domain</th><th>Project</th><th>URL</th><th>Repositories</th><th>Issues</th></tr>
+                <tr><th /><th>Row</th><th>Client</th><th>Domain</th><th>Project</th><th>URL</th><th>Repositories</th><th>Website</th><th>Issues</th></tr>
               </thead>
               <tbody>
                 {upload.records.map((r) => (
@@ -100,6 +128,13 @@ export default function UploadPage() {
                     <td>{r.project.name}</td>
                     <td className="max-w-48 truncate">{r.project.url ?? "—"}</td>
                     <td className="text-xs">{[...r.sources.github, ...r.sources.gitlab].join(", ") || "—"}</td>
+                    <td className="text-xs">
+                      {r.domain_check ? (
+                        <span title={r.domain_check.detail} className={r.domain_check.status === "ok" ? "text-emerald-700" : r.domain_check.status === "redirected" ? "text-amber-700" : "text-rose-700"}>
+                          {DOMAIN_STATUS[r.domain_check.status]}{r.domain_check.status !== "ok" && r.domain_check.detail ? ` — ${r.domain_check.detail}` : ""}
+                        </span>
+                      ) : <span className="text-slate-400">not checked</span>}
+                    </td>
                     <td className="text-xs text-amber-700">{r.issues.join("; ")}</td>
                   </tr>
                 ))}

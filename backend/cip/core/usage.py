@@ -6,7 +6,8 @@ provider can record usage without being passed the run context:
 
 * **LLM**: calls, prompt/completion tokens, model, and cost (OpenRouter's reported cost, otherwise the
   configured per-million-token prices);
-* **web**: HTTP requests made while researching (pages, robots.txt, APIs) and search queries.
+* **web**: HTTP requests made while researching (pages, robots.txt, APIs), search queries, pages served
+  from the research cache, and failed fetches with their reason (timeout, http_503, robots_disallowed…).
 
 Budgets (``CIP_RUN_LLM_TOKEN_BUDGET``, ``CIP_AGENT_LLM_TOKEN_BUDGET``, ``CIP_RUN_WEB_REQUEST_BUDGET``;
 0 = unlimited). When one is exhausted the LLM reports itself *unavailable* and web requests fail, so
@@ -24,7 +25,10 @@ _agent: ContextVar[str] = ContextVar("cip_usage_agent", default="")
 
 def _blank() -> dict:
     return {"llm_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0,
-            "web_requests": 0, "search_queries": 0, "models": {}}
+            "web_requests": 0, "search_queries": 0, "cache_hits": 0, "web_failures": 0, "models": {}}
+
+
+MAX_FAILURES_KEPT = 25
 
 
 class BudgetExhausted(Exception):
@@ -42,6 +46,7 @@ class UsageMeter:
     totals: dict = field(default_factory=_blank)
     by_agent: dict[str, dict] = field(default_factory=dict)
     events: list[str] = field(default_factory=list)
+    failures: dict[str, list[dict]] = field(default_factory=dict)  # agent -> [{url, reason, attempts}]
 
     @classmethod
     def from_settings(cls, s) -> UsageMeter:
@@ -54,12 +59,14 @@ class UsageMeter:
         for agent, u in usages.items():
             if not u:
                 continue
-            self.by_agent[agent] = {**_blank(), **u, "models": dict(u.get("models", {}))}
+            self.by_agent[agent] = {**_blank(), **{k: v for k, v in u.items() if k != "failures"},
+                                    "models": dict(u.get("models", {}))}
             self._add(self.totals, u)
 
     @staticmethod
     def _add(target: dict, u: dict) -> None:
-        for k in ("llm_calls", "prompt_tokens", "completion_tokens", "total_tokens", "web_requests", "search_queries"):
+        for k in ("llm_calls", "prompt_tokens", "completion_tokens", "total_tokens", "web_requests", "search_queries",
+                  "cache_hits", "web_failures"):
             target[k] += int(u.get(k, 0))
         target["cost_usd"] = round(target["cost_usd"] + float(u.get("cost_usd", 0.0)), 6)
         for m, t in (u.get("models") or {}).items():
@@ -97,13 +104,26 @@ class UsageMeter:
         self._add(self.totals, {**_blank(), **u})
         self._add(self._bucket(), {**_blank(), **u})
 
+    def record_cache_hit(self) -> None:
+        self._add(self.totals, {**_blank(), "cache_hits": 1})
+        self._add(self._bucket(), {**_blank(), "cache_hits": 1})
+
+    def record_web_failure(self, url: str, reason: str, attempts: int = 1) -> None:
+        self._add(self.totals, {**_blank(), "web_failures": 1})
+        self._add(self._bucket(), {**_blank(), "web_failures": 1})
+        log = self.failures.setdefault(_agent.get() or "unattributed", [])
+        if len(log) < MAX_FAILURES_KEPT:
+            log.append({"url": url[:500], "reason": reason, "attempts": attempts})
+
     def _event(self, text: str) -> None:
         if text not in self.events:
             self.events.append(text)
 
     def agent_usage(self, agent: str) -> dict | None:
         u = self.by_agent.get(agent)
-        return dict(u) if u and any(u[k] for k in ("llm_calls", "web_requests", "search_queries")) else None
+        if not (u and any(u[k] for k in ("llm_calls", "web_requests", "search_queries", "cache_hits", "web_failures"))):
+            return None
+        return {**u, "failures": list(self.failures[agent])} if self.failures.get(agent) else dict(u)
 
     def summary(self) -> dict:
         return {**self.totals, "budgets": {"run_tokens": self.run_token_budget, "agent_tokens": self.agent_token_budget,
@@ -112,6 +132,10 @@ class UsageMeter:
 
 def current() -> UsageMeter | None:
     return _meter.get()
+
+
+def current_agent() -> str:
+    return _agent.get()
 
 
 def activate(meter: UsageMeter):
