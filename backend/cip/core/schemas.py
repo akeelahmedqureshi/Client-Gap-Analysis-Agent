@@ -260,6 +260,13 @@ class Competitor(BaseModel):
     features: list[FeatureObservation] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Ranking (core/relevance.py): {"factors": {...}, "overall": 0-1, "reason": str}
+    relevance: dict | None = None
+    rank: int | None = None
+    deep: bool = False  # Top-3 deep analysis done
+    deep_error: str | None = None
+    pages_analysed: list[str] = Field(default_factory=list)
+    stars: int | None = None  # open-source alternatives
 
 
 class ComparisonRow(BaseModel):
@@ -268,7 +275,15 @@ class ComparisonRow(BaseModel):
     category: str
     client: FeatureStatus
     competitors: dict[str, FeatureStatus]  # competitor id -> status
-    competitor_coverage: float  # share of compared competitors that have it
+    competitor_coverage: float  # share of compared (deep-analysed) competitors that have it
+    # Frequency in the Top-3 deep analysis and the Top-10 landscape (BRS 7.11)
+    top3_count: int = 0
+    top3_total: int = 0
+    top10_count: int = 0
+    top10_total: int = 0
+    # industry_standard | emerging | differentiator | niche | unique_to_client
+    market_class: str = "niche"
+    must_have: bool = False
 
 
 class GapType(str, Enum):
@@ -294,6 +309,8 @@ class Gap(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     basis: Basis = Basis.INFERRED
     process_id: str | None = None  # set for process gaps (see agents/business_process.py)
+    market_class: str | None = None  # from the comparison: industry_standard, emerging, ...
+    landscape_share: float | None = None  # share of the Top-10 landscape offering it
 
 
 class Opportunity(BaseModel):

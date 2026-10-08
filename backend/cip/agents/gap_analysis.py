@@ -164,6 +164,13 @@ class GapAnalysisAgent(Agent):
                 "status": FeatureStatus.AVAILABLE.value,
                 "evidence_ids": [a["evidence_id"] for a in apps["client_apps"]]}}
 
+        # Market context from the comparison: how standard the capability is across the landscape.
+        row_by_feature = {r["feature_id"]: r for r in rows}
+        for g in gaps:
+            r = row_by_feature.get(g.feature_id or "")
+            if r:
+                g.market_class = r.get("market_class")
+                g.landscape_share = round(r["top10_count"] / r["top10_total"], 3) if r.get("top10_total") else None
         by_type: dict[str, int] = {}
         for g in gaps:
             g.evidence_ids = ledger.validate_refs(g.evidence_ids)

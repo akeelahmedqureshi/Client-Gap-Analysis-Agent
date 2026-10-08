@@ -76,6 +76,7 @@ class SalesIntelligenceAgent(Agent):
         comp_names = {c["id"]: c["name"] for c in competitors}
         n_comp = len(competitors)
         gaps = {g["id"]: g for g in ctx.data("gap_analysis").get("gaps", [])}
+        rows_by_feature = {r["feature_id"]: r for r in ctx.data("feature_comparison").get("rows", [])}
         prio = ctx.data("opportunity_prioritization")
         opps = sorted(prio.get("opportunities", []), key=lambda o: -o["score"]["total"])
         recs = {r["gap_id"]: r for r in prio.get("recommendations", [])}
@@ -123,12 +124,16 @@ class SalesIntelligenceAgent(Agent):
                                  "reason": "confidence below the client-facing threshold"})
                 continue
             names = _names(g["competitors_with"], comp_names)
+            row = rows_by_feature.get(g.get("feature_id") or "", {})
+            wider = (f" and {row['top10_count']} of the top {row['top10_total']} in the wider market"
+                     if row.get("top10_total", 0) >= 4 else "")
             top_gaps.append({
                 "gap_id": g["id"], "name": g["name"], "competitors": names,
                 "coverage": f"{len(g['competitors_with'])} of {n_comp}",
                 "statement": f"{_join(names)} offer{'s' if len(names) == 1 else ''} {g['name']} "
-                             f"({len(g['competitors_with'])} of {n_comp} competitors analysed); it was not publicly "
-                             f"identified for {product}.",
+                             f"({len(g['competitors_with'])} of {n_comp} competitors analysed in depth{wider}); it was "
+                             f"not publicly identified for {product}.",
+                "market_class": g.get("market_class"),
                 "why": (recs.get(g["id"]) or {}).get("business_impact", ""),
                 "evidence_ids": g["evidence_ids"][:5], "confidence": g["confidence"],
             })

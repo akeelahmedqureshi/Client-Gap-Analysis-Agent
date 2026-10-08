@@ -50,7 +50,8 @@ def business_category(gap: dict, factors: dict[str, float], *, phase: str, prior
     if t == "security":
         return RISK
     competitive = t in ("missing", "partial", "ux", "ai", "pricing") and bool(gap.get("competitors_with"))
-    if competitive and coverage >= 0.66 and priority == "high":
+    standard = gap.get("market_class") == "industry_standard"
+    if competitive and (coverage >= 0.66 or standard) and priority == "high":
         return CRITICAL
     if t == "ai" or fid.startswith("ai.") or (process and process.get("ai")):
         return AI

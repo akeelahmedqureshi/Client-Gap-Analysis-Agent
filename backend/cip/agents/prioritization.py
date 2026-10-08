@@ -183,12 +183,15 @@ def baseline_factors(ctx: RunContext, gap: dict, stack: set[str]) -> dict[str, f
                                               or APP_GAP_FACTORS.get(gap["name"])
                                               or UX_GAP_FACTORS.get(gap["name"]) or GENERIC_FACTORS)
     n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
-    coverage = len(gap.get("competitors_with", [])) / n_comp
+    # Demand: the deep-analysed competitors, or the wider Top-10 landscape when that is stronger.
+    coverage = max(len(gap.get("competitors_with", [])) / n_comp, gap.get("landscape_share") or 0)
     base["market_demand"] = round(1 + 4 * coverage, 2) if gap["gap_type"] not in ("technology", "security") else 2.0
     base["competitive_gap"] = {
         "missing": 2 + 3 * coverage, "ux": 2 + 3 * coverage, "ai": 2 + 3 * coverage,
         "partial": 1.5 + 2 * coverage, "technology": 1.5, "pricing": 2 + 3 * coverage, "security": 2.5,
     }.get(gap["gap_type"], 2.0)
+    if gap.get("market_class") == "industry_standard":
+        base["competitive_gap"] = base["competitive_gap"] + 0.5  # a must-have, not just a nice-to-have
     feasibility = 3.0
     if gap["gap_type"] == "partial":
         feasibility += 1  # builds on an existing implementation

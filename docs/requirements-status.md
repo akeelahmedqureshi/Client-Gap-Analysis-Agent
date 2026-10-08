@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 71 |
-| 🟡 Partially completed | 25 |
-| ❌ Incomplete | 32 |
+| ✅ Completed | 81 |
+| 🟡 Partially completed | 20 |
+| ❌ Incomplete | 27 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -66,9 +66,9 @@ _Baseline audit: 2026-10-08._
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 28 | Industry and segment classification | 🟡 | Industry label only |
-| 29 | Trends, emerging technology, AI adoption, automation trends | ❌ | |
-| 30 | Industry profile that feeds competitor selection | ❌ | |
+| 28 | Industry and segment classification | ✅ | `industry_market`: industry, segment, category, customers, business model, geography |
+| 29 | Trends, emerging technology, AI adoption, automation trends | ✅ | Quoted from search sources; adoption also measured across the landscape |
+| 30 | Industry profile that feeds competitor selection | ✅ | Search queries and relevance ranking |
 
 ## 5. Competitors (8)
 
@@ -77,11 +77,11 @@ _Baseline audit: 2026-10-08._
 | 31 | Discovery from search, LLM and marketplaces, validated before acceptance | ✅ | |
 | 32 | Competitor profile: name, URL, type, description, market, reason for inclusion, evidence | ✅ | |
 | 33 | Chosen for relevance rather than size | ✅ | |
-| 34 | Top-10 list | 🟡 | 5 by default |
-| 35 | Deep research sources (site, pricing, app stores, UX) | 🟡 | Docs, help centre and announcements not targeted |
-| 36 | Retry a single failed competitor | 🟡 | Retry works per agent |
-| 37 | Relevance score built from several factors, plus a rank | ❌ | |
-| 38 | Deep analysis of the Top 3 | ❌ | |
+| 34 | Top-10 list | ✅ | `CIP_MAX_COMPETITORS=10` |
+| 35 | Deep research sources (site, pricing, app stores, UX) | ✅ | Deep crawl prefers pricing, features, integrations, docs, help, customers, case studies, blog, news, changelog |
+| 36 | Retry a single failed competitor | ✅ | Each deep analysis retried on its own |
+| 37 | Relevance score built from several factors, plus a rank | ✅ | Nine factors (`core/relevance.py`) |
+| 38 | Deep analysis of the Top 3 | ✅ | `CIP_DEEP_COMPETITORS=3` |
 
 ## 6. Capability names and comparison matrix (5)
 
@@ -91,7 +91,7 @@ _Baseline audit: 2026-10-08._
 | 40 | Mapping each found feature onto that list | ✅ | |
 | 41 | Comparison matrix | ✅ | |
 | 42 | Capability list editable in the UI, with versions | 🟡 | YAML file only |
-| 43 | Matrix search, filter and export | 🟡 | Evidence links only |
+| 43 | Matrix search, filter and export | 🟡 | Search, filters and CSV export; no per-cell evidence drill-down |
 
 ## 7. Gaps and common capabilities (6)
 
@@ -101,8 +101,8 @@ _Baseline audit: 2026-10-08._
 | 45 | How common each capability is among competitors | ✅ | |
 | 46 | Business attributes per gap | ✅ | Relevance, customer value, competitive importance, revenue, efficiency, time to value, complexity |
 | 47 | The 8 business gap categories | ✅ | Plus a separate risk & compliance category for security |
-| 48 | Standard / emerging / differentiator / niche; must-have versus optional | 🟡 | Differentiators only |
-| 49 | Frequency among the Top 3 compared with the Top 10 | ❌ | |
+| 48 | Standard / emerging / differentiator / niche; must-have versus optional | ✅ | |
+| 49 | Frequency among the Top 3 compared with the Top 10 | ✅ | |
 
 ## 8. Opportunity analysis (4)
 

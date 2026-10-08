@@ -169,6 +169,19 @@ Start a second analysis of ABC Patient Management with all three gates ticked.
         phone numbers and emails are masked, and a request for *SMS notifications* (2 reviews);
       - **Gaps** no longer has *Native mobile app*, but has *Mobile app stability (crashes & bugs)*.
 
+### 3.3b Market and competitor ranking
+
+Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC Patient Management.
+
+- [ ] **Competitors**: a landscape of 6 ranked by relevance. Click a row to see its nine factor scores.
+      MediBook, BookWell and ClinicFlow have *deep analysis*; SlotSmart (salons) is *adjacent* and last;
+      Random News is rejected.
+- [ ] **Market**: industry *Healthcare*, customers *clinics*, business model *Subscription (SaaS)*; AI and
+      automation adoption across the landscape; industry standards (online booking, SMS and email
+      notifications); two quoted trends.
+- [ ] **Comparison**: Top-3 and Top-10 frequency and a market class per capability. Search, filter and
+      **Export CSV** work.
+
 ### 3.4 Knowledge base and capability matching
 
 - [ ] **Knowledge Base → Add record**: type *Reusable solution*, title *Workflow automation platform*,

@@ -59,7 +59,10 @@ class Settings(BaseSettings):
     crawler_max_pages: int = 15
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"
-    max_competitors: int = 5
+    max_competitors: int = 10           # Top-N competitive landscape (BRS 7.5)
+    deep_competitors: int = 3           # of which deep-analysed (BRS 7.7)
+    competitor_light_pages: int = 2     # pages fetched to verify and rank a candidate
+    competitor_deep_pages: int = 10     # pages crawled per deep-analysed competitor
     # Security review: passive website checks + dependency lookups against OSV.dev (public vulnerability
     # database; only package names/versions are sent). Set false to keep dependency lists in-house.
     security_review_enabled: bool = True

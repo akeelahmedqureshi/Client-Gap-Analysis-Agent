@@ -19,12 +19,13 @@ Each `Finding` has a `basis`:
 | `repository` | after csv_intake | `repository_access`, `large_repository_scan:<repo>` (runtime) | `repositories[]`: metadata, languages, paths, redacted key files, activity, skipped sensitive files |
 | `code_analysis` | **requires** repository | — | `profiles[]` (RepositoryProfile: technologies, architecture, tests/CI/Docker/IaC, debt), `feature_signals[]` |
 | `product_features` | after client_research, code_analysis | — | `observations{feature_id: FeatureObservation}`, `inventory[]`, `coverage` |
-| `competitor_research` | after client_research, product_features | (covered by `external_research`) | `competitors[]` (verified, classified, feature observations), `rejected[]` |
+| `industry_market` | after client_research, product_features | (search covered by `external_research`) | industry, market segment, product category, customer segment, business model, geography (each marked evidence or inferred), `trends[]` (trend / technology / AI adoption / automation, each quoted from a source), `keywords` |
+| `competitor_research` | after client_research, product_features, industry_market | (covered by `external_research`) | `landscape[]` (Top 10 ranked by relevance: nine factor scores, reason for inclusion, `deep`), `competitors[]` (the deep-analysed Top 3: classified, feature observations, pricing, pages analysed), `rejected[]`, `ranking` |
 | `pricing_analysis` | after client_research, competitor_research | — | `client` and per-competitor pricing (plans, monthly prices, models, trial, free tier, annual discount, enterprise tier), `market` statistics, client `position`, pricing `gaps` |
 | `app_store` | after client_research, competitor_research | (covered by `external_research`) | `client_apps[]` / `competitor_apps[]` (verified store listings: rating, ratings count, version, last release), `client_reviews` (sentiment, themes with quotes), `requests[]` (features asked for in reviews), `competitor_review_themes[]`, `market`, app `gaps` |
 | `ux_review` | after client_research, competitor_research | (covered by `external_research`) | `client` and `companies[]` (pages audited, scores per category, website practices), `issues[]` (merged across pages, WCAG reference, pages, markup evidence), `market`, UX `gaps`, `notes` |
 | `business_process` | after client_research, product_features, app_store | — | `opportunities[]` (process, observed signals + evidence, assumed current process and inefficiency, BRS 7.12/7.13 fields, `ai`, `automation`, confidence), `in_place[]`, `ai_opportunities[]`, `automation_opportunities[]` |
-| `feature_comparison` | after product_features, competitor_research | — | `rows[]` (client status and each competitor's status per taxonomy feature, coverage) |
+| `feature_comparison` | after product_features, competitor_research | — | `rows[]` (client and Top-3 statuses, Top-3 and Top-10 frequency, `market_class`, `must_have`), `market` (AI and automation adoption, industry standards, emerging, differentiators, the client's coverage of standards) |
 | `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store, ux_review, business_process | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security / process), `existing[]` |
 | `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown with evidence-confidence factor, `priority`, `business_category`, `attributes`), `recommendations[]` (top N with phase and priority), `roadmap` |
 | `enhancement_planning` | after opportunity_prioritization | — | `plans[]` (ImplementationPlan) |
@@ -110,12 +111,37 @@ It parses these manifests: `package.json`, `requirements*.txt`, `pyproject.toml`
 
 Evidence links point to the exact file and line.
 
-**Competitor Research.** Search results are never assumed to be competitors:
+**Industry & Market** (`industry_market`, BRS 7.4). Industry, market segment, product category,
+customer segment (who the client says its product is *for*), business model (from pricing signals when
+not stated), and geography. With an LLM these are grounded in the client's pages; otherwise they are
+derived and marked *inferred*. With the external-research approval it searches for industry trends, AI
+adoption and automation trends; every trend is a sentence from a quoted source. Its segment, customers
+and industry vocabulary shape competitor discovery and ranking.
+
+**Competitor Research** (BRS 7.5–7.7). Search results are never assumed to be competitors:
 
 1. Review and directory sites are excluded.
-2. Each candidate's own website must be reachable, or the candidate is marked unverified and excluded.
-3. Candidates with less than 10% feature overlap with the client, or that the LLM judges not
-   comparable, are rejected. The report shows rejected candidates.
+2. **Light verification:** each candidate's own website (1–2 pages) must be reachable, or the
+   candidate is marked unverified and excluded.
+3. **Relevance ranking** (`core/relevance.py`): nine factors from 0 to 1 — feature overlap, product
+   similarity, industry (with an industry vocabulary: *healthcare* also matches clinics, patients,
+   HIPAA), customers, geography, business model, market presence, product maturity and evidence. Market
+   presence has a small weight, so the ranking favours fit over size. Candidates that resemble neither
+   the client's product nor its capabilities are rejected. A candidate whose customers differ (salons vs
+   clinics) is *adjacent*.
+4. **Top 10** (`CIP_MAX_COMPETITORS`) form the landscape, each with its rank, factor scores and reason
+   for inclusion.
+5. **Top 3 deep analysis** (`CIP_DEEP_COMPETITORS`): up to 10 pages each, preferring pricing, features,
+   integrations, docs, help, customers, case studies, blog, news and changelog pages, plus the LLM profile
+   with grounded quotes. Each deep analysis is retried on its own; if it still fails, the competitor
+   keeps its light profile and the run notes the failure. A competitor the LLM judges not comparable is
+   dropped and the next in the ranking takes its place.
+
+**Feature Comparison** (BRS 7.9, 7.11). The matrix compares the client with the Top 3. Every capability
+also gets its Top-3 and Top-10 frequency and a market class: *industry standard* (≥ 60% of the
+landscape, a must-have), *emerging expectation* (30–60%, or an AI capability at ≥ 20%), *differentiator*
+(several, under 30%), *niche* (one competitor) or *unique to client*. Gaps carry the class and the
+landscape share; industry standards raise the competitive-gap factor and can make a gap *critical*.
 
 Classes: direct, indirect, adjacent, open_source, enterprise, emerging.
 

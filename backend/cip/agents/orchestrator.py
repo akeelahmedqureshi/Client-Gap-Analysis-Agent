@@ -33,6 +33,7 @@ from cip.agents.comparison import FeatureComparisonAgent
 from cip.agents.competitor_research import CompetitorResearchAgent
 from cip.agents.csv_intake import CsvIntakeAgent
 from cip.agents.gap_analysis import GapAnalysisAgent
+from cip.agents.industry_market import IndustryMarketAgent
 from cip.agents.planning import EnhancementPlanningAgent
 from cip.agents.pricing_analysis import PricingAnalysisAgent
 from cip.agents.prioritization import PrioritizationAgent
@@ -58,6 +59,7 @@ def default_agents() -> list[Agent]:
         CodeAnalysisAgent(),
         SecurityReviewAgent(),
         ProductFeatureAgent(),
+        IndustryMarketAgent(),
         CompetitorResearchAgent(),
         PricingAnalysisAgent(),
         AppStoreAgent(),

@@ -171,6 +171,30 @@ CLIENT_APP_SITES = {
 }
 
 
+# A wider competitive landscape (opt-in: FakeSearch(landscape=True) + sites_with_landscape()).
+LANDSCAPE_SITES: dict[str, str] = {
+    "https://bookwell.app/": html(
+        "BookWell", "<h1>BookWell</h1><p>Online booking for clinics and therapists. SMS reminders, email reminders "
+        "and an analytics dashboard. Patient portal. Plans from $39/month.</p><a href='/pricing'>Pricing</a>"
+        "<a href='/help'>Help center</a>", "Clinic booking software"),
+    "https://caredesk.io/": html(
+        "CareDesk", "<h1>CareDesk</h1><p>Patient portal and online payments for clinics. Invoicing, email reminders "
+        "and a public API. Trusted by clinics in the United States.</p><a href='/docs'>Docs</a>",
+        "Patient portal for clinics"),
+    "https://slotsmart.com/": html(
+        "SlotSmart", "<h1>SlotSmart</h1><p>Appointment scheduling for salons and barbers. Online booking and SMS "
+        "reminders.</p>", "Salon scheduling"),
+    "https://vetplan.com/": html(
+        "VetPlan", "<h1>VetPlan</h1><p>Practice management for veterinary clinics: online booking, email "
+        "reminders, invoicing and online payments. AI assistant for pet owners.</p><a href='/pricing'>Pricing</a>",
+        "Veterinary clinic software"),
+}
+
+
+def sites_with_landscape() -> dict:
+    return {**SITES, **LANDSCAPE_SITES}
+
+
 def sites_with_client_app() -> dict:
     """SITES plus a client iOS app; prefix keys are placed before the generic fallbacks."""
     out = {k: v for k, v in CLIENT_APP_SITES.items()}
@@ -293,17 +317,32 @@ class FakeSourceControl(SourceControlProvider):
 class FakeSearch(SearchProvider):
     name = "fake"
 
-    def __init__(self) -> None:
+    def __init__(self, landscape: bool = False) -> None:
         self.queries: list[str] = []
+        self.landscape = landscape
 
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
         self.queries.append(query)
-        return [
+        if "trend" in query.lower() or "adoption" in query.lower():
+            return [
+                SearchResult("Healthcare scheduling trends 2026", "https://healthtech-weekly.example/trends",
+                             "Patient self-scheduling adoption is growing as clinics automate reminders to cut "
+                             "no-shows."),
+                SearchResult("AI in clinics survey", "https://clinic-survey.example/ai",
+                             "More clinics are adopting AI assistants for patient questions and intake."),
+            ]
+        out = [
             SearchResult("MediBook - clinic scheduling", "https://medibook.io/", "AI-powered clinic scheduling"),
             SearchResult("ClinicFlow | Scheduling software", "https://clinicflow.com/", "Clinic scheduling"),
             SearchResult("Top 10 scheduling tools - G2", "https://www.g2.com/categories/scheduling", "reviews"),
             SearchResult("Random News", "https://randomnews.com/", "gossip"),
         ]
+        if self.landscape:
+            out += [SearchResult("BookWell clinic booking", "https://bookwell.app/", "Booking for clinics"),
+                    SearchResult("CareDesk patient portal", "https://caredesk.io/", "Patient portal"),
+                    SearchResult("SlotSmart salon booking", "https://slotsmart.com/", "Salon scheduling"),
+                    SearchResult("VetPlan", "https://vetplan.com/", "Veterinary practice management")]
+        return out
 
 
 class ScriptedLLM:

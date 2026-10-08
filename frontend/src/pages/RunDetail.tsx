@@ -5,26 +5,20 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { AgentResult, Evidence, KnowledgeMatch, Run, RunChanges, User } from "../lib/types";
+import type { Evidence, KnowledgeMatch, Run, RunChanges, User } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 import { ChangeList, SeverityBadge } from "../components/Changes";
 import SalesTab from "../components/SalesTab";
+import { useAgent } from "../lib/useAgent";
+import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 
-const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
+const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Roadmap", "Our Fit", "Sales", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 
-function useAgent(runId: string, agent: string, enabled: boolean) {
-  return useQuery({
-    queryKey: ["agent", runId, agent],
-    queryFn: () => api.get<{ result: AgentResult | null }>(`/api/runs/${runId}/agents/${agent}`),
-    enabled,
-    select: (d) => d.result,
-  });
-}
 
 export default function RunDetailPage() {
   const { runId = "" } = useParams();
@@ -134,6 +128,7 @@ export default function RunDetailPage() {
         {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
         {tab === "UX" && <UxTab runId={runId} enabled={["completed", "skipped"].includes(r.agents["ux_review"])} />}
         {tab === "Apps" && <AppsTab runId={runId} enabled={["completed", "skipped"].includes(r.agents["app_store"])} />}
+        {tab === "Market" && <MarketTab runId={runId} enabled={done("industry_market")} comparisonDone={done("feature_comparison")} />}
         {tab === "Comparison" && <ComparisonTab runId={runId} enabled={done("feature_comparison")} />}
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
@@ -310,9 +305,11 @@ function CompetitorsTab({ runId, enabled }: { runId: string; enabled: boolean })
   if (!d) return null;
   return (
     <div className="space-y-4">
+      {d.landscape?.length > 0 && <LandscapeCard landscape={d.landscape} ranking={d.ranking} />}
+      <h2 className="font-semibold">Top {d.competitors.length} — deep analysis</h2>
       <div className="grid lg:grid-cols-2 gap-4">
         {d.competitors.map((c: any) => (
-          <Card key={c.id} title={<><a className="underline" href={c.url} target="_blank" rel="noreferrer">{c.name}</a> <Badge value={c.classification} /></>}>
+          <Card key={c.id} title={<>{c.rank && <span className="text-slate-400">#{c.rank} </span>}<a className="underline" href={c.url} target="_blank" rel="noreferrer">{c.name}</a> <Badge value={c.classification} /></>}>
             <p className="text-sm">{c.description} <EvidenceRefs ids={c.evidence_ids} /></p>
             {c.pricing && <p className="text-sm mt-1"><span className="text-slate-500">Pricing:</span> {c.pricing}</p>}
             {c.target_market && <p className="text-sm"><span className="text-slate-500">Market:</span> {c.target_market}</p>}
@@ -320,7 +317,8 @@ function CompetitorsTab({ runId, enabled }: { runId: string; enabled: boolean })
             <div className="mt-2 flex flex-wrap gap-1">
               {c.features.map((f: any) => <span key={f.feature_id} className="text-xs bg-slate-100 rounded px-1.5 py-0.5">{f.feature_id}</span>)}
             </div>
-            <div className="mt-2"><Confidence value={c.confidence} /></div>
+            <div className="mt-2 flex items-center gap-3"><Confidence value={c.confidence} />
+              <span className="text-xs text-slate-500">{c.pages_analysed?.length ?? 0} page(s) analysed{c.deep_error && " · deep analysis failed, light profile shown"}</span></div>
           </Card>
         ))}
       </div>
@@ -667,39 +665,6 @@ function AppsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
         <p className="text-xs text-slate-500 mt-2">{d.method}</p>
       </Card>
     </div>
-  );
-}
-
-const ICON: Record<string, string> = { available: "✅", partial: "🟡", missing: "❌", unknown: "❔" };
-
-function ComparisonTab({ runId, enabled }: { runId: string; enabled: boolean }) {
-  const res = useAgent(runId, "feature_comparison", enabled);
-  if (!enabled) return <Pending />;
-  const d = res.data?.data;
-  if (!d) return null;
-  return (
-    <Card title="Feature comparison">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-slate-500">
-            <tr><th className="py-1">Category</th><th>Feature</th><th className="text-center">Client</th>
-              {d.competitors.map((c: any) => <th key={c.id} className="text-center">{c.name}</th>)}</tr>
-          </thead>
-          <tbody>
-            {d.rows.map((row: any) => (
-              <tr key={row.feature_id} className="border-t">
-                <td className="py-1 text-slate-500">{row.category}</td>
-                <td>{row.feature_name}</td>
-                <td className="text-center">{ICON[row.client]}</td>
-                {d.competitors.map((c: any) => <td key={c.id} className="text-center">{ICON[row.competitors[c.id]]}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-xs text-slate-500 mt-2">✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing.
-        Not publicly identified means no public evidence was found, not that the capability is absent.</p>
-    </Card>
   );
 }
 

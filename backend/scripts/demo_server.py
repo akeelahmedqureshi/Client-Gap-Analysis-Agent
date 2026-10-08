@@ -7,6 +7,7 @@ so you can click through the whole product with no API keys and no internet acce
     cd backend
     python scripts/demo_server.py                 # API on http://localhost:8000
     python scripts/demo_server.py --client-app    # the fake client also has an iOS app with reviews
+    python scripts/demo_server.py --landscape     # six competitors: Top-10 ranking and Top-3 deep analysis
 
 Then either ``cd frontend && npm run dev`` (http://localhost:5173) or build the UI first
 (``npm run build``) and open http://localhost:8000 — the demo serves ``frontend/dist`` when present.
@@ -41,6 +42,8 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--data-dir", help="where the demo database and uploads live (default: a temp dir)")
     parser.add_argument("--client-app", action="store_true", help="give the fake client an iOS app with reviews")
+    parser.add_argument("--landscape", action="store_true",
+                        help="a wider competitive landscape (6 competitors: Top-10 ranking + Top-3 deep analysis)")
     args = parser.parse_args()
 
     if os.environ.get("CIP_ENVIRONMENT", "").lower() == "production":
@@ -74,9 +77,19 @@ def main() -> None:
     from cip.db.models import Monitor
     from cip.services import notify
     from cip.services.runner import runner
-    from fakes import SITES, FakeSearch, FakeSourceControl, html, sites_with_client_app, web_transport
+    from fakes import (
+        LANDSCAPE_SITES,
+        SITES,
+        FakeSearch,
+        FakeSourceControl,
+        html,
+        sites_with_client_app,
+        web_transport,
+    )
 
     sites = sites_with_client_app() if args.client_app else dict(SITES)
+    if args.landscape:
+        sites.update(LANDSCAPE_SITES)
     captured: list[dict] = []
 
     def capture(request: httpx.Request) -> httpx.Response:
@@ -87,7 +100,7 @@ def main() -> None:
 
     def use_fakes(ctx) -> None:
         ctx.fetcher = WebFetcher(transport=web_transport(sites))
-        ctx.search = FakeSearch()
+        ctx.search = FakeSearch(landscape=args.landscape)
         ctx.source_control_factory = lambda ref, token: FakeSourceControl(ref, token)
 
     runner.context_hook = use_fakes
