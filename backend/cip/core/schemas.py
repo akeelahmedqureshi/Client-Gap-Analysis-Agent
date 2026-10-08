@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def new_id(prefix: str) -> str:
@@ -56,6 +56,16 @@ class Evidence(BaseModel):
     line_range: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)
     collected_at: datetime = Field(default_factory=utcnow)
+    # 1 (official product source) … 5 (search result); see core/source_quality.py. Derived when not given.
+    source_tier: int | None = None
+
+    @model_validator(mode="after")
+    def _tier(self) -> Evidence:
+        if self.source_tier is None:
+            from cip.core.source_quality import tier
+
+            self.source_tier = tier(self.source_type, self.source_url)
+        return self
 
 
 class Finding(BaseModel):

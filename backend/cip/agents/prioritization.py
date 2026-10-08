@@ -16,6 +16,8 @@ from cip.agents.base import Agent, RunContext
 from cip.agents.business_process import process_by_id
 from cip.core.categories import attributes, business_category
 from cip.core.llm import LLMError, LLMUnavailable
+from cip.core.source_quality import TIER_LABELS
+from cip.core.source_quality import factor as source_factor
 from cip.core.schemas import AgentResult, Basis, Finding, Opportunity, Recommendation
 from cip.core.scoring import (
     ALL_FACTORS,
@@ -352,13 +354,18 @@ class PrioritizationAgent(Agent):
             if request:
                 narrative["business_opportunity"] += (
                     f" {request['count']} recent App Store reviews of the client's app ask for it.")
-            confidence = float(g.get("confidence", 0.5))
+            # Source quality influences (never alone determines) confidence: the best-supporting source's tier.
+            tiers = [ev.source_tier for e in g.get("evidence_ids", []) if (ev := ctx.ledger.get(e)) and ev.source_tier]
+            best_tier = min(tiers) if tiers else None
+            confidence = round(float(g.get("confidence", 0.5)) * source_factor(best_tier, ctx.settings.source_tier_factors), 3)
             score = score_opportunity(factors, ctx.scoring, confidence)
             phase = assign_phase(factors, ctx.scoring)
             priority = priority_label(score, ctx.scoring, confidence)
             category = business_category(g, factors, phase=phase, priority=priority,
                                          coverage=len(g.get("competitors_with", [])) / n_comp, process=process)
             attrs = attributes(factors, complexity_label(factors.get("complexity", 3)))
+            if best_tier:
+                attrs["source_quality"] = TIER_LABELS[best_tier]
             opp = Opportunity(gap_id=g["id"], name=g["name"], business_opportunity=narrative["business_opportunity"],
                               potential_users=narrative["potential_users"],
                               revenue_opportunity=narrative["revenue_opportunity"], factors=factors,

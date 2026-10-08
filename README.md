@@ -107,6 +107,9 @@ Platform features:
 - **Research layer:** per-domain rate limits, retries and recorded failure reasons; a research cache
   shared across agents and runs, with evidence keeping its true fetch date; PDF brochures and pricing sheets
   read as text; and domain checks (unreachable, redirecting or parked sites) in the upload preview.
+- **Configuration (admin, versioned):** analysis settings, named scoring profiles, the capability
+  taxonomy, and prompts and models (default and per agent). Every analysis records the versions it used.
+  Evidence carries a source-quality tier that feeds confidence.
 - **Governance:** job functions (sales, business development, product, technical, management) next to
   the permission roles; an export policy by role and job function; structured exports (comparison matrix,
   gaps, opportunities, recommendations and evidence as CSV, plus the full analysis as JSON); deletion of

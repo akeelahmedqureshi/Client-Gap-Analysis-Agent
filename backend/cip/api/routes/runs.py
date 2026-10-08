@@ -16,10 +16,11 @@ from cip.api.deps import not_found, require_role
 from cip.core.evidence import EvidenceLedger
 from cip.core.schemas import NormalizedRecord
 from cip.core.scoring import ALL_FACTORS
+from cip.core.source_quality import tier as source_tier
 from cip.core.usage import total_usage
 from cip.db.models import AgentExecution, AnalysisRun, Approval, EvidenceRecord, Project, Report, User
 from cip.db.session import get_session
-from cip.services import audit, governance
+from cip.services import audit, configuration, governance
 from cip.services.access import project_for, run_for, visible_projects
 from cip.services.report_pdf import PdfUnavailable, render_pdf, report_html
 from cip.services.rerun import ACTIVE, STAGE_PRESETS, RerunError, active_run, create_rerun
@@ -42,12 +43,14 @@ class StartRunIn(BaseModel):
     project_id: str
     approve_gates: list[str] = []
     scoring_weights: dict[str, float] = {}
+    scoring_profile: str | None = None  # a saved scoring profile; default: the organization's default
 
 
 class BulkRunIn(BaseModel):
     project_ids: list[str] = Field(min_length=1, max_length=100)
     approve_gates: list[str] = []
     scoring_weights: dict[str, float] = {}
+    scoring_profile: str | None = None
 
 
 class RerunIn(BaseModel):
@@ -92,6 +95,7 @@ class RunOut(BaseModel):
     rerun_stages: list[str] | None = None
     usage: dict = {}  # totals across agents: LLM calls/tokens/cost/models, web requests, search queries
     created_by: str | None = None
+    config: dict | None = None  # configuration versions used (analysis, scoring profile, taxonomy, llm)
 
 
 class DecisionIn(BaseModel):
@@ -130,7 +134,8 @@ async def _run_out(session: AsyncSession, run: AnalysisRun) -> RunOut:
                   agents={d.agent: d.status for d in details}, agent_details=details,
                   approvals=[_approval_out(a) for a in approvals], has_report=has_report,
                   monitor_id=run.monitor_id, parent_run_id=run.parent_run_id, rerun_stages=run.rerun_stages,
-                  usage=total_usage([d.usage for d in details]), created_by=run.created_by)
+                  usage=total_usage([d.usage for d in details]), created_by=run.created_by,
+                  config=run.config)
 
 
 @router.get("/approval-preview", response_model=list[ApprovalPreview])
@@ -163,7 +168,8 @@ async def start_run(body: StartRunIn, request: Request, user: User = Depends(req
     if existing:
         # Duplicate-job prevention (BRS 26.3): reuse the analysis that is already in progress.
         raise HTTPException(409, f"An analysis of this project is already in progress ({existing.id}).")
-    run = await _create_run(session, request, user, project, body.approve_gates, body.scoring_weights)
+    run = await _create_run(session, request, user, project, body.approve_gates, body.scoring_weights,
+                            body.scoring_profile)
     await session.commit()
     runner.start(run.id)
     return await _run_out(session, run)
@@ -185,7 +191,8 @@ async def start_runs(body: BulkRunIn, request: Request, user: User = Depends(req
         if existing:
             skipped.append({"project_id": pid, "reason": "already in progress", "run_id": existing.id})
             continue
-        started.append(await _create_run(session, request, user, project, body.approve_gates, body.scoring_weights))
+        started.append(await _create_run(session, request, user, project, body.approve_gates, body.scoring_weights,
+                                         body.scoring_profile))
     await session.commit()
     for run in started:
         runner.start(run.id)
@@ -193,9 +200,11 @@ async def start_runs(body: BulkRunIn, request: Request, user: User = Depends(req
 
 
 async def _create_run(session: AsyncSession, request: Request, user: User, project: Project,
-                      approve_gates: list[str], scoring_weights: dict[str, float]) -> AnalysisRun:
+                      approve_gates: list[str], scoring_weights: dict[str, float],
+                      scoring_profile: str | None = None) -> AnalysisRun:
     run = AnalysisRun(org_id=user.org_id, project_id=project.id, created_by=user.id, status="queued",
-                      scoring_weights=scoring_weights)
+                      scoring_weights=scoring_weights,
+                      config=await configuration.snapshot(session, user.org_id, scoring_profile))
     session.add(run)
     await session.flush()
     # Pre-approvals granted in the start dialog are recorded like any other decision (audit trail).
@@ -209,7 +218,8 @@ async def _create_run(session: AsyncSession, request: Request, user: User, proje
                                  why=req.why, target=req.target, data_analyzed=req.data_analyzed,
                                  status="approved", decided_by=user.id, decided_at=now))
     audit.record(session, request, user, "run.started", "run", run.id, project_id=project.id,
-                 pre_approved=approve_gates or None, scoring_weights=scoring_weights or None)
+                 pre_approved=approve_gates or None, scoring_weights=scoring_weights or None,
+                 config=run.config)
     return run
 
 
@@ -350,7 +360,8 @@ async def list_evidence(run_id: str, source_type: str | None = None, q: str | No
     rows = (await session.execute(stmt.order_by(EvidenceRecord.pk).limit(2000))).scalars().all()
     return [{"id": e.id, "claim": e.claim, "source_url": e.source_url, "source_type": e.source_type,
              "extracted_text": e.extracted_text, "repository_path": e.repository_path, "line_range": e.line_range,
-             "confidence": e.confidence, "collected_at": e.collected_at.isoformat()} for e in rows]
+             "confidence": e.confidence, "collected_at": e.collected_at.isoformat(),
+             "source_tier": source_tier(e.source_type, e.source_url)} for e in rows]
 
 
 @router.get("/{run_id}/report")

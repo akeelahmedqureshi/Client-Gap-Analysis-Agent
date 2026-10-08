@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     # for this many hours (0 = off). Partial re-runs ("Refresh …") always fetch fresh pages. Evidence from a
     # cached page is dated when the page was fetched, so its age is never hidden.
     research_cache_ttl_hours: float = 24.0
+    # Source-quality tiers (core/source_quality.py): a gap's confidence is scaled by its best source's factor.
+    source_tier_factors: dict[int, float] = {1: 1.0, 2: 1.0, 3: 0.95, 4: 0.85, 5: 0.75}
     max_competitors: int = 10           # Top-N competitive landscape (BRS 7.5)
     deep_competitors: int = 3           # of which deep-analysed (BRS 7.7)
     competitor_light_pages: int = 2     # pages fetched to verify and rank a candidate

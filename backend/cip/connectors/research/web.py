@@ -26,7 +26,7 @@ from urllib.robotparser import RobotFileParser
 import httpx
 from bs4 import BeautifulSoup
 
-from cip.config import get_settings
+from cip.config import Settings, get_settings
 from cip.connectors.research.browser import BrowserRenderer, looks_script_rendered
 from cip.connectors.research.cache import CachedPage, PageCache
 
@@ -284,8 +284,8 @@ class WebFetcher:
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None, check_public: bool = True,
                  rendering: str | None = None, renderer: BrowserRenderer | None = None,
-                 cache: PageCache | None = None, refresh: bool = False) -> None:
-        s = get_settings()
+                 cache: PageCache | None = None, refresh: bool = False, settings: Settings | None = None) -> None:
+        s = self._settings = settings or get_settings()
         self._transport = transport
         self._check_public = check_public and transport is None
         self._timeout = s.crawler_timeout_seconds
@@ -597,7 +597,7 @@ class WebFetcher:
             return await self._crawl(start_url, max_pages, prefer or [])
 
     async def _crawl(self, start_url: str, max_pages: int | None = None, prefer: list[str] = ()) -> list[Page]:
-        max_pages = max_pages or get_settings().crawler_max_pages
+        max_pages = max_pages or self._settings.crawler_max_pages
         start_url = normalize_url(start_url)
         p = urlparse(start_url)
         origin = f"{p.scheme}://{p.netloc}"

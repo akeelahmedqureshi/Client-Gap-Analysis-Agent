@@ -308,7 +308,11 @@ function QualityCard({ runId }: { runId: string }) {
         </ul>
       )}
       {shown.length > 5 && <button className="text-xs text-indigo-700 underline mt-1" onClick={() => setOpen(!open)}>{open ? "Show less" : `Show all ${shown.length}`}</button>}
-      <p className="text-xs text-slate-500 mt-2">Model: {q.reproducibility.model} · prompts {q.reproducibility.prompt_version} · taxonomy {q.reproducibility.taxonomy_version}</p>
+      <p className="text-xs text-slate-500 mt-2">
+        Model: {q.reproducibility.model} · prompts {q.reproducibility.prompt_version} · taxonomy {q.reproducibility.taxonomy_version}
+        {q.reproducibility.config_versions && <> · configuration: analysis v{q.reproducibility.config_versions.analysis}, scoring “{q.reproducibility.config_versions.scoring_profile?.name}” v{q.reproducibility.config_versions.scoring_profile?.version}, LLM v{q.reproducibility.config_versions.llm}</>}
+        {q.metrics.source_tiers && <> · sources by quality tier: {Object.entries(q.metrics.source_tiers).map(([t, v]: any) => `T${t} ${Math.round(v * 100)}%`).join(", ")}</>}
+      </p>
     </Card>
   );
 }
@@ -347,6 +351,11 @@ function ChangesTab({ runId, status }: { runId: string; status: string }) {
     </Card>
   );
 }
+
+const TIERS: Record<number, string> = {
+  1: "Official product / documentation / pricing", 2: "Official announcement / case study", 3: "Trusted third party",
+  4: "Industry publication / other third party", 5: "Aggregator / search result",
+};
 
 const DOMAIN_STATUS: Record<string, string> = {
   ok: "reachable", redirected: "redirects to another domain", parked: "parked / for sale", unreachable: "unreachable",
@@ -1158,7 +1167,7 @@ function EvidenceTab({ evidence }: { evidence: Evidence[] }) {
       </>
     }>
       <table className="w-full text-sm">
-        <thead className="text-left text-slate-500"><tr><th className="py-1">Claim</th><th>Source</th><th>Type</th><th>Confidence</th></tr></thead>
+        <thead className="text-left text-slate-500"><tr><th className="py-1">Claim</th><th>Source</th><th>Type</th><th title="1 official … 5 search result">Quality</th><th>Confidence</th></tr></thead>
         <tbody>
           {rows.map((e) => (
             <tr key={e.id} className="border-t align-top">
@@ -1168,6 +1177,7 @@ function EvidenceTab({ evidence }: { evidence: Evidence[] }) {
                 {e.repository_path && <div><code>{e.repository_path}{e.line_range ? `:${e.line_range}` : ""}</code></div>}
               </td>
               <td><Badge value={e.source_type} /></td>
+              <td className="text-xs whitespace-nowrap" title={TIERS[e.source_tier ?? 0]}>{e.source_tier ? `T${e.source_tier} · ${TIERS[e.source_tier].split(" ")[0]}` : "—"}</td>
               <td><Confidence value={e.confidence} /></td>
             </tr>
           ))}

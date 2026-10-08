@@ -122,6 +122,30 @@ run finishes   ─▶ services/changes.py diff vs previous completed run ─▶ 
   redirected, parked, unreachable or blocked. They run in the upload preview and again at the start of
   client research.
 
+## Configuration and reproducibility
+
+`services/configuration.py` keeps four kinds of organization configuration as immutable versions
+(`config_versions`):
+
+- **analysis:** Top-N competitors, deep-analysis count, pages, PDFs, roadmap size, freshness thresholds,
+  source-tier factors and the default scoring profile;
+- **scoring_profile:** named profiles with factor weights, evidence-confidence weight, priority bands and
+  horizon thresholds;
+- **taxonomy:** the capability catalogue;
+- **llm:** the default model and temperature, per-agent model and temperature, and prompt-text overrides
+  for the prompts registered in `core/prompts.py`.
+
+A new run records the versions in effect (`AnalysisRun.config`). `build_context` resolves exactly those
+versions into the run's settings, `ScoringConfig`, `Taxonomy` and a `ConfiguredLLM` (prompt and model
+overrides applied centrally; agents are unchanged). Resumes and partial re-runs keep the parent's
+versions, so a configuration change never silently alters an existing analysis. The QA agent records the
+versions, the effective prompt versions and the models in its reproducibility block.
+
+**Source-quality tiers** (`core/source_quality.py`) are derived for every evidence item: 1 official
+product, docs or pricing; 2 announcements and case studies; 3 trusted third parties; 4 publications; 5
+search or aggregators. Prioritization multiplies a gap's confidence by the factor of its best-supporting
+tier, and QA reports the tier mix and warns when recommendations rest mostly on tier-5 sources.
+
 ## Data model
 
 `Organization → Client → Project → AnalysisRun → {AgentExecution, Evidence, Approval, Report}`

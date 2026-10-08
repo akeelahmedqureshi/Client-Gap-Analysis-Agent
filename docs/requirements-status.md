@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 113 |
-| 🟡 Partially completed | 9 |
-| ❌ Incomplete | 6 |
+| ✅ Completed | 118 |
+| 🟡 Partially completed | 5 |
+| ❌ Incomplete | 5 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -90,7 +90,7 @@ _Baseline audit: 2026-10-08._
 | 39 | Central list of capability names, with categories and synonyms | ✅ | `core/taxonomy.yaml` |
 | 40 | Mapping each found feature onto that list | ✅ | |
 | 41 | Comparison matrix | ✅ | |
-| 42 | Capability list editable in the UI, with versions | 🟡 | YAML file only |
+| 42 | Capability list editable in the UI, with versions | ✅ | Configuration → Capability taxonomy: categories, capabilities, keywords/synonyms, code signals; validated, versioned, restorable; runs keep their version |
 | 43 | Matrix search, filter and export | 🟡 | Search, filters and CSV export; no per-cell evidence drill-down |
 
 ## 7. Gaps and common capabilities (6)
@@ -122,7 +122,7 @@ _Baseline audit: 2026-10-08._
 | 56 | Roadmap timeline plus patch plans | ✅ | |
 | 57 | BRS factors: cost saving, productivity, time to value, evidence confidence | ✅ | Confidence scales the benefit part of the score |
 | 58 | High / Medium / Low priority label | ✅ | |
-| 59 | Saved, versioned scoring profiles | ❌ | |
+| 59 | Saved, versioned scoring profiles | ✅ | Named profiles (weights, confidence weight, priority bands, horizon thresholds); default profile; chosen per run in the start dialog |
 | 60 | Low-confidence findings blocked from top priority | ✅ | Confidence < 0.5 is never High; sales leads need ≥ 0.5 |
 
 ## 10. Internal knowledge base and matching (4)
@@ -152,7 +152,7 @@ _Baseline audit: 2026-10-08._
 | 71 | LLM claims must quote their source word for word | ✅ | `core/grounding.py` |
 | 72 | Evidence view with filters | ✅ | |
 | 73 | Drill-down from recommendation to gap to evidence | 🟡 | "N sources" links only |
-| 74 | Source-quality tiers | 🟡 | Source type only |
+| 74 | Source-quality tiers | ✅ | Five BRS tiers on every evidence item; configurable factors scale gap confidence; tier mix in QA and the Evidence tab |
 | 75 | Detection of conflicting sources | ✅ | Targeted checks: CSV vs website industry, website vs app store, CSV features vs public evidence |
 | 76 | Freshness states (fresh / aging / stale) | ✅ | Configurable thresholds; stale sources flagged |
 | 77 | Quality-check agent and quality metrics | ✅ | `quality_assurance` |
@@ -202,13 +202,13 @@ _Baseline audit: 2026-10-08._
 | 101 | Run history and comparing versions | ✅ | |
 | 102 | Tracking changed competitors, capabilities and prices | ✅ | |
 | 103 | Recording how a run was produced (model, prompt and taxonomy versions) | ✅ | Model, prompt fingerprint, taxonomy, process catalog, scoring, settings, research window |
-| 104 | Prompt and model versioning | 🟡 | Versions fingerprinted per run; no managed prompt registry |
+| 104 | Prompt and model versioning | ✅ | Prompt registry with per-prompt versions; prompt overrides, default and per-agent model and temperature as versioned configuration; recorded per run |
 
 ## 17. Configuration (1)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 105 | Admin-editable, versioned configuration | 🟡 | Environment variables only |
+| 105 | Admin-editable, versioned configuration | ✅ | Configuration page: analysis settings, scoring profiles, taxonomy, prompts and models; every save is a version with note and author; runs snapshot the versions they use |
 
 ## 18. Report and export (6)
 

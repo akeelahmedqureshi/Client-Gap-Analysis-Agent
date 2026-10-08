@@ -188,6 +188,7 @@ export interface Evidence {
   line_range: string | null;
   confidence: number;
   collected_at: string;
+  source_tier?: number;
 }
 
 export interface Finding {

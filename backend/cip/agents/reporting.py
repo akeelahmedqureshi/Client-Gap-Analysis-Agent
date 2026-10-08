@@ -23,6 +23,10 @@ STATUS_ICON = {"available": "✅", "partial": "🟡", "missing": "❌", "unknown
 STATUS_LEGEND = "✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing"
 
 
+SUMMARY_PROMPT = ("You write concise executive summaries for account managers. Use only the structured findings "
+                  "provided; do not introduce new facts. 3-5 key findings, 3-5 major opportunities.")
+
+
 class _LLMSummary(BaseModel):
     current_position: str
     key_findings: list[str]
@@ -759,8 +763,7 @@ class ReportAgent(Agent):
         recs = ctx.data("opportunity_prioritization").get("recommendations", [])
         try:
             summary = await ctx.llm.complete_json(
-                "You write concise executive summaries for account managers. Use only the structured findings "
-                "provided; do not introduce new facts. 3-5 key findings, 3-5 major opportunities.",
+                SUMMARY_PROMPT,
                 f"Client: {ctx.record.client.name}\nProject: {ctx.record.project.name}\n"
                 f"Features: {[f['name'] + ':' + f['status'] for f in ctx.data('product_features').get('inventory', [])][:40]}\n"
                 f"Competitors: {[c['name'] for c in ctx.data('competitor_research').get('competitors', [])]}\n"

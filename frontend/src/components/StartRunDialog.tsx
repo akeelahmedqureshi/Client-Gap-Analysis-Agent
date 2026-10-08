@@ -7,6 +7,8 @@ import { Button, ErrorText } from "./ui";
 
 interface ScoringConfig {
   weights: Record<string, number>;
+  profile: string;
+  profiles: string[];
 }
 
 interface BulkResult {
@@ -26,6 +28,14 @@ export default function StartRunDialog({ projects, onClose }: { projects: Projec
     queryFn: () => api.get<ApprovalPreview[]>(`/api/runs/approval-preview?project_id=${project.id}`),
   });
   const scoring = useQuery({ queryKey: ["scoring"], queryFn: () => api.get<ScoringConfig>("/api/meta/scoring") });
+  const [profile, setProfile] = useState<string | null>(null);
+  const chosen = profile ?? scoring.data?.profile ?? "Standard";
+  const profileWeights = useQuery({
+    queryKey: ["scoring-profile", chosen],
+    queryFn: () => api.get<{ effective: { weights: Record<string, number> } }>(`/api/config/scoring_profile?key=${encodeURIComponent(chosen)}`),
+    enabled: !!scoring.data,
+  });
+  const shownWeights = profileWeights.data?.effective.weights ?? scoring.data?.weights;
   const [approved, setApproved] = useState<Set<string>>(new Set());
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [showWeights, setShowWeights] = useState(false);
@@ -46,6 +56,7 @@ export default function StartRunDialog({ projects, onClose }: { projects: Projec
       if (bulk) {
         setResult(await api.post<BulkResult>("/api/runs/bulk", {
           project_ids: projects.map((p) => p.id), approve_gates: [...approved], scoring_weights: weights,
+          scoring_profile: chosen,
         }));
         setBusy(false);
         return;
@@ -54,6 +65,7 @@ export default function StartRunDialog({ projects, onClose }: { projects: Projec
         project_id: project.id,
         approve_gates: [...approved],
         scoring_weights: weights,
+        scoring_profile: chosen,
       });
       navigate(`/runs/${run.run_id}`);
     } catch (e) {
@@ -88,12 +100,21 @@ export default function StartRunDialog({ projects, onClose }: { projects: Projec
               </div>
             </label>
           ))}
+          {scoring.data && (
+            <label className="text-sm flex items-center gap-2">
+              Scoring profile
+              <select className="border rounded px-2 py-1" value={chosen} onChange={(e) => setProfile(e.target.value)}>
+                {scoring.data.profiles.map((p) => <option key={p} value={p}>{p}{p === scoring.data.profile ? " (default)" : ""}</option>)}
+              </select>
+            </label>
+          )}
           <button className="text-sm text-indigo-600 underline" onClick={() => setShowWeights(!showWeights)}>
             {showWeights ? "Hide" : "Customize"} prioritization weights
           </button>
-          {showWeights && scoring.data && (
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(scoring.data.weights).map(([k, v]) => (
+          {showWeights && shownWeights && (
+            <div className="grid grid-cols-2 gap-2" key={chosen}>
+              <p className="col-span-2 text-xs text-slate-500">Changes here apply to this start only, on top of the “{chosen}” profile.</p>
+              {Object.entries(shownWeights).map(([k, v]) => (
                 <label key={k} className="text-sm flex justify-between items-center gap-2">
                   <span className="text-slate-600">{k.replaceAll("_", " ")}</span>
                   <input

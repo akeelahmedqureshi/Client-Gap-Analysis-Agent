@@ -83,7 +83,59 @@ def _phrase_pattern(phrase: str) -> re.Pattern[str]:
 
 @lru_cache
 def load_taxonomy(path: str | None = None) -> Taxonomy:
-    raw = yaml.safe_load(Path(path or TAXONOMY_PATH).read_text())
+    return taxonomy_from_dict(yaml.safe_load(Path(path or TAXONOMY_PATH).read_text()))
+
+
+CATEGORY_ID = re.compile(r"^[a-z0-9_]{1,40}$")
+FEATURE_ID = re.compile(r"^[a-z0-9_]{1,40}\.[a-z0-9_]{1,60}$")
+MAX_FEATURES = 400
+
+
+def _check(raw: dict) -> None:
+    """Validation for an organization-edited taxonomy (services/configuration.py)."""
+    from cip.core.scoring import ALL_FACTORS
+
+    cats = raw.get("categories")
+    if not isinstance(cats, list) or not cats:
+        raise ValueError("categories must be a non-empty list")
+    seen_cats, seen = set(), set()
+    for cat in cats:
+        if not isinstance(cat, dict) or not CATEGORY_ID.match(str(cat.get("id", ""))):
+            raise ValueError(f"category id {cat.get('id')!r} must be lowercase letters, digits or _")
+        if cat["id"] in seen_cats:
+            raise ValueError(f"duplicate category id {cat['id']!r}")
+        seen_cats.add(cat["id"])
+        if not str(cat.get("name", "")).strip():
+            raise ValueError(f"category {cat['id']!r} needs a name")
+        for f in cat.get("features") or []:
+            fid = str(f.get("id", ""))
+            if not FEATURE_ID.match(fid):
+                raise ValueError(f"feature id {fid!r} must look like category.feature (lowercase)")
+            if fid in seen:
+                raise ValueError(f"duplicate feature id {fid!r}")
+            seen.add(fid)
+            if not str(f.get("name", "")).strip() or len(str(f["name"])) > 120:
+                raise ValueError(f"feature {fid!r} needs a name (max 120 characters)")
+            for key in ("keywords", "code_signals"):
+                values = f.get(key, [])
+                if not isinstance(values, list) or len(values) > 60 or \
+                        any(not isinstance(v, str) or not v.strip() or len(v) > 80 for v in values):
+                    raise ValueError(f"{fid}.{key} must be a list of up to 60 phrases (80 characters each)")
+            defaults = f.get("defaults", {})
+            if not isinstance(defaults, dict) or set(defaults) - set(ALL_FACTORS) or any(
+                    isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 5 for v in defaults.values()):
+                raise ValueError(f"{fid}.defaults must map scoring factors to 0-5")
+            if "ai" in f and not isinstance(f["ai"], bool):
+                raise ValueError(f"{fid}.ai must be true or false")
+    if len(seen) > MAX_FEATURES:
+        raise ValueError(f"at most {MAX_FEATURES} features")
+    if not seen:
+        raise ValueError("the taxonomy needs at least one feature")
+
+
+def taxonomy_from_dict(raw: dict, strict: bool = False) -> Taxonomy:
+    if strict:
+        _check(raw)
     features: list[TaxonomyFeature] = []
     for cat in raw["categories"]:
         for f in cat["features"]:

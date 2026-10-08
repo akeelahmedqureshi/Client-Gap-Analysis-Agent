@@ -29,6 +29,7 @@ from pathlib import Path
 from cip import agents as agents_pkg
 from cip.agents.base import Agent, RunContext
 from cip.core.relevance import industry_terms
+from cip.core.source_quality import mix as source_mix
 from cip.core.schemas import AgentResult, AgentStatus, Basis, Finding
 
 MANDATORY = {
@@ -207,6 +208,11 @@ class QualityAssuranceAgent(Agent):
                 flag("warning", "review", f"A reviewer asked for rework of gap {o['target_id']}: {o['note'] or 'no note'}")
         for event in ctx.usage.events:
             flag("warning", "budget", f"{event}: some steps used their deterministic fallback or skipped requests.")
+        rec_tiers = [ev.source_tier for r in recs for e in r.get("evidence_ids", [])
+                     if (ev := ledger.get(e)) and ev.source_tier]
+        if rec_tiers and sum(1 for t in rec_tiers if t >= 5) / len(rec_tiers) > 0.5:
+            flag("warning", "evidence", "Most evidence behind the recommendations comes from search results or "
+                                        "aggregators; confirm with official sources before relying on it.")
         blocking = [i for i in issues if i["severity"] == "blocking"]
         warnings = [i for i in issues if i["severity"] == "warning"]
         state = ("needs_review" if blocking else "partial" if missing else
@@ -218,6 +224,8 @@ class QualityAssuranceAgent(Agent):
             "low_confidence_findings": len(low_conf), "inferred_findings": len(inferred),
             "assumption_findings": len(assumed), "evidence_items": len(ages), "source_freshness": fresh_counts,
             "source_types": source_types, "conflicts": len(conflicts),
+            "source_tiers": source_mix([e.source_tier for e in ledger.all() if e.source_tier]),
+            "recommendation_source_tiers": source_mix(rec_tiers),
             "competitors_deep": len(comps), "competitors_target": s.deep_competitors,
             "landscape_size": len(ctx.data("competitor_research").get("landscape", [])),
             "comparison_rows": len(rows),
@@ -229,16 +237,24 @@ class QualityAssuranceAgent(Agent):
             "usage": ctx.usage.summary(),
             "manual_overrides": len(ctx.review),
         }
+        cfg = ctx.config or {}
         repro = {
-            "model": s.openrouter_model if s.llm_enabled else "none (deterministic pipeline)",
-            "llm_temperature": s.llm_temperature if s.llm_enabled else None,
-            "prompt_version": prompt_version(), "taxonomy_version": file_version("taxonomy.yaml"),
+            "model": cfg.get("model", s.openrouter_model) if s.llm_enabled else "none (deterministic pipeline)",
+            "llm_temperature": cfg.get("temperature", s.llm_temperature) if s.llm_enabled else None,
+            "agent_models": cfg.get("agent_models") or None,
+            "prompt_version": cfg.get("prompt_version") or prompt_version(),
+            "prompt_versions": cfg.get("prompt_versions"),
+            "taxonomy_version": (f"org v{cfg['taxonomy']}" if cfg.get("taxonomy") else
+                                 file_version("taxonomy.yaml")),
+            "config_versions": {k: cfg[k] for k in ("analysis", "scoring_profile", "taxonomy", "llm") if k in cfg}
+            or None,
             "process_catalog_version": file_version("processes.yaml"),
             "scoring_weights": ctx.scoring.weights, "workflow": sorted(ctx.outputs),
             "research_from": min(timestamps).isoformat() if timestamps else None,
             "research_to": max(timestamps).isoformat() if timestamps else None,
             "settings": {"max_competitors": s.max_competitors, "deep_competitors": s.deep_competitors,
-                         "crawler_max_pages": s.crawler_max_pages, "roadmap_top_n": s.roadmap_top_n},
+                         "crawler_max_pages": s.crawler_max_pages, "roadmap_top_n": s.roadmap_top_n,
+                         "source_tier_factors": {str(k): v for k, v in s.source_tier_factors.items()}},
         }
         label = {"complete": "Complete", "complete_with_warnings": "Complete with warnings",
                  "partial": "Partially complete", "needs_review": "Needs review"}[state]

@@ -35,7 +35,7 @@ from cip.db.models import (
     ProjectMember,
     User,
 )
-from cip.services import audit, notify
+from cip.services import audit, configuration, notify
 from cip.services.changes import at_least, diff_outputs, summarize
 
 log = logging.getLogger(__name__)
@@ -88,7 +88,8 @@ async def create_monitored_run(session: AsyncSession, monitor: Monitor, project:
     run = AnalysisRun(org_id=monitor.org_id, project_id=project.id, status="queued", monitor_id=monitor.id,
                       created_by=monitor.approved_by if valid else None,
                       scoring_weights=monitor.scoring_weights or {},
-                      approved_gates=[g for g in gates if g.startswith("large_repository_scan:")])
+                      approved_gates=[g for g in gates if g.startswith("large_repository_scan:")],
+                      config=await configuration.snapshot(session, monitor.org_id))
     session.add(run)
     await session.flush()
     ctx = RunContext(run_id=run.id, project_id=project.id, record=record, ledger=EvidenceLedger())

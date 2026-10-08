@@ -80,7 +80,8 @@ async def create_rerun(session: AsyncSession, run: AnalysisRun, stages: list[str
     selected, rerun = expand(stages)
     new = AnalysisRun(org_id=run.org_id, project_id=run.project_id, created_by=user.id, status="queued",
                       scoring_weights=dict(run.scoring_weights or {}), approved_gates=list(run.approved_gates or []),
-                      parent_run_id=run.id, rerun_stages=selected)
+                      parent_run_id=run.id, rerun_stages=selected,
+                      config=dict(run.config) if run.config else None)  # same configuration versions
     session.add(new)
     await session.flush()
     execs = (await session.execute(select(AgentExecution).where(AgentExecution.run_id == run.id))).scalars().all()

@@ -15,9 +15,10 @@ from cip.connectors.research.search import get_search_provider
 from cip.connectors.research.cache import DbPageCache
 from cip.connectors.research.web import WebFetcher
 from cip.core.evidence import EvidenceLedger
-from cip.core.llm import get_llm
+from cip.core import prompts
+from cip.core.llm import ConfiguredLLM, get_llm
 from cip.core.schemas import AgentResult, AgentStatus, Evidence, NormalizedRecord
-from cip.core.scoring import ScoringConfig
+from cip.core.taxonomy import load_taxonomy
 from cip.db import session as db
 from cip.db.models import (
     AgentExecution,
@@ -28,6 +29,7 @@ from cip.db.models import (
     Report,
     ReviewOverride,
 )
+from cip.services import configuration
 from cip.services.knowledge import load_for_run
 from cip.services.tokens import make_token_resolver
 
@@ -126,6 +128,7 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
         ev_rows = (await s.execute(select(EvidenceRecord).where(EvidenceRecord.run_id == run.id))).scalars().all()
         approvals = (await s.execute(select(Approval).where(Approval.run_id == run.id))).scalars().all()
         knowledge = await load_for_run(s, run.org_id)
+        run_config = await configuration.for_run(s, run)
         review = [{"kind": o.kind, "label": o.target_label, "target_id": o.target_id, "field": o.field,
                    "value": o.value, "note": o.note, "by": o.created_by_email} for o in (await s.execute(select(ReviewOverride).where(
                        ReviewOverride.run_id == run.id, ReviewOverride.status == "applied"))).scalars()]
@@ -147,17 +150,31 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
                                                                 AgentStatus.PENDING):
             statuses[a.agent] = AgentStatus.SKIPPED
             rejected.add(a.agent)
-    settings = get_settings()
-    scoring = ScoringConfig()
-    if run.scoring_weights:
+    # Exactly the configuration versions recorded on the run (services/configuration.py).
+    settings = run_config.settings(get_settings())
+    scoring = configuration.scoring_config(run_config.scoring)
+    if run.scoring_weights:  # ad-hoc weights from the start dialog apply on top of the profile
         scoring.weights.update({k: float(v) for k, v in run.scoring_weights.items()})
+    llm_cfg = run_config.llm
+    overrides = llm_cfg.get("prompts") or {}
+    llm = get_llm(settings)
+    if llm_cfg:
+        llm = ConfiguredLLM(llm, prompts={prompts.default_text(pid): text for pid, text in overrides.items()},
+                            default_model=llm_cfg.get("default_model"), temperature=llm_cfg.get("temperature"),
+                            agents=llm_cfg.get("agents"))
     ctx = RunContext(
         run_id=run.id, project_id=project.id, record=NormalizedRecord.model_validate(project.record),
-        ledger=ledger, outputs=outputs, approvals=granted, llm=get_llm(settings), settings=settings,
-        scoring=scoring, search=get_search_provider(settings),
+        ledger=ledger, outputs=outputs, approvals=granted, llm=llm, settings=settings,
+        scoring=scoring, search=get_search_provider(settings), taxonomy=run_config.taxonomy or load_taxonomy(),
+        config={**run_config.versions, "prompt_version": prompts.fingerprint(overrides),
+                "prompt_versions": prompts.effective_versions(overrides),
+                "model": llm_cfg.get("default_model") or settings.openrouter_model,
+                "temperature": llm_cfg.get("temperature", settings.llm_temperature),
+                "agent_models": llm_cfg.get("agents") or {}},
         # Pages are shared across the organization's runs; a partial re-run ("Refresh …") fetches fresh.
         fetcher=WebFetcher(cache=DbPageCache(run.org_id, settings.research_cache_ttl_hours)
-                           if settings.research_cache_ttl_hours > 0 else None, refresh=bool(run.parent_run_id)),
+                           if settings.research_cache_ttl_hours > 0 else None, refresh=bool(run.parent_run_id),
+                           settings=settings),
         token_resolver=make_token_resolver(run.org_id), knowledge=knowledge, review=review,
     )
     # Usage of stages completed in an earlier pass counts toward this run's budgets.

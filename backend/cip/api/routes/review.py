@@ -13,7 +13,7 @@ from cip.api.deps import not_found, require_role
 from cip.db.models import AgentExecution, ReviewOverride, User
 from cip.db.session import get_session
 from cip.core import review as rv
-from cip.services import audit
+from cip.services import audit, configuration
 from cip.services.access import run_for
 from cip.services.rerun import FINISHED, RerunError, create_rerun
 from cip.services.runner import runner
@@ -74,7 +74,8 @@ async def set_review(run_id: str, body: OverrideIn, request: Request, user: User
     if run.status not in FINISHED:
         raise HTTPException(409, "Review a run once it has finished")
     try:
-        label = rv.resolve(body.kind, body.target_id, body.field, body.value, await _results(session, run.id))
+        label = rv.resolve(body.kind, body.target_id, body.field, body.value, await _results(session, run.id),
+                           await configuration.run_taxonomy(session, run))
     except rv.ReviewError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
     o = (await session.execute(select(ReviewOverride).where(
@@ -122,9 +123,10 @@ async def apply_review(run_id: str, request: Request, user: User = Depends(requi
                               "note": o.note, "by": o.created_by_email} for o in rows]
     items = as_items(pending)
     every = as_items(overrides)  # earlier applied overrides keep applying to reused stages
+    taxonomy = await configuration.run_taxonomy(session, run)
     try:
         new = await create_rerun(session, run, rv.stages_for(items), user,
-                                 patch=lambda agent, result: rv.patch(agent, result, every))
+                                 patch=lambda agent, result: rv.patch(agent, result, every, taxonomy))
     except RerunError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
     for o in pending:

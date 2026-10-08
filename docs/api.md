@@ -94,6 +94,24 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
 | GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
+## Configuration
+
+Analysts can read; admins change. Every save creates an immutable version (with note and author, audited);
+a run records the versions it used in `config` and keeps them for resumes and partial re-runs.
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/config` | analyst | Active version of `analysis`, `taxonomy`, `llm`; scoring profiles and the default profile |
+| GET | `/api/config/{kind}?key=` | analyst | `kind`: `analysis`, `scoring_profile` (`key` = profile name), `taxonomy`, `llm`. Returns `overrides`, `effective` (merged with built-ins), `defaults`, `history`; `llm` adds the prompt registry, `analysis` the tier labels and profiles |
+| GET | `/api/config/{kind}/versions/{n}?key=` | analyst | One stored version |
+| PUT | `/api/config/{kind}?key=` | admin | `{data, note}` saves a new version. `analysis`/`scoring_profile`/`llm` take overrides; `taxonomy` takes the whole catalogue. Invalid values → 422 (ranges, unknown keys, duplicate ids, secrets in prompts…) |
+| POST | `/api/config/{kind}/revert?key=` | admin | `{version, note?}` saves that version's content as the newest version |
+| GET | `/api/config/runs/{run_id}` | viewer | The configuration a run used |
+| GET | `/api/meta/taxonomy`, `/api/meta/scoring` | viewer | The organization's active taxonomy and default scoring profile (with `profiles`) |
+
+`POST /api/runs` and `/api/runs/bulk` accept `scoring_profile`; ad-hoc `scoring_weights` apply on top of it.
+Evidence items carry `source_tier` (1 official … 5 search result).
+
 ## Governance
 
 "export" in the Role column means the organization's export policy applies: the caller needs at least

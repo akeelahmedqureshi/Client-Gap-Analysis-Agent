@@ -23,7 +23,7 @@ from cip.connectors.research.web import registrable_domain
 from cip.core.categories import CATEGORIES
 from cip.core.schemas import FeatureStatus
 from cip.core.scoring import PHASE_LABELS
-from cip.core.taxonomy import load_taxonomy
+from cip.core.taxonomy import Taxonomy, load_taxonomy
 
 KINDS = ("capability_status", "competitor", "gap", "recommendation")
 RECOMMENDATION_FIELDS = {
@@ -49,11 +49,12 @@ class ReviewError(Exception):
         self.status = status
 
 
-def resolve(kind: str, target_id: str, field: str, value: str, results: dict[str, dict]) -> str:
+def resolve(kind: str, target_id: str, field: str, value: str, results: dict[str, dict],
+            taxonomy: Taxonomy | None = None) -> str:
     """Validate an override against the run's results and return its stable label."""
     data = lambda agent: (results.get(agent) or {}).get("data", {})  # noqa: E731
     if kind == "capability_status":
-        if target_id not in load_taxonomy():
+        if target_id not in (taxonomy or load_taxonomy()):
             raise ReviewError(422, f"Unknown capability '{target_id}'")
         if value not in {s.value for s in FeatureStatus}:
             raise ReviewError(422, "Status must be available, partial, unknown (not publicly identified) or missing")
@@ -100,11 +101,11 @@ def _by(overrides: list[dict], kind: str) -> list[dict]:
     return [o for o in overrides if o["kind"] == kind]
 
 
-def apply_to(agent: str, data: dict, overrides: list[dict]) -> dict:
+def apply_to(agent: str, data: dict, overrides: list[dict], taxonomy: Taxonomy | None = None) -> dict:
     """Apply the reviewers' overrides relevant to ``agent`` to its output data (in place)."""
     if not overrides:
         return data
-    tax = load_taxonomy()
+    tax = taxonomy or load_taxonomy()
     if agent == "product_features":
         obs, inv = data.setdefault("observations", {}), data.setdefault("inventory", [])
         for o in _by(overrides, "capability_status"):
@@ -170,9 +171,9 @@ def apply_to(agent: str, data: dict, overrides: list[dict]) -> dict:
     return data
 
 
-def patch(agent: str, result: dict, overrides: list[dict]) -> dict:
+def patch(agent: str, result: dict, overrides: list[dict], taxonomy: Taxonomy | None = None) -> dict:
     """Write the overrides into a copied (reused) agent result; the reviewed run is never changed."""
-    result["data"] = apply_to(agent, result.get("data") or {}, overrides)
+    result["data"] = apply_to(agent, result.get("data") or {}, overrides, taxonomy)
     if agent == "gap_analysis":
         rejected = {r["name"] for r in result["data"].get("rejected_by_review", [])}
         result["findings"] = [f for f in result.get("findings", []) if f.get("title") not in rejected]

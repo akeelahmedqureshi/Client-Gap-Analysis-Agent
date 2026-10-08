@@ -174,6 +174,8 @@ class AnalysisRun(Base):
     # Partial re-run (a new version of an earlier run): which run it was derived from and what was re-run.
     parent_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     rerun_stages: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Configuration versions this run uses (services/configuration.py); None = built-in defaults.
+    config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -435,3 +437,23 @@ class ResearchCacheEntry(Base):
     body: Mapped[str] = mapped_column(Text)  # HTML (rendered if it was rendered) or extracted PDF text
     rendered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class ConfigVersion(Base):
+    """One immutable version of an organization's configuration (services/configuration.py).
+
+    ``kind``: analysis | scoring_profile | taxonomy | llm. ``key`` names a scoring profile ("" otherwise).
+    """
+
+    __tablename__ = "config_versions"
+    __table_args__ = (UniqueConstraint("org_id", "kind", "key", "version"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("cfg"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    key: Mapped[str] = mapped_column(String(80), default="")
+    version: Mapped[int] = mapped_column(Integer)
+    data: Mapped[dict] = mapped_column(default=dict)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

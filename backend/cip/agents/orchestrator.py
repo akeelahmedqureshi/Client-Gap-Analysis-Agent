@@ -227,7 +227,7 @@ class Orchestrator:
                 # Normalize to plain JSON types so fresh and resumed runs see identical data; reviewers'
                 # overrides of this run (core/review.py) are applied to every agent's output.
                 dumped = result.model_dump(mode="json")
-                result = AgentResult.model_validate(review.patch(agent.name, dumped, ctx.review) if ctx.review
+                result = AgentResult.model_validate(review.patch(agent.name, dumped, ctx.review, ctx.taxonomy) if ctx.review
                                                     else dumped)
                 # Only evidence that exists in the ledger may be referenced.
                 for f in result.findings:

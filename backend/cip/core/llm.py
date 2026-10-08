@@ -97,7 +97,8 @@ class OpenRouterClient:
                     backoff *= 2
         raise LLMError(str(last_exc))
 
-    async def complete_json(self, system: str, user: str, schema: type[T]) -> T:
+    async def complete_json(self, system: str, user: str, schema: type[T], *, model: str | None = None,
+                            temperature: float | None = None) -> T:
         json_schema = json.dumps(schema.model_json_schema(), separators=(",", ":"))
         system_msg = (
             f"{system}\n\nRespond with a single JSON object only — no prose, no markdown. "
@@ -116,9 +117,9 @@ class OpenRouterClient:
                 except usage.BudgetExhausted as exc:
                     raise LLMUnavailable(str(exc)) from exc
             payload = {
-                "model": self.settings.openrouter_model,
+                "model": model or self.settings.openrouter_model,
                 "messages": messages,
-                "temperature": self.settings.llm_temperature,
+                "temperature": self.settings.llm_temperature if temperature is None else temperature,
                 "response_format": {"type": "json_object"},
                 "usage": {"include": True},  # OpenRouter reports tokens and cost
             }
@@ -126,7 +127,7 @@ class OpenRouterClient:
             if meter:
                 u = body.get("usage") or {}
                 cost = u.get("cost")
-                meter.record_llm(body.get("model") or self.settings.openrouter_model, int(u.get("prompt_tokens") or 0),
+                meter.record_llm(body.get("model") or model or self.settings.openrouter_model, int(u.get("prompt_tokens") or 0),
                                  int(u.get("completion_tokens") or 0), float(cost) if cost is not None else None)
             try:
                 content = body["choices"][0]["message"]["content"] or ""
@@ -149,6 +150,33 @@ class NullLLM:
 
     async def complete_json(self, system: str, user: str, schema: type[T]) -> T:
         raise LLMUnavailable("No LLM configured")
+
+
+class ConfiguredLLM:
+    """Applies an organization's versioned LLM configuration (services/config.py, kind ``llm``):
+    prompt-text overrides (matched on the registered default text, core/prompts.py) and the model and
+    temperature per agent (the running agent comes from core/usage.py). Everything else is the inner client."""
+
+    def __init__(self, inner: LLMClient, prompts: dict[str, str] | None = None, default_model: str | None = None,
+                 temperature: float | None = None, agents: dict[str, dict] | None = None) -> None:
+        self.inner = inner
+        self.prompts = prompts or {}  # default text -> override text
+        self.default_model = default_model
+        self.temperature = temperature
+        self.agents = agents or {}
+
+    def settings_for(self, agent: str) -> tuple[str | None, float | None]:
+        own = self.agents.get(agent) or {}
+        model = own.get("model") or self.default_model
+        temperature = own.get("temperature") if own.get("temperature") is not None else self.temperature
+        return model, temperature
+
+    async def complete_json(self, system: str, user: str, schema: type[T]) -> T:
+        system = self.prompts.get(system, system)
+        model, temperature = self.settings_for(usage.current_agent())
+        if isinstance(self.inner, OpenRouterClient) and (model or temperature is not None):
+            return await self.inner.complete_json(system, user, schema, model=model, temperature=temperature)
+        return await self.inner.complete_json(system, user, schema)
 
 
 def get_llm(settings: Settings | None = None) -> LLMClient:

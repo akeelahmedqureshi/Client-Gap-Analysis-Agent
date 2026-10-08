@@ -61,6 +61,8 @@ class RunContext:
     knowledge: list[dict] = field(default_factory=list)
     # Human-review overrides applied to this run version (services/review.py).
     review: list[dict] = field(default_factory=list)
+    # Configuration versions in effect (services/configuration.py) and prompt versions, for reproducibility.
+    config: dict = field(default_factory=dict)
     # LLM / web usage and budgets of this run (core/usage.py).
     usage: UsageMeter = field(default_factory=lambda: UsageMeter.from_settings(get_settings()))
 

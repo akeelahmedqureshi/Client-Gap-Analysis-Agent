@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from cip.api.deps import require_role
 from cip.api.routes import (
     auth,
+    config,
     connections,
     governance,
     knowledge,
@@ -23,8 +24,11 @@ from cip.api.routes import (
     users,
 )
 from cip.config import get_settings
-from cip.core.scoring import ScoringConfig
-from cip.core.taxonomy import load_taxonomy
+from cip.core.taxonomy import load_taxonomy, taxonomy_from_dict
+from cip.db.models import User
+from cip.db.session import get_session
+from cip.services import configuration
+from sqlalchemy.ext.asyncio import AsyncSession
 from cip.db import session as db
 from cip.services.ratelimit import limiter
 from cip.services.runner import runner
@@ -63,7 +67,7 @@ app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, al
                    allow_methods=["*"], allow_headers=["*"])
 for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router,
           monitoring.router, knowledge.router, sales.router, review.router, portfolio.router,
-          governance.router):
+          governance.router, config.router):
     app.include_router(r)
 
 
@@ -74,12 +78,21 @@ async def health() -> dict:
             "search_provider": s.search_provider}
 
 
-@app.get("/api/meta/taxonomy", dependencies=[Depends(require_role("viewer"))])
-async def taxonomy() -> list[dict]:
+@app.get("/api/meta/taxonomy")
+async def taxonomy(user: User = Depends(require_role("viewer")), session: AsyncSession = Depends(get_session)) \
+        -> list[dict]:
+    """The organization's active capability taxonomy (or the built-in one)."""
+    row = await configuration.latest(session, user.org_id, "taxonomy")
+    tax = taxonomy_from_dict(row.data) if row else load_taxonomy()
     return [{"id": f.id, "name": f.name, "category": f.category_name, "ai": f.ai, "defaults": f.defaults}
-            for f in load_taxonomy().features]
+            for f in tax.features]
 
 
-@app.get("/api/meta/scoring", dependencies=[Depends(require_role("viewer"))])
-async def scoring() -> dict:
-    return ScoringConfig().model_dump()
+@app.get("/api/meta/scoring")
+async def scoring(user: User = Depends(require_role("viewer")), session: AsyncSession = Depends(get_session)) -> dict:
+    """The organization's default scoring profile, plus the names of all profiles."""
+    analysis = configuration.effective("analysis", await configuration.latest(session, user.org_id, "analysis"))
+    name = analysis["default_scoring_profile"]
+    row = await configuration.latest(session, user.org_id, "scoring_profile", name)
+    return {**configuration.effective("scoring_profile", row), "profile": name,
+            "profiles": await configuration.profiles(session, user.org_id)}
