@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 99 |
-| 🟡 Partially completed | 17 |
-| ❌ Incomplete | 12 |
+| ✅ Completed | 103 |
+| 🟡 Partially completed | 15 |
+| ❌ Incomplete | 10 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -226,10 +226,10 @@ _Baseline audit: 2026-10-08._
 | # | Feature | Status | Notes |
 |---|---|---|---|
 | 112 | Client detail page with top opportunities | ✅ | |
-| 113 | Portfolio dashboard: top gaps and AI opportunities, failed and needs-review runs | 🟡 | Counts, recent runs, approvals only |
-| 114 | Client list with status, score and actions | 🟡 | |
-| 115 | Search, filter and sort across clients, competitors and capabilities | ❌ | |
-| 116 | Cross-client comparison and recurring gaps | ❌ | |
+| 113 | Portfolio dashboard: top gaps and AI opportunities, failed and needs-review runs | ✅ | Dashboard + Portfolio page |
+| 114 | Client list with status, score and actions | ✅ | Portfolio table: status, quality, top priority, opportunity score, evidence, dates |
+| 115 | Search, filter and sort across clients, competitors and capabilities | ✅ | Portfolio search / industry / status / priority / sort; matrix and evidence filters |
+| 116 | Cross-client comparison and recurring gaps | ✅ | Recurring gaps, AI and automation opportunities, requested capabilities, capability demand, shared case studies |
 
 ## 20. Notifications and observability (5)
 

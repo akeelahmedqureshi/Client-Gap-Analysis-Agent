@@ -74,7 +74,7 @@ Platform features:
 - **Normalized feature taxonomy** (`core/taxonomy.yaml`): 40+ features in 9 categories, each with
   keywords, code signals and default scoring factors.
 - **Web UI** (React, TypeScript, Tailwind, React Query) with screens for Dashboard, Upload
-  (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules), Knowledge
+  (validate → preview → import), Portfolio (cross-client intelligence), Projects, Clients, Runs, Monitoring (alerts and schedules), Knowledge
   Base (capabilities and case studies with approval workflow and version history) and Run detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
   security, UX, competitors (ranked Top 10 and deep-analysed Top 3), pricing, apps, market, comparison, gaps, opportunity matrix with priorities and
   categories, cost & AI (process opportunities), roadmap and patch plans,

@@ -93,6 +93,12 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
 | GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
+## Portfolio
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/portfolio?q=&industry=&status=&priority=high\|medium\|low&sort=score\|date\|name\|confidence` | viewer | From each visible project's latest completed run: `summary` (clients, projects, analysed, running, awaiting approval, needs review, failed, never analysed), `projects[]` (industry, status, quality, top priority, opportunity score, evidence coverage, dates; searchable, filterable, sortable), `top_opportunities[]`, `recurring_gaps[]`, `recurring_ai[]`, `recurring_automation[]`, `requested_capabilities[]` (app reviews), `industries[]`, `capability_demand[]` (knowledge-base records matched across clients) and `shared_case_studies[]` |
+
 ## Human review
 
 Reviewers correct a finished run (BRS 17). Overrides key on stable labels (capability id, competitor

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Client, Project, Run } from "../lib/types";
+import type { Client, Portfolio, Project, Run } from "../lib/types";
 import { Badge, Card, Empty } from "../components/ui";
 
 function Stat({ label, value, to }: { label: string; value: number | string; to: string }) {
@@ -17,7 +17,9 @@ export default function DashboardPage() {
   const clients = useQuery({ queryKey: ["clients"], queryFn: () => api.get<Client[]>("/api/clients") });
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => api.get<Project[]>("/api/projects") });
   const runs = useQuery({ queryKey: ["runs"], queryFn: () => api.get<Run[]>("/api/runs"), refetchInterval: 5000 });
+  const pf = useQuery({ queryKey: ["portfolio", "dashboard"], queryFn: () => api.get<Portfolio>("/api/portfolio") });
   const awaiting = runs.data?.filter((r) => r.status === "awaiting_approval") ?? [];
+  const failed = runs.data?.filter((r) => ["failed", "completed_with_errors"].includes(r.status)) ?? [];
   const projectName = (id: string) => projects.data?.find((p) => p.id === id)?.name ?? id;
 
   return (
@@ -28,7 +30,34 @@ export default function DashboardPage() {
         <Stat label="Projects" value={projects.data?.length ?? "–"} to="/projects" />
         <Stat label="Analysis runs" value={runs.data?.length ?? "–"} to="/runs" />
         <Stat label="Awaiting approval" value={awaiting.length} to="/runs" />
+        <Stat label="Running" value={pf.data?.summary.running ?? "–"} to="/runs" />
+        <Stat label="Needs review" value={pf.data?.summary.needs_review ?? "–"} to="/portfolio" />
+        <Stat label="Failed" value={failed.length} to="/runs" />
+        <Stat label="Not yet analysed" value={pf.data?.summary.never_analysed ?? "–"} to="/projects" />
       </div>
+      {pf.data && pf.data.top_opportunities.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="Top opportunities" actions={<Link className="text-sm text-indigo-600 underline" to="/portfolio">Portfolio</Link>}>
+            <ul className="text-sm divide-y">
+              {pf.data.top_opportunities.slice(0, 6).map((o, i) => (
+                <li key={i} className="py-1.5 flex gap-2">
+                  <span className="flex-1"><b>{o.feature}</b> <span className="text-slate-500">— {o.project}</span></span>
+                  {o.priority && <Badge value={o.priority} />}
+                  <Link className="text-xs text-indigo-600 underline" to={`/runs/${o.run_id}`}>open</Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+          <Card title="Top gaps and AI opportunities across clients">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div><div className="text-xs font-semibold text-slate-500 mb-1">Recurring gaps</div>
+                <ul>{pf.data.recurring_gaps.slice(0, 6).map((g) => <li key={g.name}>{g.name} <span className="text-slate-400">({g.projects})</span></li>)}</ul></div>
+              <div><div className="text-xs font-semibold text-slate-500 mb-1">AI opportunities</div>
+                <ul>{pf.data.recurring_ai.slice(0, 6).map((g) => <li key={g.name}>{g.name} <span className="text-slate-400">({g.projects})</span></li>)}</ul></div>
+            </div>
+          </Card>
+        </div>
+      )}
       {awaiting.length > 0 && (
         <Card title="Approvals needed">
           <ul className="divide-y">

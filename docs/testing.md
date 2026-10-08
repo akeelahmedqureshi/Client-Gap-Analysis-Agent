@@ -201,6 +201,11 @@ Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC
       counts 5 manual overrides with a rework warning. **Refresh → Competitor research** on the new
       version keeps all of it.
 
+- [ ] **Portfolio**: after analysing all three example projects, the page shows counts, each client's
+      status, quality, top priority and opportunity score; search, filters and sorting work; recurring
+      gaps, AI and automation opportunities, industries and your capabilities in demand are listed. The
+      Dashboard shows the same counts and the top opportunities.
+
 ### 3.4 Knowledge base and capability matching
 
 - [ ] **Knowledge Base → Add record**: type *Reusable solution*, title *Workflow automation platform*,

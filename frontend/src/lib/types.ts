@@ -285,3 +285,39 @@ export interface KnowledgeMatch {
   technologies: string[];
   customer_name: string | null;
 }
+
+export interface PortfolioProject {
+  project_id: string;
+  project: string;
+  client_id: string;
+  client: string;
+  url: string | null;
+  industry: string | null;
+  status: string | null;
+  run_id: string | null;
+  analysed_run_id: string | null;
+  quality: string | null;
+  quality_state: string | null;
+  started: string | null;
+  completed: string | null;
+  top_priority: string | null;
+  top_priority_level: string | null;
+  high_priority_count: number;
+  opportunity_score: number | null;
+  evidence_coverage: number | null;
+}
+
+export interface Portfolio {
+  summary: { clients: number; projects: number; analysed: number; running: number; awaiting_approval: number;
+    failed: number; needs_review: number; never_analysed: number };
+  projects: PortfolioProject[];
+  top_opportunities: { project_id: string; project: string; run_id: string; feature: string; priority: string | null;
+    category: string | null; score: number }[];
+  recurring_gaps: { name: string; projects: number; type?: string }[];
+  recurring_ai: { name: string; projects: number }[];
+  recurring_automation: { name: string; projects: number }[];
+  requested_capabilities: { name: string; projects: number }[];
+  industries: { name: string; projects: number }[];
+  capability_demand: { record_id: string; title: string; kind: string; client_facing: boolean; projects: number; top_needs: string[] }[];
+  shared_case_studies: { record_id: string; title: string; projects: number }[];
+}

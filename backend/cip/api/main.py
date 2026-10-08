@@ -8,7 +8,19 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cip.api.deps import require_role
-from cip.api.routes import auth, connections, knowledge, monitoring, projects, review, runs, sales, uploads, users
+from cip.api.routes import (
+    auth,
+    connections,
+    knowledge,
+    monitoring,
+    portfolio,
+    projects,
+    review,
+    runs,
+    sales,
+    uploads,
+    users,
+)
 from cip.config import get_settings
 from cip.core.scoring import ScoringConfig
 from cip.core.taxonomy import load_taxonomy
@@ -49,7 +61,7 @@ app = FastAPI(title="Client Intelligence Platform", version="0.1.0", lifespan=li
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router,
-          monitoring.router, knowledge.router, sales.router, review.router):
+          monitoring.router, knowledge.router, sales.router, review.router, portfolio.router):
     app.include_router(r)
 
 
