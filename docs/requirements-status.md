@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 54 |
+| ✅ Completed | 58 |
 | 🟡 Partially completed | 31 |
-| ❌ Incomplete | 43 |
+| ❌ Incomplete | 39 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -129,10 +129,10 @@ _Baseline audit: 2026-10-08._
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 61 | Create, edit and archive records: capabilities, projects, case studies, technologies, tags | ❌ | |
-| 62 | Approval and client-facing states | ❌ | |
-| 63 | Versions, change history, search and filter | ❌ | |
-| 64 | Matching from gap to our capability to a case study | ❌ | |
+| 61 | Create, edit and archive records: capabilities, projects, case studies, technologies, tags | ✅ | Knowledge Base page, `/api/knowledge` |
+| 62 | Approval and client-facing states | ✅ | draft → in review → approved / restricted / archived; client-facing flag; case-study reference flag |
+| 63 | Versions, change history, search and filter | ✅ | Snapshot per version with who/when/note |
+| 64 | Matching from gap to our capability to a case study | ✅ | `capability_matching` agent, "Our Fit" tab |
 
 ## 11. Sales and outreach (4)
 

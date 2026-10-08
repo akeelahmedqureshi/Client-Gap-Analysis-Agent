@@ -273,3 +273,57 @@ class Alert(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     read_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class KnowledgeRecord(Base):
+    """Internal knowledge base: what the organization has delivered (BRS 7.18, 27; PRD 10.18, 10.47).
+
+    ``kind``: capability | solution | project | case_study.
+    ``status``: draft | in_review | approved | restricted | archived. ``visibility``: internal |
+    client_facing. Only *approved* records are ever matched; only approved *client_facing* records may
+    appear in client-facing output (outreach, report). Restricted records are visible to admins only.
+    Every change bumps ``version`` and stores a snapshot of the new state in ``knowledge_record_versions``.
+    """
+
+    __tablename__ = "knowledge_records"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("kb"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(300))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    details: Mapped[str] = mapped_column(Text, default="")
+    outcomes: Mapped[str] = mapped_column(Text, default="")  # results / metrics delivered
+    customer_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    industries: Mapped[list] = mapped_column(default=list)
+    technologies: Mapped[list] = mapped_column(default=list)
+    project_types: Mapped[list] = mapped_column(default=list)
+    capability_tags: Mapped[list] = mapped_column(default=list)  # taxonomy feature/category ids or free text
+    ai: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    automation: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    linked_ids: Mapped[list] = mapped_column(default=list)  # e.g. a solution's case studies
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    visibility: Mapped[str] = mapped_column(String(20), default="internal")
+    # A case study may be named to clients only when this is set (and the record is client-facing).
+    reference_allowed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class KnowledgeRecordVersion(Base):
+    __tablename__ = "knowledge_record_versions"
+    __table_args__ = (UniqueConstraint("record_id", "version"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    record_id: Mapped[str] = mapped_column(ForeignKey("knowledge_records.id", ondelete="CASCADE"), index=True)
+    org_id: Mapped[str] = mapped_column(String(40), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    snapshot: Mapped[dict] = mapped_column(default=dict)
+    change: Mapped[str] = mapped_column(String(40))  # created | edited | status:<new status>
+    note: Mapped[str] = mapped_column(Text, default="")
+    changed_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    changed_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

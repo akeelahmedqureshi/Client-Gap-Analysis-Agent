@@ -5,14 +5,14 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { AgentResult, Evidence, Run, RunChanges, User } from "../lib/types";
+import type { AgentResult, Evidence, KnowledgeMatch, Run, RunChanges, User } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 import { ChangeList, SeverityBadge } from "../components/Changes";
 
 const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Comparison", "Gaps", "Opportunities",
-  "Roadmap", "Evidence", "Report"] as const;
+  "Roadmap", "Our Fit", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -137,6 +137,7 @@ export default function RunDetailPage() {
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
         {tab === "Roadmap" && <RoadmapTab runId={runId} enabled={done("enhancement_planning")} />}
+        {tab === "Our Fit" && <FitTab runId={runId} enabled={done("capability_matching")} />}
         {tab === "Evidence" && <EvidenceTab evidence={evidence.data ?? []} />}
         {tab === "Report" && <ReportTab runId={runId} enabled={r.has_report} />}
       </div>
@@ -809,6 +810,60 @@ function ArchitectureCard({ arch }: { arch: any }) {
           ? ` ${arch.new_components.length} new component(s) from the roadmap are highlighted in green.` : ""}
       </p>
     </Card>
+  );
+}
+
+function FitTab({ runId, enabled }: { runId: string; enabled: boolean }) {
+  const res = useAgent(runId, "capability_matching", enabled);
+  if (!enabled) return <Pending />;
+  const d = res.data?.data;
+  if (!d) return null;
+  const kb = d.knowledge_base ?? {};
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">
+        Opportunities matched to your <Link className="text-indigo-700 underline" to="/knowledge">knowledge base</Link>{" "}
+        ({kb.records_considered ?? 0} approved record(s), {kb.client_facing_records ?? 0} client-facing). Internal-only
+        matches are for your team; only client-facing ones may be used with the client.
+      </p>
+      {d.matches.length === 0 && (
+        <Card title="No matches">
+          <Empty>
+            {kb.records_considered ? "None of the approved records cover this run's opportunities." :
+              "The knowledge base has no approved records yet."}
+          </Empty>
+        </Card>
+      )}
+      {d.matches.map((m: any) => (
+        <Card key={m.recommendation_id} title={m.need}>
+          <ul className="space-y-2">
+            {m.matches.map((x: KnowledgeMatch) => (
+              <li key={x.record_id} className="border rounded-lg p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{x.title}</span>
+                  <span className="text-xs text-slate-500">{x.kind.replace("_", " ")} · v{x.version}</span>
+                  <span className={`text-xs ${x.client_facing ? "text-emerald-700" : "text-amber-700"}`}>
+                    {x.client_facing ? "client-facing" : "internal only"}
+                  </span>
+                  {x.reference_allowed && x.customer_name && (
+                    <span className="text-xs text-slate-600">reference: {x.customer_name}</span>
+                  )}
+                  <span className="ml-auto"><Confidence value={x.confidence} /></span>
+                </div>
+                <ul className="list-disc ml-5 text-xs text-slate-600 mt-1">
+                  {x.reasons.map((r) => <li key={r}>{r}</li>)}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ))}
+      {d.unmatched.length > 0 && (
+        <Card title="No internal match">
+          <p className="text-sm text-slate-600">{d.unmatched.join(" · ")}</p>
+        </Card>
+      )}
+    </div>
   );
 }
 

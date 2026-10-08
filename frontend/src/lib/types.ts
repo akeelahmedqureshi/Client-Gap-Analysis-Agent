@@ -220,3 +220,53 @@ export interface Alert {
   read_at: string | null;
   created_at: string;
 }
+
+export type KnowledgeKind = "capability" | "solution" | "project" | "case_study";
+export type KnowledgeStatus = "draft" | "in_review" | "approved" | "restricted" | "archived";
+
+export interface KnowledgeRecord {
+  id: string;
+  kind: KnowledgeKind;
+  title: string;
+  summary: string;
+  details: string;
+  outcomes: string;
+  customer_name: string | null;
+  industries: string[];
+  technologies: string[];
+  project_types: string[];
+  capability_tags: string[];
+  ai: boolean;
+  automation: boolean;
+  linked_ids: string[];
+  status: KnowledgeStatus;
+  visibility: "internal" | "client_facing";
+  reference_allowed: boolean;
+  client_facing: boolean;
+  version: number;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeVersion {
+  version: number;
+  change: string;
+  note: string;
+  changed_by_email: string | null;
+  changed_at: string;
+  snapshot: Partial<KnowledgeRecord>;
+}
+
+export interface KnowledgeMatch {
+  record_id: string;
+  version: number;
+  kind: KnowledgeKind;
+  title: string;
+  confidence: number;
+  reasons: string[];
+  client_facing: boolean;
+  reference_allowed: boolean;
+  technologies: string[];
+  customer_name: string | null;
+}

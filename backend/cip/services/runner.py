@@ -26,6 +26,7 @@ from cip.db.models import (
     Project,
     Report,
 )
+from cip.services.knowledge import load_for_run
 from cip.services.tokens import make_token_resolver
 
 log = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
         execs = (await s.execute(select(AgentExecution).where(AgentExecution.run_id == run.id))).scalars().all()
         ev_rows = (await s.execute(select(EvidenceRecord).where(EvidenceRecord.run_id == run.id))).scalars().all()
         approvals = (await s.execute(select(Approval).where(Approval.run_id == run.id))).scalars().all()
+        knowledge = await load_for_run(s, run.org_id)
     ledger = EvidenceLedger(Evidence(id=e.id, claim=e.claim, source_url=e.source_url, source_type=e.source_type,
                                      extracted_text=e.extracted_text, repository_path=e.repository_path,
                                      line_range=e.line_range, confidence=e.confidence, collected_at=e.collected_at)
@@ -142,7 +144,7 @@ async def build_context(run: AnalysisRun, project: Project) -> tuple[RunContext,
         run_id=run.id, project_id=project.id, record=NormalizedRecord.model_validate(project.record),
         ledger=ledger, outputs=outputs, approvals=granted, llm=get_llm(settings), settings=settings,
         scoring=scoring, fetcher=WebFetcher(), search=get_search_provider(settings),
-        token_resolver=make_token_resolver(run.org_id),
+        token_resolver=make_token_resolver(run.org_id), knowledge=knowledge,
     )
     return ctx, statuses, rejected
 

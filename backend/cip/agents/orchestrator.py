@@ -25,6 +25,7 @@ from typing import Protocol
 
 from cip.agents.app_store import AppStoreAgent
 from cip.agents.base import Agent, ApprovalRequest, AwaitingApproval, RunContext
+from cip.agents.capability_matching import CapabilityMatchingAgent
 from cip.agents.client_research import ClientResearchAgent
 from cip.agents.code_analysis import CodeAnalysisAgent
 from cip.agents.comparison import FeatureComparisonAgent
@@ -63,6 +64,7 @@ def default_agents() -> list[Agent]:
         GapAnalysisAgent(),
         PrioritizationAgent(),
         EnhancementPlanningAgent(),
+        CapabilityMatchingAgent(),
         ReportAgent(),
     ]
 

@@ -27,9 +27,24 @@ Each `Finding` has a `basis`:
 | `gap_analysis` | after feature_comparison, code_analysis, pricing_analysis, security_review, app_store, ux_review | — | `gaps[]` (missing / partial / technology / ux / ai / pricing / security), `existing[]` |
 | `opportunity_prioritization` | after gap_analysis | — | `opportunities[]` (factors, score breakdown), `recommendations[]` (top N with phase), `roadmap` |
 | `enhancement_planning` | after opportunity_prioritization | — | `plans[]` (ImplementationPlan) |
+| `capability_matching` | after opportunity_prioritization | — | `matches[]` (per recommendation: up to 3 knowledge-base records with confidence, reasons, `client_facing`, `reference_allowed`), `by_record[]` (demand per record), `unmatched[]`, `knowledge_base` (record ids + versions used) |
 | `report` | after enhancement_planning | `client_report` | `report` (structured JSON), `markdown` |
 
 ## Notes by agent
+
+**Capability Matching.** Maps each recommendation to the organization's *approved* knowledge-base
+records (BRS 7.18): gap → required capability → internal capability → technology → previous project →
+case study. Matching is deterministic (`core/matching.py`) and local; internal knowledge is never sent
+to the LLM or written to the evidence ledger.
+
+- A record must be relevant to the capability itself: tagged with the taxonomy feature (strongest) or
+  its category, or sharing keywords with the need. Industry or technology overlap alone never matches.
+- Same industry, the client's technologies, AI/automation flags and documented case-study outcomes
+  raise the confidence. Every match lists its reasons. Matches below 35% are dropped.
+- Draft, in-review, restricted and archived records are never matched. `client_facing` is set only for
+  approved records with client-facing visibility; a case study's customer may be named only when its
+  record also allows references.
+- The result stores the record ids and versions it used, so it stays reproducible after records change.
 
 **CSV Intake.** The agent detects columns by alias, including fuzzy matches such as "Company", "Repo"
 and "Tech Stack". It sniffs the delimiter (`,` `;` tab `|`) and handles BOMs and several encodings.

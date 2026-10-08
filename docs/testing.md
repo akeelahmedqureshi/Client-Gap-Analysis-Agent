@@ -169,7 +169,21 @@ Start a second analysis of ABC Patient Management with all three gates ticked.
         phone numbers and emails are masked, and a request for *SMS notifications* (2 reviews);
       - **Gaps** no longer has *Native mobile app*, but has *Mobile app stability (crashes & bugs)*.
 
-### 3.4 Monitoring and alerts
+### 3.4 Knowledge base and capability matching
+
+- [ ] **Knowledge Base → Add record**: type *Reusable solution*, title *Workflow automation platform*,
+      industry *Healthcare*, technologies *React, Node.js*, capability *AI workflow automation / agents*,
+      tick *Automation capability* and *May be used in client-facing output*, then **Save and approve**.
+      The record shows *approved* and *Usable in client-facing output*.
+- [ ] Add a second record as a **draft** tagged *AI assistant / chatbot*. As an analyst, **Submit for
+      review**: there is no **Approve** button. Edit an approved record as the analyst: it goes back to
+      *in review*. **Show history** lists every version with who and when.
+- [ ] Re-run ABC Patient Management. The **Our Fit** tab matches *AI workflow automation / agents* to
+      the approved record with reasons (required capability, same industry, the client's technology). The
+      draft record is never matched; *AI assistant / chatbot* is under *No internal match*.
+- [ ] **Restrict** a record as admin: analysts and viewers no longer see it, and new runs ignore it.
+
+### 3.5 Monitoring and alerts
 
 - [ ] **Projects → ABC Patient Management → Monitor**:
       1. tick all standing approvals;
@@ -197,7 +211,7 @@ Start a second analysis of ABC Patient Management with all three gates ticked.
       scheduled run pauses and raises an *approval needed* alert. **Run now** returns *409* while that
       run waits.
 
-### 3.5 Roles, isolation and audit
+### 3.6 Roles, isolation and audit
 
 - [ ] **Settings → Add team member**: add a *viewer* and an *analyst*. In a private window, sign in
       as the **viewer**: everything is visible, but there are no Analyze, Repos or Monitor buttons.
@@ -259,7 +273,7 @@ For each project, start an analysis with all gates approved and check:
 | 10 | Private repo | After adding a token in **Settings → Source control connections** and picking the repo with **Repos**, a new run analyses it |
 | 11 | Monitoring | **Send test** reaches your Slack webhook or email. **Run now** produces a second run whose **Changes** tab compares it with the first |
 | 12 | Resilience (Celery mode) | `docker compose restart worker` during a run: the run continues and completed agents are not repeated |
-| 13 | Isolation | Repeat § 3.5 on the deployment |
+| 13 | Isolation | Repeat § 3.6 on the deployment |
 
 Record where results were wrong, and why. Those cases become the LLM evaluation set (roadmap item
 #52).

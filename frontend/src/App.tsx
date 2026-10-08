@@ -13,6 +13,7 @@ import SettingsPage from "./pages/Settings";
 import AuditPage from "./pages/Audit";
 import ClientDetailPage from "./pages/ClientDetail";
 import MonitoringPage from "./pages/Monitoring";
+import KnowledgePage from "./pages/Knowledge";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -21,6 +22,7 @@ const NAV = [
   ["/clients", "Clients"],
   ["/runs", "Analysis Runs"],
   ["/monitoring", "Monitoring"],
+  ["/knowledge", "Knowledge Base"],
   ["/settings", "Settings"],
 ] as const;
 
@@ -80,6 +82,7 @@ function Shell() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:runId" element={<RunDetailPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" />} />

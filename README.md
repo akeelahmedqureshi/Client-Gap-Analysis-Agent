@@ -49,6 +49,7 @@ facts whose quote can't be found are kept only at low confidence. Every finding 
 | 9 | Opportunity & Prioritization: transparent weighted scoring, phase assignment | `agents/prioritization.py`, `core/scoring.py` |
 | 10 | Enhancement Planning: frontend/backend/DB/API/AI/infra/security/testing plan per recommendation | `agents/planning.py` |
 | 11 | Report: Markdown and JSON report with an evidence appendix | `agents/reporting.py` |
+| 12 | Capability Matching: opportunities → approved knowledge-base capabilities, projects and case studies | `agents/capability_matching.py`, `core/matching.py` |
 
 Platform features:
 
@@ -69,10 +70,10 @@ Platform features:
 - **Normalized feature taxonomy** (`core/taxonomy.yaml`): 40+ features in 9 categories, each with
   keywords, code signals and default scoring factors.
 - **Web UI** (React, TypeScript, Tailwind, React Query) with screens for Dashboard, Upload
-  (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules) and Run
-  detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
+  (validate → preview → import), Projects, Clients, Runs, Monitoring (alerts and schedules), Knowledge
+  Base (capabilities and case studies with approval workflow and version history) and Run detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
   security, UX, competitors, pricing, apps, comparison, gaps, opportunity matrix, roadmap and patch plans,
-  evidence explorer, and the report. A Settings screen manages connections and users.
+  our fit (knowledge-base matches), evidence explorer, and the report. A Settings screen manages connections and users.
 - **CLI** for running an analysis without the API or a database.
 - **Report export** as a client-ready PDF, plus Markdown and JSON.
 - **Pricing analysis:** plans, prices, pricing models and practices for the client and competitors;

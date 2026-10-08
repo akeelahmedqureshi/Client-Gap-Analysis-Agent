@@ -77,6 +77,23 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
 | GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
+## Knowledge base
+
+Internal capabilities, reusable solutions, previous projects and case studies (BRS 27). Viewers see
+approved records only; analysts see everything except restricted records; admins see everything.
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/knowledge?q=&kind=&status=&industry=&technology=&tag=&ai=&automation=&include_archived=` | viewer | Search and filter records (archived hidden by default) |
+| POST | `/api/knowledge` | analyst | `{kind: capability\|solution\|project\|case_study, title, summary?, details?, outcomes?, customer_name?, industries[], technologies[], project_types[], capability_tags[] (taxonomy ids or keywords), ai?, automation?, linked_ids[], visibility: internal\|client_facing, reference_allowed?, status: draft\|in_review (admins may create approved), note?}` |
+| GET | `/api/knowledge/{id}` | viewer | One record (404 if not visible to the caller) |
+| PATCH | `/api/knowledge/{id}` | analyst | Edit any field (+ `note`). An analyst's edit to an approved record sends it back to `in_review`. Only admins edit restricted or archived records |
+| POST | `/api/knowledge/{id}/status` | analyst | `{status, note?}`. Analysts move draft ↔ in_review; approve, restrict, archive and restore need an admin |
+| GET | `/api/knowledge/{id}/versions` | analyst | Full history: every version's snapshot, change, note, who and when |
+
+Statuses: `draft`, `in_review`, `approved`, `restricted`, `archived`. Only `approved` records are used by
+analyses; only approved `client_facing` records may be used in client-facing output.
+
 ## Source control connections
 
 | Method | Path | Role | Description |

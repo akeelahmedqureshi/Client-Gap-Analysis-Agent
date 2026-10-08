@@ -55,6 +55,9 @@ class RunContext:
     source_control_factory: Callable[..., Any] | None = None
     # Injectable in-browser UX auditor (see connectors/research/ux.py); built from settings when None.
     ux_auditor: Any = None
+    # The organization's approved knowledge-base records (see services/knowledge.py). Internal data:
+    # used for deterministic matching only, never sent to the LLM or written to the evidence ledger.
+    knowledge: list[dict] = field(default_factory=list)
 
     def data(self, agent: str) -> dict[str, Any]:
         result = self.outputs.get(agent)
