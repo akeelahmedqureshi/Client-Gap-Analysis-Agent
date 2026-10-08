@@ -13,20 +13,28 @@ import { ChangeList, SeverityBadge } from "../components/Changes";
 import SalesTab from "../components/SalesTab";
 import ReviewTab from "../components/ReviewTab";
 import { useAgent } from "../lib/useAgent";
+import { useCanExport } from "../lib/useOrg";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 
 const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Roadmap", "Our Fit", "Sales", "Review", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
+const FINISHED = ["completed", "completed_with_errors", "failed", "cancelled"];
+// The tab each job function usually starts from (BRS roles); anyone can switch tabs.
+const START_TAB: Record<string, Tab> = { sales: "Sales", business_development: "Sales", product: "Opportunities", technical: "Security" };
+const EXPORTS: [string, string][] = [["matrix.csv", "Comparison matrix (CSV)"], ["gaps.csv", "Gaps (CSV)"],
+  ["opportunities.csv", "Opportunities (CSV)"], ["recommendations.csv", "Recommendations (CSV)"],
+  ["evidence.csv", "Evidence (CSV)"], ["analysis.json", "Full analysis (JSON)"]];
 
 
 export default function RunDetailPage() {
   const { runId = "" } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>("Pipeline");
+  const [chosenTab, setTab] = useState<Tab | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
+  const canExport = useCanExport();
   const canAct = !!me.data && me.data.role !== "viewer";
   const run = useQuery({
     queryKey: ["run", runId],
@@ -44,6 +52,20 @@ export default function RunDetailPage() {
   if (!run.data) return <p>Loading…</p>;
   const r = run.data;
   const done = (agent: string) => r.agents[agent] === "completed";
+  const startTab = START_TAB[me.data?.job_function ?? ""];
+  const tab: Tab = chosenTab ?? (startTab && FINISHED.includes(r.status) ? startTab : "Pipeline");
+  const canDelete = !!me.data && FINISHED.includes(r.status) && (me.data.role === "admin" || (me.data.role === "analyst" && r.created_by === me.data.id));
+
+  async function remove() {
+    if (!confirm("Delete this run with its evidence, report, sales documents and review changes? This cannot be undone.")) return;
+    try {
+      await api.del(`/api/runs/${runId}`);
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      navigate("/runs");
+    } catch (e) {
+      setError(e);
+    }
+  }
 
   async function decide(approvalId: string, approve: boolean) {
     try {
@@ -119,7 +141,15 @@ export default function RunDetailPage() {
                 <option value="report">Report</option>
               </select>
             )}
-            {r.has_report && (
+            {canExport && FINISHED.includes(r.status) && (
+              <select className="border rounded-lg px-2 py-1.5 text-sm" value="" title="Download structured data"
+                onChange={(e) => e.target.value && api.download(`/api/runs/${runId}/export/${e.target.value}`, `${e.target.value.replace(".", `-${runId}.`)}`).catch(setError)}>
+                <option value="">Export…</option>
+                {EXPORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            )}
+            {canDelete && <Button variant="danger" onClick={remove}>Delete</Button>}
+            {r.has_report && canExport && (
               <>
                 <Button onClick={() => api.download(`/api/runs/${runId}/report.pdf`, `report-${runId}.pdf`).catch(setError)}>
                   Download PDF

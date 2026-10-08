@@ -23,7 +23,7 @@ from cip.core.llm import get_llm
 from cip.core.outreach import OutreachInput, check_claims, generate_email
 from cip.db.models import AgentExecution, AnalysisRun, SalesDocument, User
 from cip.db.session import get_session
-from cip.services import audit
+from cip.services import audit, governance
 from cip.services.access import run_for
 
 router = APIRouter(prefix="/api/runs", tags=["sales & outreach"])
@@ -221,6 +221,7 @@ async def approve_outreach(run_id: str, body: ApproveIn, request: Request, user:
 async def export_outreach(run_id: str, request: Request, user: User = Depends(require_role("viewer")),
                           session: AsyncSession = Depends(get_session)) -> Response:
     run, doc = await _doc(session, user, run_id, "outreach")
+    await governance.require_export(session, user)
     msg = EmailMessage()
     if doc.content.get("to"):
         msg["To"] = doc.content["to"]
@@ -270,6 +271,7 @@ def summary_markdown(c: dict, status: str) -> str:
 async def export_summary(run_id: str, request: Request, user: User = Depends(require_role("viewer")),
                          session: AsyncSession = Depends(get_session)) -> PlainTextResponse:
     run, doc = await _doc(session, user, run_id, "sales_summary")
+    await governance.require_export(session, user)
     audit.record(session, request, user, "sales_summary.exported", "run", run.id, status=doc.status)
     await session.commit()
     return PlainTextResponse(summary_markdown(doc.content, doc.status), media_type="text/markdown",

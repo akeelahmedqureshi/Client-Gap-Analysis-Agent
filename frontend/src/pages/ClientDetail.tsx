@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Client, Project } from "../lib/types";
-import { Badge, Card, Empty } from "../components/ui";
+import type { Client, Project, User } from "../lib/types";
+import { Badge, Button, Card, Empty, ErrorText } from "../components/ui";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
 
 interface ClientDetail {
@@ -27,14 +28,30 @@ const PHASE: Record<string, string> = {
 export default function ClientDetailPage() {
   const { clientId = "" } = useParams();
   const q = useQuery({ queryKey: ["client", clientId], queryFn: () => api.get<ClientDetail>(`/api/clients/${clientId}`) });
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
+  const navigate = useNavigate();
+  const [error, setError] = useState<unknown>(null);
   if (q.error) return <Empty>Client not found.</Empty>;
   if (!q.data) return <p>Loading…</p>;
   const { client, projects, profile, recommendations } = q.data;
+  async function remove() {
+    if (!confirm(`Delete ${client.name} with its ${projects.length} project(s) and every analysis of them? This cannot be undone.`)) return;
+    try {
+      await api.del(`/api/clients/${client.id}`);
+      navigate("/clients");
+    } catch (e) {
+      setError(e);
+    }
+  }
   return (
     <div className="space-y-6">
       <div>
         <Link to="/clients" className="text-sm text-indigo-600 underline">← Clients</Link>
-        <h1 className="text-2xl font-bold">{client.name}</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">{client.name}</h1>
+          {me.data?.role === "admin" && <Button variant="danger" onClick={remove}>Delete client</Button>}
+        </div>
+        <ErrorText error={error} />
         <div className="text-sm text-slate-500">{[client.domain, profile?.industry ?? client.industry].filter(Boolean).join(" · ")}</div>
       </div>
 

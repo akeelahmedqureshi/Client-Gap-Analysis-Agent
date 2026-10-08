@@ -293,13 +293,19 @@ class AnalysisRunner:
         return status
 
     async def _after_pass(self, run_id: str, status: str) -> None:
-        """Change detection and monitoring alerts; never allowed to fail the run itself."""
+        """Change detection, monitoring alerts and notifications; never allowed to fail the run itself."""
         from cip.services.monitoring import on_run_finished
+
+        from cip.services.notifications import notify_run
 
         try:
             await on_run_finished(run_id, status)
         except Exception:  # noqa: BLE001
             log.exception("Post-run processing failed for %s", run_id)
+        try:
+            await notify_run(run_id, status)
+        except Exception:  # noqa: BLE001
+            log.exception("Run notifications failed for %s", run_id)
 
 
 runner = AnalysisRunner()

@@ -19,7 +19,7 @@ from cip.core.scoring import ALL_FACTORS
 from cip.core.usage import total_usage
 from cip.db.models import AgentExecution, AnalysisRun, Approval, EvidenceRecord, Project, Report, User
 from cip.db.session import get_session
-from cip.services import audit
+from cip.services import audit, governance
 from cip.services.access import project_for, run_for, visible_projects
 from cip.services.report_pdf import PdfUnavailable, render_pdf, report_html
 from cip.services.rerun import ACTIVE, STAGE_PRESETS, RerunError, active_run, create_rerun
@@ -91,6 +91,7 @@ class RunOut(BaseModel):
     parent_run_id: str | None = None  # partial re-run: the run this version was derived from
     rerun_stages: list[str] | None = None
     usage: dict = {}  # totals across agents: LLM calls/tokens/cost/models, web requests, search queries
+    created_by: str | None = None
 
 
 class DecisionIn(BaseModel):
@@ -129,7 +130,7 @@ async def _run_out(session: AsyncSession, run: AnalysisRun) -> RunOut:
                   agents={d.agent: d.status for d in details}, agent_details=details,
                   approvals=[_approval_out(a) for a in approvals], has_report=has_report,
                   monitor_id=run.monitor_id, parent_run_id=run.parent_run_id, rerun_stages=run.rerun_stages,
-                  usage=total_usage([d.usage for d in details]))
+                  usage=total_usage([d.usage for d in details]), created_by=run.created_by)
 
 
 @router.get("/approval-preview", response_model=list[ApprovalPreview])
@@ -368,6 +369,7 @@ async def get_report_pdf(run_id: str, request: Request, user: User = Depends(req
                          session: AsyncSession = Depends(get_session)) -> Response:
     """Client-ready PDF of the report (rendered offline in headless Chromium)."""
     await _run_for(session, run_id, user)
+    await governance.require_export(session, user)
     r = (await session.execute(select(Report).where(Report.run_id == run_id))).scalar_one_or_none()
     if not r:
         raise not_found("Report")
@@ -383,11 +385,14 @@ async def get_report_pdf(run_id: str, request: Request, user: User = Depends(req
 
 
 @router.get("/{run_id}/report.md", response_class=PlainTextResponse)
-async def get_report_markdown(run_id: str, user: User = Depends(require_role("viewer")),
+async def get_report_markdown(run_id: str, request: Request, user: User = Depends(require_role("viewer")),
                               session: AsyncSession = Depends(get_session)) -> PlainTextResponse:
     await _run_for(session, run_id, user)
+    await governance.require_export(session, user)
     r = (await session.execute(select(Report).where(Report.run_id == run_id))).scalar_one_or_none()
     if not r:
         raise not_found("Report")
+    audit.record(session, request, user, "report.exported", "run", run_id, format="markdown")
+    await session.commit()
     return PlainTextResponse(r.markdown, media_type="text/markdown",
                              headers={"Content-Disposition": f'attachment; filename="report-{run_id}.md"'})

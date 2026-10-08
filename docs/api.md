@@ -10,7 +10,7 @@ OAuth callback requires `Authorization: Bearer <jwt>`.
 | POST | `/api/auth/register` | — | Create an organization and its admin user; returns `access_token` |
 | POST | `/api/auth/login` | — | Returns `access_token` |
 | GET | `/api/auth/me` | any | Current user |
-| POST | `/api/auth/users` | admin | Add a user (`email`, `password`, `role`) |
+| POST | `/api/auth/users` | admin | Add a user (`email`, `password`, `role`, optional `job_function`) |
 | POST | `/api/auth/change-password` | any | `{current_password, new_password}`. Signs out other sessions and returns a new token |
 
 Login protection: after 5 consecutive failures the account is locked for 15 minutes (429), and each IP
@@ -22,7 +22,7 @@ reset, role change or deactivation invalidates existing sessions.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/users` | Organization users (`is_active`, `locked`) |
-| PATCH | `/api/users/{id}` | `{name?, role?, is_active?}`. The last active admin can't be demoted or deactivated (409) |
+| PATCH | `/api/users/{id}` | `{name?, role?, is_active?, job_function?}` (`job_function`: sales, business_development, product, technical, management; `""` clears it). The last active admin can't be demoted or deactivated (409) |
 | POST | `/api/users/{id}/reset-password` | `{new_password}`. Sets a temporary password, signs the user out and unlocks the account |
 | POST | `/api/users/{id}/unlock` | Clear a lockout |
 | GET | `/api/audit?action=&limit=&offset=` | Audit log, newest first. `action` is a prefix filter, e.g. `auth.` |
@@ -55,8 +55,8 @@ reset, role change or deactivation invalidates existing sessions.
 | POST | `/api/runs/{id}/resume` | analyst | Retry failed agents; completed agents are kept |
 | GET | `/api/runs/{id}/evidence?source_type=&q=` | viewer | Evidence records |
 | GET | `/api/runs/{id}/report` | viewer | `{title, content (structured), markdown}` |
-| GET | `/api/runs/{id}/report.md` | viewer | Markdown download |
-| GET | `/api/runs/{id}/report.pdf` | viewer | Client-ready PDF (A4, page numbers), rendered offline in headless Chromium. Returns 503 if no browser is installed. Each export is audited |
+| GET | `/api/runs/{id}/report.md` | export | Markdown download (audited) |
+| GET | `/api/runs/{id}/report.pdf` | export | Client-ready PDF (A4, page numbers), rendered offline in headless Chromium. Returns 503 if no browser is installed. Each export is audited |
 
 Each run and each agent report `usage`: LLM calls, prompt / completion / total tokens, cost in USD (as
 reported by OpenRouter, or estimated from `CIP_LLM_PRICE_*`), tokens per model, web requests and search
@@ -93,6 +93,28 @@ Agent statuses: `pending`, `running`, `awaiting_approval`, `completed`, `failed`
 | POST | `/api/alerts/{id}/read`, `/api/alerts/read-all` | viewer | Mark read (shared across the organization) |
 | GET | `/api/runs/{id}/changes` | viewer | `{baseline_run_id, changes[], summary}`: what changed since the previous completed run of the project. Each change has `kind`, `severity`, `title`, `detail` and `evidence_ids` from this run |
 
+## Governance
+
+"export" in the Role column means the organization's export policy applies: the caller needs at least
+`export_min_role` and, when `export_job_functions` is set, one of those job functions (admins always pass).
+Otherwise 403. Viewing results in the app is never gated.
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/org/settings` | viewer | `{settings, can_export, job_functions}`. Settings: `export_min_role`, `export_job_functions`, `retention_days` (null = keep forever, else 7-3650), `retention_keep_latest`, `last_purge_at` |
+| PUT | `/api/org/settings` | admin | Partial update; unknown keys or invalid values → 422. Audited |
+| POST | `/api/org/retention/purge?dry_run=` | admin | Apply the retention policy now (`dry_run` lists what would go). The scheduler also applies it hourly. 409 without a policy |
+| DELETE | `/api/runs/{id}` | analyst | Admins: any run; analysts: runs they started. Removes agent results, evidence, approvals, report, sales documents, review changes, alerts and notifications. 409 while in progress |
+| DELETE | `/api/projects/{id}` | admin | The project with all of its runs, monitor and access list. 409 while a run is in progress |
+| DELETE | `/api/clients/{id}` | admin | The client and all of its projects |
+| GET | `/api/runs/{id}/export/{name}` | export | `matrix.csv`, `gaps.csv`, `opportunities.csv`, `recommendations.csv`, `evidence.csv` (UTF-8 with BOM; cells that would start a spreadsheet formula are prefixed with `'`) or `analysis.json` (every agent result, the evidence ledger and run metadata). Audited |
+| GET | `/api/notifications?unread_only=&limit=` | viewer | Your in-app notifications (projects you can still see) |
+| GET | `/api/notifications/unread-count` | viewer | `{count}` |
+| POST | `/api/notifications/{id}/read`, `/api/notifications/read-all` | viewer | Mark read |
+| GET/PUT | `/api/notifications/preferences` | viewer | `{scope: mine\|all, events: {event: {in_app, email}}}`. Events: `run_completed`, `run_failed`, `approval_needed`, `needs_review`, `outreach_ready` |
+
+Deletions and purges are written to the audit log, which is never purged.
+
 ## Portfolio
 
 | Method | Path | Role | Description |
@@ -121,11 +143,11 @@ opened, then reviewed by people. Every change is versioned in `history`.
 | GET | `/api/runs/{id}/sales` | viewer | `{summary, outreach}`, each `{content, status: draft\|approved, version, history, edited}` |
 | PATCH | `/api/runs/{id}/sales/summary` | analyst | `{conversation_angle?, next_step?, reviewer_notes?, note?}`; back to draft |
 | POST | `/api/runs/{id}/sales/summary/approve` | analyst | `{note?}` |
-| GET | `/api/runs/{id}/sales-summary.md` | viewer | Markdown export (internal-only items labelled) |
+| GET | `/api/runs/{id}/sales-summary.md` | export | Markdown export (internal-only items labelled) |
 | PATCH | `/api/runs/{id}/outreach` | analyst | `{to?, subject?, body?, note?}`; re-runs the claim check, back to draft |
 | POST | `/api/runs/{id}/outreach/regenerate` | analyst | `{instructions?}`: new LLM draft (template without an LLM), claim-checked |
 | POST | `/api/runs/{id}/outreach/approve` | analyst | `{acknowledge_warnings?, note?}`. 409 while the draft mentions internal-only knowledge or security findings; other claim-check warnings need `acknowledge_warnings: true` |
-| GET | `/api/runs/{id}/outreach.eml` | viewer | The email as an unsent `.eml` draft (file name ends in `-DRAFT` until approved) |
+| GET | `/api/runs/{id}/outreach.eml` | export | The email as an unsent `.eml` draft (file name ends in `-DRAFT` until approved) |
 
 ## Knowledge base
 

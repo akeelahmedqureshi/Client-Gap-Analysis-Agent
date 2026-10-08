@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Monitor, Project, User } from "../lib/types";
-import { Badge, Button, Card, Empty } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorText } from "../components/ui";
 import StartRunDialog from "../components/StartRunDialog";
 import ProjectAccessDialog from "../components/ProjectAccessDialog";
 import RepositoriesDialog from "../components/RepositoriesDialog";
@@ -31,11 +31,25 @@ export default function ProjectsPage() {
   const monitorOf = new Map((monitors.data ?? []).map((m) => [m.project_id, m]));
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
   const isAdmin = me.data?.role === "admin";
+  const qc = useQueryClient();
+  const [error, setError] = useState<unknown>(null);
+  async function remove(p: Project) {
+    if (!confirm(`Delete project "${p.name}" with all of its analysis runs, evidence and reports? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      await api.del(`/api/projects/${p.id}`);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["portfolio"] });
+    } catch (e) {
+      setError(e);
+    }
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Projects</h1>
+        <ErrorText error={error} />
         {me.data?.role !== "viewer" && selected.size > 0 && (
           <Button onClick={() => setStarting((projects.data ?? []).filter((p) => selected.has(p.id)))}>
             Analyze selected ({selected.size})
@@ -85,6 +99,7 @@ export default function ProjectsPage() {
                       {isAdmin && <Button variant="secondary" onClick={() => setEditingAccess(p)}>Access</Button>}
                       {me.data?.role !== "viewer" && <Button variant="secondary" onClick={() => setMonitoring(p)}>Monitor</Button>}
                       {me.data?.role !== "viewer" && <Button onClick={() => setStarting([p])}>Analyze</Button>}
+                      {isAdmin && <Button variant="danger" onClick={() => remove(p)}>Delete</Button>}
                     </td>
                   </tr>
                 );

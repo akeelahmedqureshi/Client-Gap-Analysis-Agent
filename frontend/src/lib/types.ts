@@ -9,6 +9,39 @@ export interface User {
   is_active: boolean;
   locked: boolean;
   created_at: string | null;
+  job_function: string | null;
+}
+
+export const JOB_FUNCTIONS: [string, string][] = [["sales", "Sales"], ["business_development", "Business development"],
+  ["product", "Product"], ["technical", "Technical"], ["management", "Management"]];
+
+export interface OrgSettings {
+  settings: {
+    export_min_role: "viewer" | "analyst" | "admin";
+    export_job_functions: string[];
+    retention_days: number | null;
+    retention_keep_latest: boolean;
+    last_purge_at?: string;
+  };
+  can_export: boolean;
+  job_functions: string[];
+}
+
+export interface AppNotification {
+  id: string;
+  event: string;
+  title: string;
+  body: string;
+  run_id: string | null;
+  project_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationPrefs {
+  scope: "mine" | "all";
+  events: Record<string, { in_app: boolean; email: boolean }>;
+  labels: Record<string, string>;
 }
 
 export interface AuditEntry {
@@ -130,6 +163,7 @@ export interface Run {
   parent_run_id: string | null;
   rerun_stages: string[] | null;
   usage: Usage;
+  created_by: string | null;
 }
 
 export interface Evidence {

@@ -15,6 +15,7 @@ import ClientDetailPage from "./pages/ClientDetail";
 import MonitoringPage from "./pages/Monitoring";
 import KnowledgePage from "./pages/Knowledge";
 import PortfolioPage from "./pages/Portfolio";
+import NotificationsPage from "./pages/Notifications";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -25,6 +26,7 @@ const NAV = [
   ["/runs", "Analysis Runs"],
   ["/monitoring", "Monitoring"],
   ["/knowledge", "Knowledge Base"],
+  ["/notifications", "Notifications"],
   ["/settings", "Settings"],
 ] as const;
 
@@ -35,6 +37,11 @@ function Shell() {
     queryKey: ["alerts-unread"],
     queryFn: () => api.get<{ count: number }>("/api/alerts/unread-count"),
     refetchInterval: 60_000,
+  });
+  const notes = useQuery({
+    queryKey: ["notifications-unread"],
+    queryFn: () => api.get<{ count: number }>("/api/notifications/unread-count"),
+    refetchInterval: 30_000,
   });
   return (
     <div className="min-h-screen flex">
@@ -54,6 +61,9 @@ function Shell() {
               }
             >
               {label}
+              {to === "/notifications" && !!notes.data?.count && (
+                <span className="ml-2 rounded-full bg-indigo-500 px-1.5 text-xs text-white" title="Unread notifications">{notes.data.count}</span>
+              )}
               {to === "/monitoring" && !!unread.data?.count && (
                 <span className="ml-2 rounded-full bg-rose-500 px-1.5 text-xs text-white" title="Unread alerts">{unread.data.count}</span>
               )}
@@ -62,7 +72,7 @@ function Shell() {
         </nav>
         <div className="px-4 py-4 text-xs text-slate-400 border-t border-slate-800">
           <div className="truncate">{me.data?.email}</div>
-          <div className="capitalize">{me.data?.role}</div>
+          <div className="capitalize">{me.data?.role}{me.data?.job_function && ` · ${me.data.job_function.replace("_", " ")}`}</div>
           <button
             className="mt-2 text-slate-300 hover:text-white underline"
             onClick={() => {
@@ -86,6 +96,7 @@ function Shell() {
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" />} />

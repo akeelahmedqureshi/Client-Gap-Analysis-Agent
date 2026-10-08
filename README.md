@@ -75,7 +75,7 @@ Platform features:
   keywords, code signals and default scoring factors.
 - **Web UI** (React, TypeScript, Tailwind, React Query) with screens for Dashboard, Upload
   (validate → preview → import), Portfolio (cross-client intelligence), Projects, Clients, Runs, Monitoring (alerts and schedules), Knowledge
-  Base (capabilities and case studies with approval workflow and version history) and Run detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
+  Base (capabilities and case studies with approval workflow and version history), Notifications and Run detail. Run detail has tabs for the pipeline, changes since the previous run, client, project,
   security, UX, competitors (ranked Top 10 and deep-analysed Top 3), pricing, apps, market, comparison, gaps, opportunity matrix with priorities and
   categories, cost & AI (process opportunities), roadmap and patch plans,
   our fit (knowledge-base matches), sales summary and outreach email (edit, regenerate, approve,
@@ -104,6 +104,12 @@ Platform features:
   approvals. Each run is compared with the previous one: new or dropped competitors, competitor feature
   evidence, price moves, gaps opened or closed, new or resolved security issues, client announcements
   and hiring. Alerts appear in the app and go to a Slack-compatible webhook or email.
+- **Governance:** job functions (sales, business development, product, technical, management) next to
+  the permission roles; an export policy by role and job function; structured exports (comparison matrix,
+  gaps, opportunities, recommendations and evidence as CSV, plus the full analysis as JSON); deletion of
+  runs, projects and clients; and a retention period with automatic purge. Each person gets run
+  notifications (completed, failed, waiting for approval, needs review, outreach ready) in the app and
+  by email, as they choose.
 
 Also built:
 

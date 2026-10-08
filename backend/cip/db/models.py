@@ -28,6 +28,8 @@ class Organization(Base):
     __tablename__ = "organizations"
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("org"))
     name: Mapped[str] = mapped_column(String(200))
+    # Admin-managed governance settings (export permission, retention); see services/governance.py.
+    settings: Mapped[dict] = mapped_column(default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -39,6 +41,11 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(200), default="")
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(20), default="analyst")  # admin | analyst | viewer
+    # BRS job function (sales | business_development | product | technical | management); tailors the UI
+    # and may gate exports. Permissions still come from ``role``.
+    job_function: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # {event: {"in_app": bool, "email": bool}}; missing entries use services/notifications.DEFAULTS.
+    notification_prefs: Mapped[dict] = mapped_column(default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     # Brute-force protection: consecutive failures and temporary lock.
     failed_logins: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -383,3 +390,24 @@ class ReviewOverride(Base):
     created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Notification(Base):
+    """A per-user, in-app notification about a run (BRS 30; PRD 10.43). Email copies are recorded in
+    ``delivery``. Recipients must still be able to see the project when it is created."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("user_id", "run_id", "event"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("ntf"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True,
+                                               index=True)
+    event: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(500))
+    body: Mapped[str] = mapped_column(Text, default="")
+    in_app: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    delivery: Mapped[list] = mapped_column(default=list)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

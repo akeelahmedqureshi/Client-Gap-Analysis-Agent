@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useCanExport } from "../lib/useOrg";
 import { BasisTag, Badge, Button, Card, Confidence, Empty, ErrorText } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
 
@@ -70,6 +71,7 @@ function SummaryCard({ runId, doc, canAct, onSaved, onError }: {
   runId: string; doc: SalesDoc; canAct: boolean; onSaved: (d: SalesDoc) => void; onError: (e: unknown) => void;
 }) {
   const c = doc.content;
+  const canExport = useCanExport();
   const [editing, setEditing] = useState(false);
   const [angle, setAngle] = useState(c.conversation_angle);
   const [next, setNext] = useState(c.next_step);
@@ -105,9 +107,9 @@ function SummaryCard({ runId, doc, canAct, onSaved, onError }: {
           <Badge value={doc.status} />
           {canAct && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
           {canAct && doc.status !== "approved" && <Button onClick={approve}>Approve</Button>}
-          <Button variant="secondary" onClick={() => api.download(`/api/runs/${runId}/sales-summary.md`, `sales-summary-${runId}.md`).catch(onError)}>
+          {canExport && <Button variant="secondary" onClick={() => api.download(`/api/runs/${runId}/sales-summary.md`, `sales-summary-${runId}.md`).catch(onError)}>
             Export
-          </Button>
+          </Button>}
         </div>
       }
     >
@@ -211,6 +213,7 @@ function OutreachCard({ runId, doc, canAct, onSaved, onError }: {
   runId: string; doc: SalesDoc; canAct: boolean; onSaved: (d: SalesDoc) => void; onError: (e: unknown) => void;
 }) {
   const c = doc.content;
+  const canExport = useCanExport();
   const [to, setTo] = useState(c.to ?? "");
   const [subject, setSubject] = useState(c.subject);
   const [body, setBody] = useState(c.body);
@@ -261,9 +264,9 @@ function OutreachCard({ runId, doc, canAct, onSaved, onError }: {
           <Badge value={doc.status} />
           <span className="text-xs text-slate-500">v{doc.version} · {c.generated_by === "llm" ? "AI draft" : c.generated_by === "edited" ? "edited" : "template draft"}</span>
           <Button variant="secondary" onClick={copy}>{copied ? "Copied" : "Copy"}</Button>
-          <Button variant="secondary" onClick={() => api.download(`/api/runs/${runId}/outreach.eml`, `outreach-${runId}.eml`).catch(onError)}>
+          {canExport && <Button variant="secondary" onClick={() => api.download(`/api/runs/${runId}/outreach.eml`, `outreach-${runId}.eml`).catch(onError)}>
             Download .eml
-          </Button>
+          </Button>}
         </div>
       }
     >

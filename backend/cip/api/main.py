@@ -11,6 +11,7 @@ from cip.api.deps import require_role
 from cip.api.routes import (
     auth,
     connections,
+    governance,
     knowledge,
     monitoring,
     portfolio,
@@ -61,7 +62,8 @@ app = FastAPI(title="Client Intelligence Platform", version="0.1.0", lifespan=li
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router,
-          monitoring.router, knowledge.router, sales.router, review.router, portfolio.router):
+          monitoring.router, knowledge.router, sales.router, review.router, portfolio.router,
+          governance.router):
     app.include_router(r)
 
 

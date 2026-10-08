@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 103 |
-| 🟡 Partially completed | 15 |
-| ❌ Incomplete | 10 |
+| ✅ Completed | 109 |
+| 🟡 Partially completed | 10 |
+| ❌ Incomplete | 9 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -31,9 +31,9 @@ _Baseline audit: 2026-10-08._
 | 5 | Audit log | ✅ | |
 | 6 | HTTPS in transit; repository tokens encrypted at rest | ✅ | |
 | 7 | Secrets redacted before anything reaches the LLM | ✅ | |
-| 8 | Roles named in the BRS (Sales, BD, Product, Tech, Viewer) | 🟡 | Only admin, analyst and viewer exist |
-| 9 | Export permissions by role | 🟡 | Every role can export |
-| 10 | Data retention and deletion policy | ❌ | No delete for clients, projects or runs |
+| 8 | Roles named in the BRS (Sales, BD, Product, Tech, Viewer) | ✅ | Permission roles (admin, analyst, viewer) plus a job function per user (sales, BD, product, technical, management) that sets the starting tab and can gate exports |
+| 9 | Export permissions by role | ✅ | Org setting: minimum role and optional job functions for every download (report, CSV/JSON, outreach, sales summary); audited |
+| 10 | Data retention and deletion policy | ✅ | Delete runs, projects and clients with everything derived from them; retention period with automatic purge (keeps each project's latest analysis); audit log kept |
 
 ## 2. CSV intake (11)
 
@@ -218,7 +218,7 @@ _Baseline audit: 2026-10-08._
 | 107 | Markdown and PDF export | ✅ | |
 | 108 | The 15 required sections | ✅ | Plus appendices |
 | 109 | Section navigation, print view, version display | 🟡 | Contents line, run/version and PDF print; no clickable navigation |
-| 110 | Structured exports (matrix CSV, opportunities CSV, JSON) | 🟡 | Evidence JSON only |
+| 110 | Structured exports (matrix CSV, opportunities CSV, JSON) | ✅ | Matrix, gaps, opportunities, recommendations and evidence CSV (formula-safe) plus full analysis JSON |
 | 111 | Completeness indicator and low-confidence warnings | ✅ | |
 
 ## 19. Dashboard and portfolio (5)
@@ -236,8 +236,8 @@ _Baseline audit: 2026-10-08._
 | # | Feature | Status | Notes |
 |---|---|---|---|
 | 117 | Agent status, duration, attempts, errors | ✅ | |
-| 118 | In-app notifications | 🟡 | Monitoring alerts only |
-| 119 | Email notifications | 🟡 | Monitoring alerts only |
+| 118 | In-app notifications | ✅ | Per-user inbox: run completed, failed, waiting for approval, needs review, outreach ready; respects project access |
+| 119 | Email notifications | ✅ | Per-user, per-event email preferences (SMTP) |
 | 120 | Token, model and cost tracking | ✅ | Per agent and run; OpenRouter cost or configured prices |
 | 121 | Web-request tracking | ✅ | HTTP requests and search queries per agent |
 

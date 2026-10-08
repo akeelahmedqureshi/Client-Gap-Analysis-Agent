@@ -15,6 +15,7 @@ from cip.core.security.auth import ROLES, hash_password
 from cip.db.models import AuditLog, User
 from cip.db.session import get_session
 from cip.services import audit
+from cip.services.governance import JOB_FUNCTIONS
 
 router = APIRouter(prefix="/api", tags=["users & audit"])
 
@@ -23,6 +24,7 @@ class UserPatch(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     role: str | None = None
     is_active: bool | None = None
+    job_function: str | None = None  # "" clears it
 
 
 class ResetPasswordIn(BaseModel):
@@ -75,6 +77,14 @@ async def update_user(user_id: str, body: UserPatch, request: Request, admin: Us
         (body.role is not None and body.role != "admin") or body.is_active is False)
     if losing_admin and await _active_admins(session, admin.org_id) <= 1:
         raise HTTPException(409, "An organization must keep at least one active admin")
+    if body.job_function is not None:
+        new = body.job_function or None
+        if new is not None and new not in JOB_FUNCTIONS:
+            raise HTTPException(422, f"job_function must be one of {JOB_FUNCTIONS}")
+        if new != user.job_function:
+            audit.record(session, request, admin, "user.updated", "user", user.id, target=user.email,
+                         changes={"job_function": [user.job_function, new]})
+            user.job_function = new
     if body.name is not None:
         user.name = body.name
     if body.role is not None:

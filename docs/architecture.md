@@ -107,7 +107,18 @@ run finishes   ─▶ services/changes.py diff vs previous completed run ─▶ 
 Every tenant-owned row has an `org_id`, and every API query filters on it. Other tables:
 `users` (role-based), `source_connections` (encrypted tokens), `oauth_states`, `csv_uploads` (raw
 files kept in object storage under `storage/{org}/csv/`), `monitors` (one per project, encrypted
-webhook URL) and `alerts`.
+webhook URL), `alerts` and `notifications` (per user, with email delivery results). Users carry a
+permission `role`, a `job_function` and `notification_prefs`; organizations carry governance
+`settings` (export policy, retention).
+
+### Deletion and retention
+
+`services/governance.py` deletes a run, project or client together with everything derived from it.
+SQLite does not enforce foreign-key cascades, so child rows are deleted explicitly. Later versions of a
+deleted run lose their `parent_run_id` link but keep their `updated_at`, because retention ages runs by
+it. With `retention_days` set, the monitoring scheduler purges finished runs older than that once an
+hour, optionally keeping each project's latest completed run. Deletions and purges are audited, and the
+audit log itself is never purged.
 
 Migrations live in `backend/migrations` (Alembic). Development mode also runs `create_all` on
 start-up.

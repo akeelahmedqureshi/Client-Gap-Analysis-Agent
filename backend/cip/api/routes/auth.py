@@ -13,6 +13,7 @@ from cip.core.security.auth import ROLES, create_access_token, hash_password, ve
 from cip.db.models import Organization, User
 from cip.db.session import get_session
 from cip.services import audit
+from cip.services.governance import JOB_FUNCTIONS
 from cip.services.ratelimit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -44,6 +45,7 @@ class UserOut(BaseModel):
     is_active: bool = True
     locked: bool = False
     created_at: datetime | None = None
+    job_function: str | None = None
 
 
 class InviteIn(BaseModel):
@@ -51,6 +53,7 @@ class InviteIn(BaseModel):
     password: str = Field(min_length=10, max_length=200)
     name: str = ""
     role: str = "analyst"
+    job_function: str | None = None
 
 
 class ChangePasswordIn(BaseModel):
@@ -78,7 +81,7 @@ def is_locked(user: User) -> bool:
 
 def user_out(u: User) -> UserOut:
     return UserOut(id=u.id, email=u.email, name=u.name, role=u.role, org_id=u.org_id, is_active=u.is_active,
-                   locked=is_locked(u), created_at=u.created_at)
+                   locked=is_locked(u), created_at=u.created_at, job_function=u.job_function)
 
 
 def token_for(u: User) -> TokenOut:
@@ -165,9 +168,12 @@ async def add_user(body: InviteIn, request: Request, admin: User = Depends(requi
                    session: AsyncSession = Depends(get_session)) -> UserOut:
     if body.role not in ROLES:
         raise HTTPException(422, f"role must be one of {ROLES}")
+    if body.job_function and body.job_function not in JOB_FUNCTIONS:
+        raise HTTPException(422, f"job_function must be one of {JOB_FUNCTIONS}")
     if (await session.execute(select(User).where(User.email == body.email.lower()))).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
     user = User(org_id=admin.org_id, email=body.email.lower(), name=body.name, role=body.role,
+                job_function=body.job_function or None,
                 password_hash=hash_password(body.password), is_active=True, failed_logins=0, token_version=0)
     session.add(user)
     await session.flush()
