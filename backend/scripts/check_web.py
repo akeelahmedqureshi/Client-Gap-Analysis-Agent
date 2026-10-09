@@ -40,6 +40,17 @@ def environment() -> None:
     except ImportError:
         print("  certifi not installed")
     print(f"  OpenSSL: {ssl.OPENSSL_VERSION}")
+    extra = s.crawler_extra_ca_file
+    if not extra:
+        print("  extra CA file (CIP_CRAWLER_EXTRA_CA_FILE): not set")
+    elif not Path(extra).is_file():
+        print(f"  extra CA file: {extra} — NOT FOUND (or not readable by this user)")
+    else:
+        try:
+            ssl.create_default_context(cafile=extra)
+            print(f"  extra CA file: {extra} (loaded)")
+        except (OSError, ssl.SSLError) as exc:
+            print(f"  extra CA file: {extra} — NOT A VALID PEM CERTIFICATE: {exc}")
     print(f"  crawler timeout: {s.crawler_timeout_seconds}s, retries: {s.crawler_retries}, user agent: {s.crawler_user_agent}")
     print()
 
