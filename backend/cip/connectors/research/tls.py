@@ -57,12 +57,11 @@ def context() -> ssl.SSLContext:
                         "LLM, search, source-control and integration connections still verify)")
             _context = ctx
             return ctx
-        extra = get_settings().crawler_extra_ca_file
-        if extra:
-            try:
-                ctx.load_verify_locations(cafile=extra)
-            except (OSError, ssl.SSLError) as exc:
-                log.error("CIP_CRAWLER_EXTRA_CA_FILE %s could not be loaded: %s", extra, exc)
+        from cip.core.net import load_extra
+
+        s = get_settings()
+        load_extra(ctx, s.extra_ca_file, "CIP_EXTRA_CA_FILE")
+        load_extra(ctx, s.crawler_extra_ca_file, "CIP_CRAWLER_EXTRA_CA_FILE")
         _context = ctx
     return _context
 
@@ -130,6 +129,7 @@ async def repair(url: str, *, timeout: float = 10.0, transport: httpx.AsyncBaseT
                  leaf_pem: str | None = None) -> bool:
     """Fetch the intermediates missing from ``url``'s chain into the shared store. True when something was added."""
     from cip.connectors.research.web import UnsafeURL, assert_public_url, urlparse
+    from cip.core.net import api_verify
 
     parsed = urlparse(url)
     host, port = parsed.hostname or "", parsed.port or 443
@@ -149,7 +149,8 @@ async def repair(url: str, *, timeout: float = 10.0, transport: httpx.AsyncBaseT
                         host, vendor, cert.issuer.rfc4514_string())
             return False
         added = 0
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, transport=transport) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, transport=transport,
+                                     verify=api_verify()) as client:
             for _ in range(MAX_DEPTH):
                 if cert.issuer == cert.subject:
                     break  # self-signed: nothing more to fetch

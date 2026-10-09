@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # CA of a firewall that inspects HTTPS (FortiGate, Zscaler, Palo Alto…). Unlike SSL_CERT_FILE it does not
     # replace the public CA bundle, so sites the firewall does not inspect keep working.
     crawler_extra_ca_file: str | None = None
+    # The same for every outbound connection, including the API calls that carry keys (LLM, web search, GitHub/
+    # GitLab, CRM, webhooks), which always verify certificates. Also trusted by the crawler.
+    extra_ca_file: str | None = None
     # Last resort when an HTTPS-inspecting firewall's CA can't be trusted: false makes research fetches of public
     # websites (pages, PDFs, the crawler's browser) accept any certificate. Only those fetches, which carry no
     # credentials; LLM, search, source-control, CRM and email connections always verify. A forged or intercepted

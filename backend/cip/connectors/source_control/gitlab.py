@@ -7,6 +7,7 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from cip.config import get_settings
+from cip.core.net import api_verify
 from cip.connectors.source_control.base import (
     ActivityItem,
     RepoMetadata,
@@ -36,7 +37,8 @@ class GitLabProvider(SourceControlProvider):
             # GitLab accepts both OAuth tokens and PATs as Bearer tokens.
             headers["Authorization"] = f"Bearer {self._token}"
         return httpx.AsyncClient(base_url=f"{self._base}/api/v4", headers=headers, timeout=30.0,
-                                 transport=self._transport, follow_redirects=True)
+                                 transport=self._transport, follow_redirects=True,
+                                 verify=api_verify())
 
     async def _get(self, path: str, params: dict | None = None) -> httpx.Response:
         async with self._client() as c:
@@ -141,7 +143,7 @@ class GitLabProvider(SourceControlProvider):
     async def refresh_token(refresh_token: str) -> dict:
         """Exchange a (single-use) refresh token for a new access + refresh token pair."""
         s = get_settings()
-        async with httpx.AsyncClient(timeout=30.0) as c:
+        async with httpx.AsyncClient(timeout=30.0, verify=api_verify()) as c:
             resp = await c.post(f"{s.gitlab_url.rstrip('/')}/oauth/token", data={
                 "client_id": s.gitlab_client_id, "client_secret": s.gitlab_client_secret,
                 "refresh_token": refresh_token, "grant_type": "refresh_token",
@@ -154,7 +156,7 @@ class GitLabProvider(SourceControlProvider):
     @staticmethod
     async def exchange_code(code: str, redirect_uri: str) -> dict:
         s = get_settings()
-        async with httpx.AsyncClient(timeout=30.0) as c:
+        async with httpx.AsyncClient(timeout=30.0, verify=api_verify()) as c:
             resp = await c.post(f"{s.gitlab_url.rstrip('/')}/oauth/token", data={
                 "client_id": s.gitlab_client_id, "client_secret": s.gitlab_client_secret,
                 "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_uri,

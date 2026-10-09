@@ -147,3 +147,41 @@ async def test_verification_can_be_turned_off_for_research_fetches_only(tmp_path
         server.close()
         monkeypatch.delenv("CIP_CRAWLER_VERIFY_TLS")
         get_settings.cache_clear()
+
+
+async def test_api_connections_trust_the_extra_ca_but_never_skip_verification(tmp_path, monkeypatch):
+    from cip.config import get_settings
+    from cip.core import net
+
+    keys = [ec.generate_private_key(ec.SECP256R1()) for _ in range(2)]
+    fw_ca = _cert("FortiGate FG200F", "FortiGate FG200F", keys[0], keys[0], ca=True)
+    leaf = _cert("api", "FortiGate FG200F", keys[1], keys[0], ca=False, san="127.0.0.1")
+    server, port = await _serve_leaf_only(leaf, keys[1], tmp_path)
+    url = f"https://127.0.0.1:{port}/"
+
+    async def api_get():
+        async with httpx.AsyncClient(verify=net.api_verify(), trust_env=False) as c:
+            return await c.get(url)
+
+    try:
+        monkeypatch.setenv("CIP_CRAWLER_VERIFY_TLS", "false")  # the crawler switch never reaches API calls
+        get_settings.cache_clear()
+        net.reset()
+        with pytest.raises(httpx.ConnectError, match="certificate verify failed"):
+            await api_get()
+
+        (tmp_path / "fw.pem").write_bytes(fw_ca.public_bytes(Encoding.PEM))
+        monkeypatch.setenv("CIP_EXTRA_CA_FILE", str(tmp_path / "fw.pem"))
+        get_settings.cache_clear()
+        net.reset()
+        assert (await api_get()).text == "ok"
+        monkeypatch.delenv("CIP_CRAWLER_VERIFY_TLS")
+        get_settings.cache_clear()
+        tls.reset()
+        assert (await _get(url)).text == "ok"  # the crawler (verifying again) trusts it too
+    finally:
+        server.close()
+        monkeypatch.delenv("CIP_CRAWLER_VERIFY_TLS", raising=False)
+        monkeypatch.delenv("CIP_EXTRA_CA_FILE")
+        get_settings.cache_clear()
+        net.reset()

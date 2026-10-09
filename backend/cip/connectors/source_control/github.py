@@ -8,6 +8,7 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from cip.config import get_settings
+from cip.core.net import api_verify
 from cip.connectors.source_control.base import (
     ActivityItem,
     RepoMetadata,
@@ -40,7 +41,8 @@ class GitHubProvider(SourceControlProvider):
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
         return httpx.AsyncClient(base_url=self._api_url, headers=headers, timeout=30.0,
-                                 transport=self._transport, follow_redirects=True)
+                                 transport=self._transport, follow_redirects=True,
+                                 verify=api_verify())
 
     async def _get(self, path: str, params: dict | None = None, accept: str | None = None) -> httpx.Response:
         async with self._client() as c:
@@ -145,7 +147,7 @@ class GitHubProvider(SourceControlProvider):
     async def refresh_token(refresh_token: str) -> dict:
         """Only used when the OAuth app has expiring user tokens enabled."""
         s = get_settings()
-        async with httpx.AsyncClient(timeout=30.0) as c:
+        async with httpx.AsyncClient(timeout=30.0, verify=api_verify()) as c:
             resp = await c.post(GITHUB_OAUTH_TOKEN, headers={"Accept": "application/json"}, data={
                 "client_id": s.github_client_id, "client_secret": s.github_client_secret,
                 "refresh_token": refresh_token, "grant_type": "refresh_token",
@@ -158,7 +160,7 @@ class GitHubProvider(SourceControlProvider):
     @staticmethod
     async def exchange_code(code: str, redirect_uri: str) -> dict:
         s = get_settings()
-        async with httpx.AsyncClient(timeout=30.0) as c:
+        async with httpx.AsyncClient(timeout=30.0, verify=api_verify()) as c:
             resp = await c.post(GITHUB_OAUTH_TOKEN, headers={"Accept": "application/json"}, data={
                 "client_id": s.github_client_id, "client_secret": s.github_client_secret,
                 "code": code, "redirect_uri": redirect_uri,

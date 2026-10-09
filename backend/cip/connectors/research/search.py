@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import httpx
 
 from cip.config import Settings, get_settings
+from cip.core.net import api_verify
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class TavilySearchProvider(SearchProvider):
         self._transport = transport
 
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
-        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as c:
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport, verify=api_verify()) as c:
             resp = await c.post("https://api.tavily.com/search",
                                 headers={"Authorization": f"Bearer {self._key}"},
                                 json={"query": query, "max_results": limit, "search_depth": "basic"})
@@ -61,7 +62,7 @@ class BraveSearchProvider(SearchProvider):
         self._transport = transport
 
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
-        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as c:
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport, verify=api_verify()) as c:
             resp = await c.get("https://api.search.brave.com/res/v1/web/search",
                                params={"q": query, "count": min(limit, 20)},
                                headers={"X-Subscription-Token": self._key, "Accept": "application/json"})

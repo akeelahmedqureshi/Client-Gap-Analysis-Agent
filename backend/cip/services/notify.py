@@ -18,6 +18,7 @@ from cip.core.urls import urlparse
 import httpx
 
 from cip.config import Settings, get_settings
+from cip.core.net import api_verify
 from cip.connectors.research.web import UnsafeURL, assert_public_url
 
 log = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ async def send_webhook(url: str, payload: dict, settings: Settings | None = None
         if webhook_transport is None:
             await assert_public_url(url)
         async with httpx.AsyncClient(timeout=s.notify_timeout_seconds, follow_redirects=False,
-                                     transport=webhook_transport) as client:
+                                     transport=webhook_transport, verify=api_verify()) as client:
             resp = await client.post(url, json=payload)
         ok = resp.status_code < 300
         return {"channel": "webhook", "ok": ok, "status": resp.status_code}

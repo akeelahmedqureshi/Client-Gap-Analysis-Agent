@@ -23,7 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cip.config import get_settings  # noqa: E402
 from cip.connectors.research import tls  # noqa: E402
 from cip.connectors.research.domain import check_domain  # noqa: E402
-from cip.connectors.research.web import WebFetcher  # noqa: E402
+from cip.connectors.research.search import get_search_provider  # noqa: E402
+from cip.connectors.research.web import WebFetcher, network_cause, urlparse  # noqa: E402
+from cip.core.net import api_verify  # noqa: E402
 
 
 def environment() -> None:
@@ -42,17 +44,17 @@ def environment() -> None:
     print(f"  OpenSSL: {ssl.OPENSSL_VERSION}")
     if not s.crawler_verify_tls:
         print("  TLS verification: OFF for research fetches (CIP_CRAWLER_VERIFY_TLS=false)")
-    extra = s.crawler_extra_ca_file
-    if not extra:
-        print("  extra CA file (CIP_CRAWLER_EXTRA_CA_FILE): not set")
-    elif not Path(extra).is_file():
-        print(f"  extra CA file: {extra} — NOT FOUND (or not readable by this user)")
-    else:
-        try:
-            ssl.create_default_context(cafile=extra)
-            print(f"  extra CA file: {extra} (loaded)")
-        except (OSError, ssl.SSLError) as exc:
-            print(f"  extra CA file: {extra} — NOT A VALID PEM CERTIFICATE: {exc}")
+    for name, extra in (("CIP_EXTRA_CA_FILE", s.extra_ca_file), ("CIP_CRAWLER_EXTRA_CA_FILE", s.crawler_extra_ca_file)):
+        if not extra:
+            print(f"  {name}: not set")
+        elif not Path(extra).is_file():
+            print(f"  {name}: {extra} — NOT FOUND (or not readable by this user)")
+        else:
+            try:
+                ssl.create_default_context(cafile=extra)
+                print(f"  {name}: {extra} (loaded)")
+            except (OSError, ssl.SSLError) as exc:
+                print(f"  {name}: {extra} — NOT A VALID PEM CERTIFICATE: {exc}")
     print(f"  browser rendering: {s.browser_rendering}")
     print(f"  crawler timeout: {s.crawler_timeout_seconds}s, retries: {s.crawler_retries}, user agent: {s.crawler_user_agent}")
     print()
@@ -73,8 +75,45 @@ async def explain_certificate(url: str) -> None:
         print("  -> the certificate names no URL for its issuer, so the missing certificate cannot be fetched automatically.")
 
 
+def _cause(exc: Exception) -> str:
+    reason, detail = network_cause(exc)
+    return f"{reason.replace('_', ' ')}: {detail or type(exc).__name__}"
+
+
+async def services(query: str) -> None:
+    """The API connections analyses depend on (they always verify certificates and carry keys)."""
+    import httpx
+
+    s = get_settings()
+    print("API connections (certificates always verified):")
+    provider = get_search_provider(s)
+    if provider.name == "none":
+        why = "CIP_SEARCH_PROVIDER is not set (or 'none')" if s.search_provider in ("", "none") else \
+            f"CIP_SEARCH_PROVIDER={s.search_provider} but its API key (CIP_{s.search_provider.upper()}_API_KEY) is empty"
+        print(f"  web search: OFF — {why}")
+    else:
+        try:
+            results = await provider.search(query, limit=3)  # one query of your search plan
+            print(f"  web search ({provider.name}): " + (f"OK — {len(results)} results for “{query}”" if results else
+                                                       "NO RESULTS — the provider answered with an error or nothing "
+                                                       "(see any warning above: 401 = invalid key, 432 = quota)"))
+        except Exception as exc:  # noqa: BLE001
+            print(f"  web search ({provider.name}): FAILED — {_cause(exc)}")
+    if not s.openrouter_api_key:
+        print("  LLM (OpenRouter): no CIP_OPENROUTER_API_KEY")
+    else:
+        try:
+            async with httpx.AsyncClient(timeout=15, verify=api_verify()) as c:
+                resp = await c.get(s.openrouter_base_url.rstrip("/") + "/models")
+            print(f"  LLM (OpenRouter): reachable (HTTP {resp.status_code})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  LLM (OpenRouter): FAILED — {_cause(exc)}")
+    print()
+
+
 async def main(urls: list[str]) -> int:
     environment()
+    await services(urlparse(urls[0] if "://" in urls[0] else "https://" + urls[0]).hostname or urls[0])
     fetcher = WebFetcher()  # same rendering setting as analyses (CIP_BROWSER_RENDERING)
     if fetcher.renderer is not None and not fetcher.renderer.available:
         print(f"Browser renderer unavailable: {fetcher.renderer._unavailable_reason}\n")

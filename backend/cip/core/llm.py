@@ -20,6 +20,7 @@ from pydantic import BaseModel, ValidationError
 from cip.core import usage
 
 from cip.config import Settings, get_settings
+from cip.core.net import api_verify
 from cip.core.security.secrets import redact
 
 log = logging.getLogger(__name__)
@@ -74,7 +75,8 @@ class OpenRouterClient:
         backoff = 2.0
         last_exc: Exception | None = None
         async with httpx.AsyncClient(
-            base_url=s.openrouter_base_url, timeout=s.llm_timeout_seconds, transport=self._transport
+            base_url=s.openrouter_base_url, timeout=s.llm_timeout_seconds, transport=self._transport,
+            verify=api_verify(),
         ) as client:
             for attempt in range(s.llm_max_retries + 1):
                 try:

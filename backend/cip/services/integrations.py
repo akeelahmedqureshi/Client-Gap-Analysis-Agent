@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 import httpx
 
 from cip.config import get_settings
+from cip.core.net import api_verify
 from cip.connectors.research.web import UnsafeURL, assert_public_url
 from cip.core.security.crypto import TokenCipher
 from cip.db.models import Integration
@@ -155,7 +156,7 @@ def note_text(o: dict) -> str:
 
 def _client(**kw) -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=get_settings().notify_timeout_seconds, transport=transport,
-                             follow_redirects=False, **kw)
+                             follow_redirects=False, verify=api_verify(), **kw)
 
 
 async def _call(client: httpx.AsyncClient, method: str, url: str, **kw) -> dict:
