@@ -86,3 +86,57 @@ async def test_a_browser_that_only_sees_the_challenge_again_is_a_failure():
         check = await check_domain(WebFetcher(transport=challenge_transport(), rendering="auto",
                                               renderer=PassingBrowser(html=page)), "www.ajlakes.test")
         assert check["status"] == "blocked" and "could not pass it either" in check["detail"]
+
+
+async def test_blocked_client_site_profile_is_built_from_search_results(make_ctx):
+    from cip.agents.client_research import ClientResearchAgent
+    from cip.connectors.research.search import SearchProvider, SearchResult
+    from cip.core.grounding import SourcedValue
+
+    class Search(SearchProvider):
+        name = "fake"
+
+        def __init__(self):
+            self.queries = []
+
+        async def search(self, query, limit=10):
+            self.queries.append(query)
+            return [
+                SearchResult("AJ Lakes | Lakeside cabins", "https://www.ajlakes.test/",
+                             "AJ Lakes offers lakeside cabins, boat rentals and guided fishing trips."),
+                SearchResult("AJ Lakes - Company profile", "https://directory.example/aj-lakes",
+                             "AJ Lakes is a family-owned resort founded in 1998 in Minnesota."),
+                SearchResult("Unrelated lake news", "https://news.example/lakes", "Water levels are rising."),
+            ]
+
+    class LLM:
+        prompts = []
+
+        async def complete_json(self, system, user, schema, **kw):
+            self.prompts.append(user)
+            return schema(
+                description=SourcedValue(value="Lakeside resort with cabins and boat rentals",
+                                         source_url="https://www.ajlakes.test/",
+                                         quote="lakeside cabins, boat rentals and guided fishing trips"),
+                headquarters=SourcedValue(value="Minnesota", source_url="https://directory.example/aj-lakes",
+                                          quote="founded in 1998 in Minnesota"),
+                industry=SourcedValue(value="Hospitality", source_url="https://news.example/lakes",
+                                      quote="Hospitality"),  # not an offered source: must be dropped
+            )
+
+    llm = LLM()
+    ctx = make_ctx(fetcher=WebFetcher(transport=challenge_transport(), rendering="never"), search=Search(), llm=llm)
+    ctx.record.client.name, ctx.record.client.domain = "AJ Lakes", "www.ajlakes.test"
+    ctx.record.project.url = None
+    result = await ClientResearchAgent().run(ctx)
+    d = result.data
+    assert d["domain_check"]["reason"] == "bot_challenge" and d["website_unavailable"]
+    assert {s["url"] for s in d["search_sources"]} == {"https://www.ajlakes.test/", "https://directory.example/aj-lakes"}
+    assert "news.example" not in llm.prompts[0] and "search results" in llm.prompts[0]
+    profile = d["profile"]
+    assert profile["description"] == "Lakeside resort with cabins and boat rentals"
+    assert profile["headquarters"] == "Minnesota"
+    assert profile["industry"] != "Hospitality"
+    cited = [ctx.ledger.get(i) for i in profile["evidence_ids"]]
+    assert {e.source_type for e in cited} == {"search"} and all(e.source_url for e in cited)
+    assert any("search result" in f.title for f in result.findings)

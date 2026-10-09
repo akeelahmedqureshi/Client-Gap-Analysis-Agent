@@ -382,9 +382,22 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
     <div className="grid lg:grid-cols-2 gap-4">
       {noWebsite && (
         <div className="lg:col-span-2 border border-rose-200 bg-rose-50 rounded-xl p-3 text-sm text-rose-900">
-          No page of the client's website could be retrieved{check?.detail ? ` (${check.detail})` : ""}. The analysis relies on
-          the CSV record, repositories and search. Check that the server can reach the site (outbound HTTPS, DNS, robots.txt), then
-          start a new analysis of the project.
+          No page of the client's website could be retrieved{check?.detail ? ` (${check.detail})` : ""}.{" "}
+          {check?.reason === "bot_challenge"
+            ? "The site's bot protection only lets human visitors in; this can only be changed by the site owner."
+            : "Check that the server can reach the site (outbound HTTPS, DNS, robots.txt), then start a new analysis of the project."}
+          {(d.search_sources ?? []).length > 0 ? (
+            <div className="mt-2">
+              The profile below is built from {d.search_sources.length} web-search result(s) about the company; each fact cites its source:
+              <ul className="list-disc ml-5 mt-1">
+                {d.search_sources.map((s: any) => (
+                  <li key={s.url}><a className="underline" href={s.url} target="_blank" rel="noreferrer">{s.title || s.url}</a></li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <span> The analysis relies on the CSV record, repositories and search.</span>
+          )}
         </div>
       )}
       {check && check.status !== "ok" && (

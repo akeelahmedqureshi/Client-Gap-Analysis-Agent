@@ -86,6 +86,36 @@ Products/services must be offerings of this company (not partners' or customers'
 Allowed product kinds: product, service, platform, mobile_app, saas, api, marketplace, other. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
 
 
+SEARCH_NOTE = ("\n\nSome sources are web-search results (title and snippet) from other sites. Use one only when it is "
+               "clearly about this company (same name, and same domain when one is given); quote it verbatim.")
+MAX_SEARCH_DOCS = 12
+
+
+def about_company(text: str, name: str, domain: str | None) -> bool:
+    low = text.lower()
+    return name.lower() in low or bool(domain and domain.lower() in low)
+
+
+async def search_docs(search, name: str, domain: str | None) -> list[SourceDoc]:
+    """Search results about the company, for when its own website can't be read: other sites (directories,
+    news, profiles) and the search engine's snippets of the site itself. Only results that name the company
+    (or its domain) are kept; each is cited as a search source."""
+    queries = [f"{name} {domain}" if domain else name, f"{name} company profile", f"{name} products services"]
+    docs: dict[str, SourceDoc] = {}
+    for q in queries:
+        try:
+            results = await search.search(q, limit=8)
+        except Exception as exc:  # noqa: BLE001 - search is best-effort
+            log.warning("Search for %s failed: %s", q, exc)
+            continue
+        for r in results:
+            text = f"{r.title}\n{r.snippet}".strip()
+            on_site = bool(domain and registrable_domain(r.url) == registrable_domain(domain))
+            if r.url and r.url not in docs and (on_site or about_company(text, name, domain)):
+                docs[r.url] = SourceDoc(r.url, text, "search")
+    return list(docs.values())[:MAX_SEARCH_DOCS]
+
+
 def page_doc(p: Page) -> SourceDoc:
     header = " | ".join(x for x in (p.title, p.description) if x)
     return SourceDoc(p.url, f"{header}\n{' / '.join(p.headings[:25])}\n{p.text}"[: PAGE_TEXT_LIMIT * 2], "website")
@@ -252,7 +282,11 @@ class ClientResearchAgent(Agent):
             project_pages = await ctx.fetcher.crawl(rec.project.url, max_pages=8)
 
         all_pages = pages + project_pages
-        if not all_pages and not companies:
+        # The website can't be read (blocked, down): build the profile from what search knows about the company.
+        found: list[SourceDoc] = []
+        if not all_pages and not isinstance(ctx.search, NullSearchProvider):
+            found = await search_docs(ctx.search, rec.client.name, domain)
+        if not all_pages and not companies and not found:
             return AgentResult(
                 status="completed", confidence=0.1, errors=errors,
                 findings=[*check_findings,
@@ -306,14 +340,20 @@ class ClientResearchAgent(Agent):
                                     detail="Only role-based business contacts are retained.", confidence=1.0))
 
         # LLM structured extraction, grounded against the crawled pages -------
-        docs = [page_doc(p) for p in all_pages]
+        docs = [page_doc(p) for p in all_pages] + found
         grounder = Grounder(ledger, docs)
+        if found:
+            findings.append(Finding(
+                category="research", title=f"Profile built from {len(found)} search result(s)",
+                detail="The client's website could not be read, so the profile uses web-search results about the "
+                       "company (other sites and search snippets of its own site). Each fact cites its source.",
+                confidence=0.7))
         try:
             extracted = await ctx.llm.complete_json(
                 SYSTEM_PROMPT,
                 f"Company: {rec.client.name}\nDomain: {profile.domain}\n"
                 f"Known project: {rec.project.name} — {rec.project.description or ''}\n\n"
-                f"{pages_to_prompt(docs, 30_000)}",
+                f"{pages_to_prompt(docs, 30_000)}" + (SEARCH_NOTE if found else ""),
                 _LLMCompany,
             )
             for label, attr in (("Description", "description"), ("Industry", "industry"),
@@ -421,5 +461,7 @@ class ClientResearchAgent(Agent):
                 "home_snippet": snippet(home.text if home else None),
                 "domain_check": site_check,
                 "languages": summarize_languages([p.lang for p in all_pages if p.content_type == "html"]),
+                "website_unavailable": not all_pages,
+                "search_sources": [{"url": d.url, "title": d.text.split("\n", 1)[0][:200]} for d in found],
             },
         )

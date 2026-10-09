@@ -50,7 +50,7 @@ class TavilySearchProvider(SearchProvider):
         if resp.status_code >= 400:
             log.warning("Tavily search failed: %s", resp.status_code)
             return []
-        return [SearchResult(r.get("title", ""), r.get("url", ""), r.get("content", "")[:400])
+        return [SearchResult(r.get("title", ""), r.get("url", ""), r.get("content", "")[:800])
                 for r in resp.json().get("results", [])]
 
 
@@ -69,7 +69,7 @@ class BraveSearchProvider(SearchProvider):
         if resp.status_code >= 400:
             log.warning("Brave search failed: %s", resp.status_code)
             return []
-        return [SearchResult(r.get("title", ""), r.get("url", ""), r.get("description", "")[:400])
+        return [SearchResult(r.get("title", ""), r.get("url", ""), r.get("description", "")[:800])
                 for r in resp.json().get("web", {}).get("results", [])]
 
 
