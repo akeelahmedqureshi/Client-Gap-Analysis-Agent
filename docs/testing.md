@@ -24,6 +24,9 @@ ruff check cip tests --select F,E9            # lint (what CI runs)
 cd ../frontend && npm run build               # TypeScript type-check + production build
 ```
 
+Tests ignore `backend/.env`, so they can be run on a configured server without its settings (or its database)
+affecting them; nothing they do reaches the network or the real database.
+
 ### Running parts of the suite
 
 ```bash

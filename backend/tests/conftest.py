@@ -7,6 +7,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cip.config import Settings  # noqa: E402
+
+# Tests never read the server's backend/.env: production settings (TLS, executor, proxies…) must not change them.
+Settings.model_config["env_file"] = None
 os.environ.setdefault("CIP_OPENROUTER_API_KEY", "")
 os.environ.setdefault("CIP_SEARCH_PROVIDER", "none")
 os.environ.setdefault("CIP_JWT_SECRET", "test-secret-with-at-least-32-bytes-of-entropy")
