@@ -27,7 +27,16 @@ async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true", help="report missing columns without changing anything")
     args = parser.parse_args()
-    print(f"Database: {get_settings().database_url.split('@')[-1]}")
+    url = get_settings().database_url
+    print(f"Database: {url.split('@')[-1]}")
+    if url.startswith("sqlite"):
+        path = Path(url.split("///", 1)[-1]).resolve()
+        if not path.exists():
+            print(f"No database file at {path}: run this from the directory the server runs in, "
+                  "or set CIP_DATABASE_URL.")
+            return 2
+        print(f"File: {path} ({path.stat().st_size:,} bytes)")
+    print(f"Tables: {len(await db.table_names())}; recorded migration: {await db.alembic_revision() or 'none'}")
     if args.check:
         missing = (await db.check_schema(repair=False))["missing_columns"]
         print("Missing columns: " + (", ".join(missing) if missing else "none"))

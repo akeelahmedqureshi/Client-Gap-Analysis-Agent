@@ -126,6 +126,20 @@ def sync_schema(conn) -> dict:
     return {"added_columns": added, "stamped": head}
 
 
+async def table_names() -> list[str]:
+    sessionmaker()
+    assert _engine is not None
+    async with _engine.connect() as conn:
+        return await conn.run_sync(lambda c: inspect(c).get_table_names())
+
+
+async def alembic_revision() -> str | None:
+    if "alembic_version" not in await table_names():
+        return None
+    async with _engine.connect() as conn:
+        return (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
+
+
 async def check_schema(repair: bool) -> dict:
     """At start-up: repair drift (development) or report it (production)."""
     sessionmaker()
