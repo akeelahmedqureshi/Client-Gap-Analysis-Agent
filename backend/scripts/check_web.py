@@ -40,6 +40,8 @@ def environment() -> None:
     except ImportError:
         print("  certifi not installed")
     print(f"  OpenSSL: {ssl.OPENSSL_VERSION}")
+    if not s.crawler_verify_tls:
+        print("  TLS verification: OFF for research fetches (CIP_CRAWLER_VERIFY_TLS=false)")
     extra = s.crawler_extra_ca_file
     if not extra:
         print("  extra CA file (CIP_CRAWLER_EXTRA_CA_FILE): not set")

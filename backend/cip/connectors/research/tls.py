@@ -50,6 +50,13 @@ def context() -> ssl.SSLContext:
         from cip.config import get_settings
 
         ctx = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE") or certifi.where())
+        if not get_settings().crawler_verify_tls:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            log.warning("CIP_CRAWLER_VERIFY_TLS=false: research fetches accept any certificate (public websites only; "
+                        "LLM, search, source-control and integration connections still verify)")
+            _context = ctx
+            return ctx
         extra = get_settings().crawler_extra_ca_file
         if extra:
             try:

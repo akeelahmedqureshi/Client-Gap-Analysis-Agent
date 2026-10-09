@@ -152,7 +152,7 @@ class BrowserRenderer:
         async with self._sem:
             context = await browser.new_context(
                 user_agent=s.crawler_user_agent, java_script_enabled=True, accept_downloads=False,
-                service_workers="block", ignore_https_errors=False,
+                service_workers="block", ignore_https_errors=not s.crawler_verify_tls,
             )
             try:
                 async def guard(route):

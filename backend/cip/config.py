@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # CA of a firewall that inspects HTTPS (FortiGate, Zscaler, Palo Alto…). Unlike SSL_CERT_FILE it does not
     # replace the public CA bundle, so sites the firewall does not inspect keep working.
     crawler_extra_ca_file: str | None = None
+    # Last resort when an HTTPS-inspecting firewall's CA can't be trusted: false makes research fetches of public
+    # websites (pages, PDFs, the crawler's browser) accept any certificate. Only those fetches, which carry no
+    # credentials; LLM, search, source-control, CRM and email connections always verify. A forged or intercepted
+    # page could then become evidence, so prefer crawler_extra_ca_file.
+    crawler_verify_tls: bool = True
     # PDFs (brochures, datasheets, pricing sheets) found on a site are read as text (BRS 20).
     crawler_max_pdfs: int = 2
     pdf_max_bytes: int = 10_000_000

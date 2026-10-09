@@ -128,3 +128,22 @@ async def test_https_inspection_by_a_firewall_is_named_and_its_ca_can_be_trusted
         server.close()
         monkeypatch.delenv("CIP_CRAWLER_EXTRA_CA_FILE")
         get_settings.cache_clear()
+
+
+async def test_verification_can_be_turned_off_for_research_fetches_only(tmp_path, monkeypatch):
+    from cip.config import get_settings
+
+    _, _, leaf, key = _pki("Unknown Root")
+    server, port = await _serve_leaf_only(leaf, key, tmp_path)
+    url = f"https://127.0.0.1:{port}/"
+    try:
+        with pytest.raises(httpx.ConnectError):
+            await _get(url)  # verified by default
+        monkeypatch.setenv("CIP_CRAWLER_VERIFY_TLS", "false")
+        get_settings.cache_clear()
+        tls.reset()
+        assert (await _get(url)).text == "ok"
+    finally:
+        server.close()
+        monkeypatch.delenv("CIP_CRAWLER_VERIFY_TLS")
+        get_settings.cache_clear()

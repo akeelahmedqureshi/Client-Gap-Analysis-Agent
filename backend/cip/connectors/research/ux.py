@@ -302,7 +302,7 @@ class BrowserUxAuditor:
 
     async def _context(self, browser, mobile: bool):
         kw = dict(user_agent=self.settings.crawler_user_agent, java_script_enabled=True, accept_downloads=False,
-                  service_workers="block")
+                  service_workers="block", ignore_https_errors=not self.settings.crawler_verify_tls)
         if mobile:
             kw.update(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
         else:
