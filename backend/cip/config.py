@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     crawler_domain_delay_seconds: float = 0.25
     crawler_retries: int = 2
     crawler_retry_backoff_seconds: float = 0.5
+    # When this server reaches the internet only through an HTTP(S) proxy (HTTPS_PROXY) and its own DNS cannot
+    # resolve public names, let the proxy resolve them. Literal and locally resolvable private addresses are still
+    # refused; set this only when the proxy itself cannot reach your internal network.
+    crawler_proxy_resolves_dns: bool = False
     # PDFs (brochures, datasheets, pricing sheets) found on a site are read as text (BRS 20).
     crawler_max_pdfs: int = 2
     pdf_max_bytes: int = 10_000_000

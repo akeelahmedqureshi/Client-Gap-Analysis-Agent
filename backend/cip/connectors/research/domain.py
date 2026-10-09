@@ -28,6 +28,21 @@ PARKED_MARKERS = (
     "undeveloped.com", "this web page is parked", "related searches", "domain has expired",
 )
 BLOCKED_REASONS = ("robots_disallowed", "blocked_address", "unsupported_url")
+HINTS = {
+    "tls_certificate": "The server could not verify the site's certificate: update the CA certificates on the server "
+                       "(e.g. `ca-certificates`, `pip install -U certifi`) or set SSL_CERT_FILE to your proxy's CA bundle",
+    "tls_error": "The TLS handshake failed (an intercepting proxy or an outdated server)",
+    "dns_error": "The server's DNS could not resolve the domain",
+    "unresolvable": "The server's DNS could not resolve the domain. If this server reaches the internet only through "
+                    "a proxy (HTTPS_PROXY), set CIP_CRAWLER_PROXY_RESOLVES_DNS=true",
+    "connection_refused": "The site refused the connection on port 443",
+    "network_unreachable": "The server has no route to the internet (outbound firewall or missing proxy settings)",
+    "no_route_to_host": "Outbound traffic is blocked or the host is down (firewall)",
+    "connection_reset": "The connection was reset (firewall, bot protection or proxy)",
+    "proxy_error": "The configured HTTP(S) proxy failed (check HTTPS_PROXY / NO_PROXY for the API process)",
+    "connection_error": "Check that the API process can make outbound HTTPS requests (firewall, proxy settings)",
+    "timeout": "The site did not answer in time (CIP_CRAWLER_TIMEOUT_SECONDS) or outbound traffic is silently dropped",
+}
 MAX_CONCURRENT_CHECKS = 8
 
 
@@ -48,8 +63,10 @@ async def check_domain(fetcher: WebFetcher, url: str) -> dict:
     if raw is None:
         failure = fetcher.last_failure(url) or {}
         reason = failure.get("reason", "no response")
+        hint = HINTS.get(reason, "")
         out.update(status="blocked" if reason in BLOCKED_REASONS else "unreachable",
-                   detail=reason.replace("_", " "))
+                   detail=reason.replace("_", " ") + (f": {failure['detail']}" if failure.get("detail") else "")
+                   + (f". {hint}" if hint else ""), reason=reason)
         return out
     status, _, final_url, body = raw
     out.update(final_url=final_url, http_status=status)

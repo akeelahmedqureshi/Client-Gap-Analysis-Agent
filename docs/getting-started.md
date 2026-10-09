@@ -212,6 +212,30 @@ python scripts/upgrade_db.py           # add them and record the schema as the n
 With `CIP_ENVIRONMENT=production` the server never changes the schema itself; it refuses to start and
 names the missing columns, so run `alembic upgrade head` (or `scripts/upgrade_db.py`) first.
 
+### When a client's website cannot be researched
+
+If the Client tab says "No page of the client's website could be retrieved", check from the server, as the
+user and with the environment the API runs with:
+
+```bash
+cd backend
+python scripts/check_web.py https://client-domain.com
+```
+
+It fetches the site exactly as an analysis does and names the cause, with a hint:
+
+| Cause | Usual fix |
+|---|---|
+| `tls certificate` | Update the server's CA certificates (`ca-certificates`, `pip install -U certifi`), or set `SSL_CERT_FILE` to your proxy's CA bundle |
+| `network unreachable`, `no route to host`, `connection error`, `timeout` | Allow outbound HTTPS (port 443) from the server, or set `HTTPS_PROXY` / `NO_PROXY` for the API process |
+| `proxy error` | Check the proxy address and that it allows the site |
+| `unresolvable`, `dns error` | Fix the server's DNS, or behind an egress-only proxy set `CIP_CRAWLER_PROXY_RESOLVES_DNS=true` |
+| `http 403`, `connection reset` | The site's bot protection blocks the crawler: try a browser-like `CIP_CRAWLER_USER_AGENT`, or analyse from another network |
+| `robots disallowed` | The site asks crawlers not to fetch it; the platform respects that |
+
+The same reasons appear per URL under **Fetch failures** on the run's Pipeline tab and in the server log.
+Then start a new analysis of the project.
+
 ## C. Full stack with Docker
 
 This runs PostgreSQL, Redis, the API (which applies migrations on start), a Celery worker, and the

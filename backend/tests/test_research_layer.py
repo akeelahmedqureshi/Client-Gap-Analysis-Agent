@@ -283,7 +283,8 @@ async def test_domain_classification():
     moved = await check_domain(f, "renamed.example")
     assert moved["status"] == "redirected" and moved["detail"] == "Redirects to newbrand.example"
     gone = await check_domain(f, "gone.example")
-    assert gone["status"] == "unreachable" and gone["detail"] == "connection error"
+    assert gone["status"] == "unreachable" and gone["detail"].startswith("connection error: refused")
+    assert gone["reason"] == "connection_error" and "outbound HTTPS" in gone["detail"]
     assert (await check_domain(f, "https://abc-healthcare.com/nope"))["status"] == "unreachable"
     assert parked_signals(html("Shop", "<p>Related searches</p>")) == []
 
@@ -333,3 +334,31 @@ async def test_unreachable_client_site_returns_the_full_result_shape(make_ctx):
     assert d["website_unavailable"] and d["domain_check"]["status"] == "unreachable"
     assert d["leadership"] == [] and d["announcements"] == [] and d["hiring"]["signals"] == []
     assert d["profile"]["products"] == [] and d["profile"]["contacts"] == []
+
+
+
+def test_network_failures_name_their_cause():
+    from cip.connectors.research.web import network_cause
+    req = httpx.Request("GET", "https://x.example/")
+    cases = {
+        "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer": "tls_certificate",
+        "[Errno 101] Network is unreachable": "network_unreachable",
+        "[Errno 111] Connection refused": "connection_refused",
+        "[Errno -3] Temporary failure in name resolution": "dns_error",
+        "[Errno 113] No route to host": "no_route_to_host",
+        "something odd": "connection_error",
+    }
+    for message, reason in cases.items():
+        assert network_cause(httpx.ConnectError(message, request=req))[0] == reason, message
+    assert network_cause(httpx.ProxyError("bad gateway", request=req))[0] == "proxy_error"
+
+
+async def test_certificate_failure_is_explained_in_the_domain_check():
+    def handler(request):
+        raise httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed", request=request)
+
+    f = WebFetcher(transport=httpx.MockTransport(handler))
+    check = await check_domain(f, "secure.example")
+    assert check["status"] == "unreachable" and check["reason"] == "tls_certificate"
+    assert "CERTIFICATE_VERIFY_FAILED" in check["detail"] and "CA certificates" in check["detail"]
+    assert f.failures[-1]["detail"].startswith("[SSL: CERTIFICATE_VERIFY_FAILED]")

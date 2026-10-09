@@ -108,12 +108,12 @@ class UsageMeter:
         self._add(self.totals, {**_blank(), "cache_hits": 1})
         self._add(self._bucket(), {**_blank(), "cache_hits": 1})
 
-    def record_web_failure(self, url: str, reason: str, attempts: int = 1) -> None:
+    def record_web_failure(self, url: str, reason: str, attempts: int = 1, detail: str = "") -> None:
         self._add(self.totals, {**_blank(), "web_failures": 1})
         self._add(self._bucket(), {**_blank(), "web_failures": 1})
         log = self.failures.setdefault(_agent.get() or "unattributed", [])
         if len(log) < MAX_FAILURES_KEPT:
-            log.append({"url": url[:500], "reason": reason, "attempts": attempts})
+            log.append({"url": url[:500], "reason": reason, "attempts": attempts, **({"detail": detail[:200]} if detail else {})})
 
     def _event(self, text: str) -> None:
         if text not in self.events:

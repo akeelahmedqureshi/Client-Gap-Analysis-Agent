@@ -93,6 +93,14 @@ def registrable_domain(url_or_host: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+def uses_proxy(url: str) -> bool:
+    """True when an HTTP(S) proxy from the environment applies to ``url`` (httpx honours the same variables)."""
+    from urllib.request import getproxies, proxy_bypass
+
+    parsed = urlparse(url)
+    return bool(getproxies().get(parsed.scheme)) and not proxy_bypass(parsed.hostname or "")
+
+
 async def assert_public_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
@@ -106,6 +114,10 @@ async def assert_public_url(url: str) -> None:
         try:
             infos = await loop.getaddrinfo(host, None, type=socket.SOCK_STREAM)
         except socket.gaierror as exc:
+            # Behind an egress proxy the local resolver may not know public names; the proxy resolves them.
+            # Opt-in (CIP_CRAWLER_PROXY_RESOLVES_DNS), because the address can then not be checked here.
+            if get_settings().crawler_proxy_resolves_dns and uses_proxy(url):
+                return
             raise UnsafeURL(f"Cannot resolve {host}") from exc
         addrs = [ipaddress.ip_address(i[4][0]) for i in infos]
     for ip in addrs:
@@ -229,10 +241,43 @@ class BudgetRequestError(httpx.RequestError):
 
 
 class FetchFailed(Exception):
-    def __init__(self, reason: str, attempts: int = 1) -> None:
+    def __init__(self, reason: str, attempts: int = 1, detail: str = "") -> None:
         super().__init__(reason)
         self.reason = reason
         self.attempts = attempts
+        self.detail = detail
+
+
+# Network failures by cause, so "connection error" says what to fix (firewall, certificates, proxy…).
+NETWORK_CAUSES = (
+    ("tls_certificate", ("certificate_verify_failed", "certificate verify failed", "self signed certificate",
+                         "unable to get local issuer")),
+    ("tls_error", ("ssl", "tls", "wrong_version_number", "handshake")),
+    ("dns_error", ("name or service not known", "temporary failure in name resolution", "nodename nor servname",
+                   "getaddrinfo failed", "no address associated")),
+    ("connection_refused", ("connection refused", "errno 111", "errno 61")),
+    ("network_unreachable", ("network is unreachable", "errno 101", "errno 51")),
+    ("no_route_to_host", ("no route to host", "errno 113", "errno 65")),
+    ("connection_reset", ("connection reset", "errno 104", "errno 54")),
+    ("proxy_error", ("proxy",)),
+)
+
+
+def network_cause(exc: BaseException) -> tuple[str, str]:
+    """(reason, short detail) for a transport error, looking through the exception chain."""
+    parts, seen, cur = [], set(), exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        parts.append(f"{type(cur).__name__}: {cur}")
+        cur = cur.__cause__ or cur.__context__
+    text = " | ".join(parts)
+    low = text.lower()
+    if isinstance(exc, httpx.ProxyError):
+        reason = "proxy_error"
+    else:
+        reason = next((r for r, cues in NETWORK_CAUSES if any(c in low for c in cues)), "connection_error")
+    detail = next((str(p) for p in (exc.__cause__, exc.__context__, exc) if p is not None and str(p)), type(exc).__name__)
+    return reason, " ".join(detail.split())[:200]
 
 
 def unsafe_reason(exc: UnsafeURL) -> str:
@@ -273,6 +318,10 @@ def extract_pdf(data: bytes, max_pages: int, max_chars: int = 200_000) -> tuple[
         if size >= max_chars:
             break
     return title[:300], " ".join(" ".join(parts).split())[:max_chars]
+
+
+def _with_attempts(cause: tuple[str, str], attempts: int) -> tuple[str, int, str]:
+    return cause[0], attempts, cause[1]
 
 
 def is_pdf(url: str, content_type: str) -> bool:
@@ -338,14 +387,15 @@ class WebFetcher:
                                  event_hooks={"request": [_meter_request]})
 
     # --- politeness, retries, failure states ------------------------------------------------------
-    def record_failure(self, url: str, reason: str, attempts: int = 1) -> None:
+    def record_failure(self, url: str, reason: str, attempts: int = 1, detail: str = "") -> None:
         if len(self.failures) < 200:
             self.failures.append({"url": url, "domain": registrable_domain(url), "reason": reason,
-                                  "attempts": attempts})
+                                  "attempts": attempts, "detail": detail})
         meter = usage.current()
         if meter is not None:
-            meter.record_web_failure(url, reason, attempts)
-        log.info("fetch failed for %s: %s (attempts: %s)", url, reason, attempts)
+            meter.record_web_failure(url, reason, attempts, detail)
+        # Warning (not info) so an unreachable site is visible in the server log without debug logging.
+        log.warning("fetch failed for %s: %s%s (attempts: %s)", url, reason, f" — {detail}" if detail else "", attempts)
 
     def cache_date(self, url: str, agent: str | None = None) -> datetime | None:
         """When ``url``'s content was really fetched, if ``agent`` (default: the running agent) read it only
@@ -392,12 +442,15 @@ class WebFetcher:
                 raise FetchFailed("budget_exhausted", attempt) from exc
             except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
                 if attempt > self._retries:
-                    reason = "timeout" if isinstance(exc, httpx.TimeoutException) else "connection_error"
-                    raise FetchFailed(reason, attempt) from exc
+                    if isinstance(exc, httpx.TimeoutException):
+                        raise FetchFailed("timeout", attempt, type(exc).__name__) from exc
+                    raise FetchFailed(*_with_attempts(network_cause(exc), attempt)) from exc
                 await asyncio.sleep(self._backoff * 2 ** (attempt - 1))
                 continue
+            except httpx.ProxyError as exc:
+                raise FetchFailed(*_with_attempts(network_cause(exc), attempt)) from exc
             except httpx.HTTPError as exc:
-                raise FetchFailed(type(exc).__name__, attempt) from exc
+                raise FetchFailed(type(exc).__name__, attempt, str(exc)[:200]) from exc
             if resp.status_code in RETRY_STATUS and attempt <= self._retries:
                 wait = _retry_after(resp) if self._backoff else None
                 await asyncio.sleep(min(wait, 10.0) if wait is not None else self._backoff * 2 ** (attempt - 1))
@@ -493,7 +546,7 @@ class WebFetcher:
             await self._store(url, page, html)
             return page, html
         except FetchFailed as exc:
-            self.record_failure(url, exc.reason, exc.attempts)
+            self.record_failure(url, exc.reason, exc.attempts, exc.detail)
             return None
         except UnsafeURL as exc:
             self.record_failure(url, unsafe_reason(exc))
@@ -537,7 +590,7 @@ class WebFetcher:
                 self.record_failure(url, f"http_{resp.status_code}", attempts)
             return resp
         except FetchFailed as exc:
-            self.record_failure(url, exc.reason, exc.attempts)
+            self.record_failure(url, exc.reason, exc.attempts, exc.detail)
         except UnsafeURL as exc:
             self.record_failure(url, unsafe_reason(exc))
         return None
@@ -568,7 +621,7 @@ class WebFetcher:
                 self._mark_live(url, str(resp.url))
             return resp.status_code, resp.headers, str(resp.url), resp.text[:20_000]
         except FetchFailed as exc:
-            self.record_failure(url, exc.reason, exc.attempts)
+            self.record_failure(url, exc.reason, exc.attempts, exc.detail)
         except UnsafeURL as exc:
             self.record_failure(url, unsafe_reason(exc))
         return None
