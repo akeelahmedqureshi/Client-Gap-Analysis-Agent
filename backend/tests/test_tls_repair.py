@@ -102,3 +102,29 @@ async def test_an_intermediate_from_an_untrusted_root_still_fails(tmp_path):
             await _get(url)
     finally:
         server.close()
+
+
+async def test_https_inspection_by_a_firewall_is_named_and_its_ca_can_be_trusted(tmp_path, monkeypatch):
+    from cip.config import get_settings
+
+    keys = [ec.generate_private_key(ec.SECP256R1()) for _ in range(2)]
+    fw_ca = _cert("FortiGate FG200F", "FortiGate FG200F", keys[0], keys[0], ca=True)
+    leaf = _cert("site", "FortiGate FG200F", keys[1], keys[0], ca=False, san="127.0.0.1")  # re-signed by the firewall
+    server, port = await _serve_leaf_only(leaf, keys[1], tmp_path)
+    url = f"https://127.0.0.1:{port}/"
+    try:
+        info = await tls.inspect(url)
+        assert info["interceptor"] == "Fortinet FortiGate" and "FortiGate FG200F" in info["issuer"]
+        assert not await tls.repair(url)  # nothing to download: the firewall's CA must be trusted explicitly
+        with pytest.raises(httpx.ConnectError, match="local issuer"):
+            await _get(url)
+
+        (tmp_path / "fw.pem").write_bytes(fw_ca.public_bytes(Encoding.PEM))
+        monkeypatch.setenv("CIP_CRAWLER_EXTRA_CA_FILE", str(tmp_path / "fw.pem"))
+        get_settings.cache_clear()
+        tls.reset()
+        assert (await _get(url)).text == "ok"
+    finally:
+        server.close()
+        monkeypatch.delenv("CIP_CRAWLER_EXTRA_CA_FILE")
+        get_settings.cache_clear()

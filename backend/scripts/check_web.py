@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cip.config import get_settings  # noqa: E402
+from cip.connectors.research import tls  # noqa: E402
 from cip.connectors.research.domain import check_domain  # noqa: E402
 from cip.connectors.research.web import WebFetcher  # noqa: E402
 
@@ -43,6 +44,21 @@ def environment() -> None:
     print()
 
 
+async def explain_certificate(url: str) -> None:
+    info = await tls.inspect(url)
+    if not info:
+        return
+    print(f"  certificate: {info['subject']}")
+    print(f"  issued by:   {info['issuer']}")
+    if info["interceptor"]:
+        print(f"  -> HTTPS from this server is intercepted by a {info['interceptor']} firewall (HTTPS / deep inspection):")
+        print("     the site is fine, but this network replaces its certificate with one signed by the firewall's own CA.")
+        print("     Fix: ask the network admin to exempt this server from HTTPS inspection, or export the firewall's CA")
+        print("     certificate (PEM) and set CIP_CRAWLER_EXTRA_CA_FILE=/path/to/firewall-ca.pem in .env, then restart.")
+    elif not info["issuer_url"]:
+        print("  -> the certificate names no URL for its issuer, so the missing certificate cannot be fetched automatically.")
+
+
 async def main(urls: list[str]) -> int:
     environment()
     fetcher = WebFetcher(rendering="never")
@@ -54,6 +70,8 @@ async def main(urls: list[str]) -> int:
             print(f"  final URL: {check['final_url']} (HTTP {check['http_status']})")
         if check.get("detail"):
             print(f"  {check['detail']}")
+        if check.get("reason") == "tls_certificate":
+            await explain_certificate(check["url"])
         if check["status"] in ("unreachable", "blocked"):
             bad += 1
         else:

@@ -8,7 +8,8 @@ certificates named in its AIA extension, and add them to the shared verification
 
 This never weakens verification: the downloaded certificates are only used to *build* the chain, which must still
 end at a trusted root from the CA bundle (no partial-chain mode), and the site's hostname is still checked.
-The CA bundle is ``SSL_CERT_FILE`` when set (e.g. a corporate proxy's bundle), otherwise certifi's.
+The CA bundle is ``SSL_CERT_FILE`` when set, otherwise certifi's, plus ``CIP_CRAWLER_EXTRA_CA_FILE`` (e.g. the CA
+of a firewall that inspects HTTPS). ``inspect`` tells when a certificate was issued by such a firewall.
 """
 
 from __future__ import annotations
@@ -28,6 +29,14 @@ from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 log = logging.getLogger(__name__)
 
 MAX_DEPTH = 3
+# Issuers of certificates re-signed by HTTPS-inspecting firewalls and proxies (matched in the issuer name).
+INTERCEPTORS = {"fortinet": "Fortinet FortiGate", "fortigate": "Fortinet FortiGate", "zscaler": "Zscaler",
+                "palo alto": "Palo Alto Networks", "sophos": "Sophos", "blue coat": "Blue Coat / Symantec",
+                "bluecoat": "Blue Coat / Symantec", "netskope": "Netskope", "forcepoint": "Forcepoint",
+                "websense": "Forcepoint", "check point": "Check Point", "checkpoint": "Check Point",
+                "barracuda": "Barracuda", "watchguard": "WatchGuard", "sonicwall": "SonicWall",
+                "cisco umbrella": "Cisco Umbrella", "kaspersky": "Kaspersky", "eset": "ESET", "avast": "Avast",
+                "bitdefender": "Bitdefender", "mitmproxy": "mitmproxy"}
 _context: ssl.SSLContext | None = None
 _added: set[str] = set()  # fingerprints of intermediates already in the store
 _tried: set[str] = set()  # hosts already repaired (or attempted), so one bad site can't loop
@@ -38,7 +47,16 @@ def context() -> ssl.SSLContext:
     """The shared verification context for research fetches (mutated in place when intermediates are added)."""
     global _context
     if _context is None:
-        _context = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE") or certifi.where())
+        from cip.config import get_settings
+
+        ctx = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE") or certifi.where())
+        extra = get_settings().crawler_extra_ca_file
+        if extra:
+            try:
+                ctx.load_verify_locations(cafile=extra)
+            except (OSError, ssl.SSLError) as exc:
+                log.error("CIP_CRAWLER_EXTRA_CA_FILE %s could not be loaded: %s", extra, exc)
+        _context = ctx
     return _context
 
 
@@ -56,6 +74,28 @@ def _leaf_pem(host: str, port: int, timeout: float) -> str:
     ctx.verify_mode = ssl.CERT_NONE
     with socket.create_connection((host, port), timeout=timeout) as sock, ctx.wrap_socket(sock, server_hostname=host) as tls:
         return ssl.DER_cert_to_PEM_cert(tls.getpeercert(binary_form=True))
+
+
+def _interceptor(cert: x509.Certificate) -> str | None:
+    issuer = cert.issuer.rfc4514_string().lower()
+    return next((name for key, name in INTERCEPTORS.items() if key in issuer), None)
+
+
+async def inspect(url: str, *, timeout: float = 10.0) -> dict | None:
+    """Who issued ``url``'s certificate, and whether that is an HTTPS-inspecting firewall (for diagnostics)."""
+    from cip.connectors.research.web import urlparse
+
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        return None
+    try:
+        pem = await asyncio.wait_for(asyncio.to_thread(_leaf_pem, parsed.hostname, parsed.port or 443, timeout),
+                                     timeout + 2)
+        cert = x509.load_pem_x509_certificate(pem.encode())
+    except (OSError, ValueError, asyncio.TimeoutError):
+        return None
+    return {"subject": cert.subject.rfc4514_string(), "issuer": cert.issuer.rfc4514_string(),
+            "interceptor": _interceptor(cert), "issuer_url": bool(_issuer_urls(cert))}
 
 
 def _issuer_urls(cert: x509.Certificate) -> list[str]:
@@ -95,6 +135,11 @@ async def repair(url: str, *, timeout: float = 10.0, transport: httpx.AsyncBaseT
             cert = x509.load_pem_x509_certificate(pem.encode())
         except (OSError, ValueError, asyncio.TimeoutError) as exc:
             log.info("TLS repair: could not read the certificate of %s: %s", host, exc)
+            return False
+        if (vendor := _interceptor(cert)) is not None:
+            log.warning("TLS: HTTPS to %s is intercepted by a %s firewall on this network (certificate issued by %s); "
+                        "trust its CA with CIP_CRAWLER_EXTRA_CA_FILE or exempt this server from HTTPS inspection",
+                        host, vendor, cert.issuer.rfc4514_string())
             return False
         added = 0
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, transport=transport) as client:

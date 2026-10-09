@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     # resolve public names, let the proxy resolve them. Literal and locally resolvable private addresses are still
     # refused; set this only when the proxy itself cannot reach your internal network.
     crawler_proxy_resolves_dns: bool = False
+    # A PEM file of extra CA certificates trusted for research fetches *in addition to* the public ones, e.g. the
+    # CA of a firewall that inspects HTTPS (FortiGate, Zscaler, Palo Alto…). Unlike SSL_CERT_FILE it does not
+    # replace the public CA bundle, so sites the firewall does not inspect keep working.
+    crawler_extra_ca_file: str | None = None
     # PDFs (brochures, datasheets, pricing sheets) found on a site are read as text (BRS 20).
     crawler_max_pdfs: int = 2
     pdf_max_bytes: int = 10_000_000

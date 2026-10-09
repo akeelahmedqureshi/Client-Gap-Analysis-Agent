@@ -226,7 +226,7 @@ It fetches the site exactly as an analysis does and names the cause, with a hint
 
 | Cause | Usual fix |
 |---|---|
-| `tls certificate` | Sites that omit their intermediate certificate are repaired automatically (the intermediate is downloaded from the certificate's AIA URL, as browsers do; the log says "TLS repair"). If it still fails, update the server's CA certificates (`ca-certificates`, `pip install -U certifi`), set `SSL_CERT_FILE` to your proxy's CA bundle, or inspect the chain with `openssl s_client -connect host:443 -servername host -showcerts` |
+| `tls certificate` | Sites that omit their intermediate certificate are repaired automatically (the intermediate is downloaded from the certificate's AIA URL, as browsers do; the log says "TLS repair"). If check_web says the certificate is issued by a firewall (FortiGate, Zscaler, Palo Alto…), your network inspects HTTPS: exempt the server from inspection, or export the firewall's CA certificate (PEM) and set `CIP_CRAWLER_EXTRA_CA_FILE` to it (trusted in addition to the public CAs). Otherwise update the server's CA certificates (`ca-certificates`, `pip install -U certifi`), or inspect the chain with `openssl s_client -connect host:443 -servername host -showcerts` |
 | `network unreachable`, `no route to host`, `connection error`, `timeout` | Allow outbound HTTPS (port 443) from the server, or set `HTTPS_PROXY` / `NO_PROXY` for the API process |
 | `proxy error` | Check the proxy address and that it allows the site |
 | `unresolvable`, `dns error` | Fix the server's DNS, or behind an egress-only proxy set `CIP_CRAWLER_PROXY_RESOLVES_DNS=true` |
