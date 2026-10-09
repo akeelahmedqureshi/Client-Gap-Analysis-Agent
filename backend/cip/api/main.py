@@ -43,8 +43,19 @@ async def lifespan(app: FastAPI):
     if settings.environment == "production" and settings.jwt_secret == "change-me-in-production":
         raise RuntimeError("CIP_JWT_SECRET must be set in production")
     db.configure()
+    log = logging.getLogger(__name__)
     if settings.environment != "production":
-        await db.create_all()
+        # Development: create missing tables and add columns an older database lacks (additive only).
+        fixed = await db.check_schema(repair=True)
+        if fixed["added_columns"]:
+            log.warning("Database schema upgraded in place: added %s; recorded as migration %s",
+                        ", ".join(fixed["added_columns"]), fixed["stamped"])
+    else:
+        drift = await db.check_schema(repair=False)
+        if drift["missing_columns"]:
+            raise RuntimeError("The database schema is out of date (missing: "
+                               + ", ".join(drift["missing_columns"]) + "). Run `alembic upgrade head` "
+                               "(or scripts/upgrade_db.py for a database created without Alembic).")
     if settings.resume_runs_on_startup:
         try:
             await runner.resume_interrupted()

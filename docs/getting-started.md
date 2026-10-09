@@ -189,6 +189,29 @@ python -m cip.cli analyze ../examples/clients.csv --yes --github-token "$GITHUB_
 
 ---
 
+### Updating an existing installation
+
+After pulling a new version, install any new dependencies and bring the database schema up to date:
+
+```bash
+cd backend
+pip install -e ".[dev]"            # picks up new dependencies (e.g. pypdf for PDF sources)
+alembic upgrade head               # PostgreSQL, or any database managed with Alembic
+```
+
+A database created without Alembic (the development SQLite file, which start-up creates with
+`create_all`) can lack columns that newer code uses: `create_all` adds new tables but never new
+columns. In development the server repairs this at start-up: it adds the missing columns and logs
+`Database schema upgraded in place`. To do it explicitly (always back up first):
+
+```bash
+python scripts/upgrade_db.py --check   # list missing columns
+python scripts/upgrade_db.py           # add them and record the schema as the newest migration
+```
+
+With `CIP_ENVIRONMENT=production` the server never changes the schema itself; it refuses to start and
+names the missing columns, so run `alembic upgrade head` (or `scripts/upgrade_db.py`) first.
+
 ## C. Full stack with Docker
 
 This runs PostgreSQL, Redis, the API (which applies migrations on start), a Celery worker, and the
