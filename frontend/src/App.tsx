@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { api, getToken, setToken } from "./lib/api";
 import type { User } from "./lib/types";
 import LoginPage from "./pages/Login";
@@ -33,6 +34,7 @@ const NAV = [
 
 function Shell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<User>("/api/auth/me") });
   const unread = useQuery({
     queryKey: ["alerts-unread"],
@@ -87,6 +89,7 @@ function Shell() {
         </div>
       </aside>
       <main className="flex-1 min-w-0 p-6">
+        <ErrorBoundary resetKey={location.pathname}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/upload" element={<UploadPage />} />
@@ -104,6 +107,7 @@ function Shell() {
           <Route path="/audit" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );

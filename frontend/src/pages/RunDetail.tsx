@@ -13,6 +13,7 @@ import { ChangeList, SeverityBadge } from "../components/Changes";
 import SalesTab from "../components/SalesTab";
 import ReviewTab from "../components/ReviewTab";
 import { useAgent } from "../lib/useAgent";
+import ErrorBoundary from "../components/ErrorBoundary";
 import { useCanExport } from "../lib/useOrg";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Explain";
@@ -193,6 +194,7 @@ export default function RunDetailPage() {
           ))}
         </div>
 
+        <ErrorBoundary resetKey={tab}>
         {tab === "Pipeline" && <>{done("quality_assurance") && <QualityCard runId={runId} />}<Pipeline run={r} /></>}
         {tab === "Changes" && <ChangesTab runId={runId} status={r.status} />}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
@@ -214,6 +216,7 @@ export default function RunDetailPage() {
           finished={["completed", "completed_with_errors", "failed", "cancelled"].includes(r.status)} />}
         {tab === "Evidence" && <EvidenceTab evidence={evidence.data ?? []} />}
         {tab === "Report" && <ReportTab run={r} enabled={r.has_report} />}
+        </ErrorBoundary>
       </div>
     </EvidenceContext.Provider>
   );
@@ -372,10 +375,18 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   if (!d) return null;
   const p = d.profile;
   const check = d.domain_check;
+  const noWebsite = d.website_unavailable || (!(d.pages ?? []).length && !(d.project_pages ?? []).length);
   const pdfs = [...(d.pages ?? []), ...(d.project_pages ?? [])].filter((x: any) => x.kind === "pdf");
   const cachedPages = [...(d.pages ?? []), ...(d.project_pages ?? [])].filter((x: any) => x.fetched_at);
   return (
     <div className="grid lg:grid-cols-2 gap-4">
+      {noWebsite && (
+        <div className="lg:col-span-2 border border-rose-200 bg-rose-50 rounded-xl p-3 text-sm text-rose-900">
+          No page of the client's website could be retrieved{check?.detail ? ` (${check.detail})` : ""}. The analysis relies on
+          the CSV record, repositories and search. Check that the server can reach the site (outbound HTTPS, DNS, robots.txt), then
+          start a new analysis of the project.
+        </div>
+      )}
       {check && check.status !== "ok" && (
         <div className="lg:col-span-2 border border-amber-300 bg-amber-50 rounded-xl p-3 text-sm text-amber-900">
           Website check: <b>{DOMAIN_STATUS[check.status] ?? check.status}</b>{check.detail && ` — ${check.detail}`}
@@ -399,7 +410,7 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
         <CompanyFacts profile={p} />
       </Card>
       <Card title="Products & services">
-        {p.products.length ? (
+        {p.products?.length ? (
           <ul className="space-y-2 text-sm">
             {p.products.map((x: any) => (
               <li key={x.name}>
@@ -411,14 +422,14 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
         ) : <Empty>None discovered.</Empty>}
       </Card>
       <Card title="Leadership">
-        {d.leadership.length ? (
+        {d.leadership?.length ? (
           <ul className="text-sm space-y-1">{d.leadership.map((l: any) => <li key={l.name}>{l.name} — {l.title} <EvidenceRefs ids={l.evidence_ids} /></li>)}</ul>
         ) : <Empty>No public leadership information found.</Empty>}
       </Card>
       <HiringCard hiring={d.hiring} />
       <AnnouncementsCard items={d.announcements ?? []} />
       <Card title="Contact & social">
-        {p.contacts.length ? (
+        {p.contacts?.length ? (
           <ul className="text-sm space-y-1">
             {p.contacts.map((c: any) => (
               <li key={c.type + c.value}><Badge value={c.type} /> <span className="break-all">{c.value}</span> <Confidence value={c.confidence} /></li>

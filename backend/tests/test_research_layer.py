@@ -12,7 +12,7 @@ from cip.core import usage
 from cip.db import session as db
 from cip.services.runner import runner
 
-from fakes import SITES, html, web_transport
+from fakes import SITES, FakeSearch, html, web_transport
 from test_api import SAMPLE_CSV, client, register  # noqa: F401  (fixture)
 
 
@@ -320,3 +320,16 @@ async def test_client_research_reports_the_domain_check(make_ctx):
     result = await ClientResearchAgent().run(ctx)
     assert result.data["domain_check"]["status"] == "parked"
     assert any("parked" in f.title for f in result.findings)
+
+
+async def test_unreachable_client_site_returns_the_full_result_shape(make_ctx):
+    """The UI reads every field of client research; a site that can't be fetched must not drop any of them."""
+    from cip.agents.client_research import ClientResearchAgent
+    ctx = make_ctx(fetcher=WebFetcher(transport=domain_transport()), search=FakeSearch())
+    ctx.record.client.domain = "gone.example"
+    ctx.record.project.url = "https://gone.example"
+    result = await ClientResearchAgent().run(ctx)
+    d = result.data
+    assert d["website_unavailable"] and d["domain_check"]["status"] == "unreachable"
+    assert d["leadership"] == [] and d["announcements"] == [] and d["hiring"]["signals"] == []
+    assert d["profile"]["products"] == [] and d["profile"]["contacts"] == []

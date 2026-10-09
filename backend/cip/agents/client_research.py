@@ -260,7 +260,10 @@ class ClientResearchAgent(Agent):
                                   detail="Client domain unknown or unreachable; downstream analysis will rely "
                                          "on CSV and repository data.", confidence=0.9)],
                 data={"profile": CompanyProfile(name=rec.client.name, domain=domain).model_dump(),
-                      "pages": [], "project_pages": [], "domain_check": site_check},
+                      "pages": [], "project_pages": [], "domain_check": site_check, "leadership": [],
+                      "linkedin_url": None, "hiring": {"job_count": 0, "sources": [], "signals": [], "jobs": []},
+                      "pricing": None, "announcements": [], "home_snippet": None,
+                      "languages": summarize_languages([]), "website_unavailable": True},
             )
 
         ledger = ctx.ledger
