@@ -98,3 +98,18 @@ def test_malformed_links_on_a_page_are_ignored():
     page = parse_html("https://site.example.com/", 200, html)
     assert page.links == ["https://site.example.com/about"]
     assert page.external_links == ["https://partner.example.org/"]
+
+
+def test_the_published_template_parses_cleanly():
+    """examples/client-template.csv (also served by the UI) uses every recognised column and needs no inference."""
+    from pathlib import Path
+
+    from cip.agents.csv_intake import COLUMN_ALIASES
+
+    root = Path(__file__).resolve().parents[2]
+    data = (root / "examples" / "client-template.csv").read_bytes()
+    assert (root / "frontend" / "public" / "client-template.csv").read_bytes() == data
+    r = parse_csv(data)
+    assert r.valid and not r.warnings and not r.unmapped_columns
+    assert set(r.column_mapping) == set(COLUMN_ALIASES)
+    assert all(not rec.issues for rec in r.records)

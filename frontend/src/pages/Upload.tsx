@@ -75,7 +75,9 @@ export default function UploadPage() {
       <Card title="1. Choose file">
         <p className="text-sm text-slate-500 mb-3">
           Columns are detected automatically (e.g. Client Name, Client Email, Project Name, Project URL, Description,
-          Industry, Technology, Repository URL, Existing Features, Notes). Missing fields are inferred where possible.
+          Industry, Technology, Repository URL, Existing Features, Notes). Missing fields are inferred where possible.{" "}
+          <a className="underline text-indigo-700" href="/client-template.csv" download>Download the CSV template</a>
+          {" "}— one row per project; put values that contain commas in double quotes and separate lists with “;”.
         </p>
         <div className="flex gap-3 items-center">
           <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

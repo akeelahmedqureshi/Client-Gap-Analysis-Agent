@@ -69,7 +69,8 @@ python scripts/demo_server.py              # add --client-app to give the fake c
 Open **http://localhost:8000**, then:
 
 1. Choose **Create an organization**. You become its admin.
-2. **Upload** `examples/clients.csv`, validate it, then import it.
+2. **Upload** `examples/clients.csv`, validate it, then import it. For your own clients, start from
+   `examples/client-template.csv` ([CSV format](csv-format.md)).
 3. **Projects**: on **ABC Patient Management**, choose **Analyze**, tick all three approvals, and start.
    Only this project is wired to the fake web.
 4. Explore the run tabs. Then follow [testing.md §3](testing.md#3-offline-demo-walkthrough) for the
