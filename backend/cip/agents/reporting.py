@@ -15,6 +15,7 @@ from cip.core.urls import urlparse
 from pydantic import BaseModel
 
 from cip.agents.base import Agent, ApprovalRequest, RunContext
+from cip.core.language import name as lang_name
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.schemas import STATUS_LABELS, AgentResult
 from cip.agents.pricing_analysis import MODEL_LABELS
@@ -88,6 +89,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "ai_generated": summary is not None,
     }
     sections["client_intelligence"] = {
+        "languages": research.get("languages"),
         "company": {k: profile.get(k) for k in ("name", "legal_name", "domain", "description", "industry",
                                                 "headquarters", "founded_year", "company_size", "business_model",
                                                 "revenue_model")},
@@ -334,6 +336,10 @@ def render_markdown(report: dict) -> str:
             f"{ci['company_citations']}", ""]
     facts = [f"**{k.replace('_', ' ').title()}:** {v}" for k, v in c.items()
              if v and k not in ("name", "description")]
+    langs = ci.get("languages") or {}
+    if langs.get("pages") and (langs.get("primary") != "en" or len(langs["pages"]) > 1):
+        facts.append("**Website language(s):** " + ", ".join(f"{lang_name(k)} ({n} page{'s' if n != 1 else ''})"
+                                                           for k, n in langs["pages"].items()))
     out += [_md_list(facts), ""]
     if ci["locations"]:
         out += [f"**Locations:** {', '.join(ci['locations'])}", ""]

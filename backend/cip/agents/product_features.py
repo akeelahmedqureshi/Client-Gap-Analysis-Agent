@@ -42,7 +42,7 @@ SYSTEM_PROMPT = """You are a product analyst. From the provided sources list the
 client's project. For each feature: a short name, the matching taxonomy feature_id if one fits (else null),
 a one-sentence description, status ('available' or 'partial'), the primary user type, the business purpose,
 the SOURCE url it was found in and a verbatim quote from that source. Only include features the sources
-actually state; never infer features that are not mentioned."""
+actually state; never infer features that are not mentioned. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
 
 
 def combine_signals(signals: list[dict], coverage: dict[str, bool]) -> dict[str, FeatureObservation]:
@@ -112,6 +112,15 @@ class ProductFeatureAgent(Agent):
                                 0.6 if len(kws) > 1 else 0.5, extracted_text=snippet(text, kws[0]))
                 signals.append({"feature_id": fid, "status": "available", "evidence_id": ev.id,
                                 "source": "website", "confidence": ev.confidence})
+
+        # Language versions declared with hreflang = localization (multi-language analysis) ----------
+        with_alt = next((p for p in pages if len({k.split("-")[0] for k in (p.get("alternates") or {})}) >= 2), None)
+        if with_alt and "ux.localization" in ctx.taxonomy:
+            langs = sorted({k.split("-")[0] for k in with_alt["alternates"]})
+            ev = ledger.add(f"Website is published in {len(langs)} languages ({', '.join(langs)})", with_alt["url"],
+                            "website", 0.85, extracted_text="hreflang: " + ", ".join(sorted(with_alt["alternates"])))
+            signals.append({"feature_id": "ux.localization", "status": "available", "evidence_id": ev.id,
+                            "source": "website", "confidence": 0.85})
 
         # CSV-declared features ----------------------------------------------
         csv_source = f"csv://row/{rec.row_number}"

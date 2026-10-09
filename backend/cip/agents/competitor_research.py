@@ -100,7 +100,7 @@ classification must be one of: direct, indirect, adjacent, open_source, enterpri
 PROFILE_PROMPT = """You are analysing a potential competitor's website. Decide whether it is genuinely
 comparable to the client's project (is_comparable) and classify it (direct, indirect, adjacent, open_source,
 enterprise, emerging). Extract description, target market and pricing, and the product features using ONLY
-feature ids from the taxonomy. Every value needs the SOURCE url and a verbatim quote from that page."""
+feature ids from the taxonomy. Every value needs the SOURCE url and a verbatim quote from that page. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
 
 
 MARKETPLACE_HOSTS = ("g2.com", "capterra.com", "producthunt.com", "getapp.com", "softwareadvice.com",

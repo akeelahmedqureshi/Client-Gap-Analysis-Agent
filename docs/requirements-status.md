@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 125 |
+| ✅ Completed | 126 |
 | 🟡 Partially completed | 0 |
-| ❌ Incomplete | 3 |
+| ❌ Incomplete | 2 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -250,7 +250,7 @@ _Baseline audit: 2026-10-08._
 | 124 | Historical competitor benchmarking | ✅ | Competitors' rank and evidenced capabilities across a project's analyses, with the client's capability and standards coverage; new and dropped competitors |
 | 125 | CRM integration and automatic opportunity creation | ❌ | |
 | 126 | Email and marketing system integration | ❌ | |
-| 127 | Multi-language analysis | ❌ | |
+| 127 | Multi-language analysis | ✅ | Page language detected (declared or by stop words); capability keyword packs in Spanish, French, German, Portuguese, Italian and Dutch with quotes kept in the original; hreflang versions count as localization; LLM prompts quote in the source language and answer in English; QA warns for uncovered languages |
 | 128 | Industry-wide benchmarking and predicted trends | ✅ | Capability adoption per industry across analysed clients and their competitors; each client's percentile and standards coverage; rising capabilities projected forward (labelled estimates); sourced trends rolled up |
 
 ## Built beyond the BRS and PRD (not counted)

@@ -56,7 +56,7 @@ PROMPT = """You are an industry analyst. From the client's pages, extract its in
 specific market its product competes in), product category and customer segments. From the search results,
 list up to 8 industry trends, emerging technologies, AI adoption and automation trends relevant to this market
 (kind: trend | technology | ai_adoption | automation). Every value needs the SOURCE url and a verbatim quote
-from that source. Do not add anything that is not stated in the sources."""
+from that source. Do not add anything that is not stated in the sources. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
 
 
 def _kind(text: str) -> str:

@@ -358,6 +358,8 @@ const TIERS: Record<number, string> = {
   4: "Industry publication / other third party", 5: "Aggregator / search result",
 };
 
+const LANGS: Record<string, string> = { en: "English", es: "Spanish", fr: "French", de: "German", pt: "Portuguese", it: "Italian", nl: "Dutch", ja: "Japanese", zh: "Chinese" };
+
 const DOMAIN_STATUS: Record<string, string> = {
   ok: "reachable", redirected: "redirects to another domain", parked: "parked / for sale", unreachable: "unreachable",
   blocked: "blocked (robots.txt or non-public address)",
@@ -377,6 +379,13 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
       {check && check.status !== "ok" && (
         <div className="lg:col-span-2 border border-amber-300 bg-amber-50 rounded-xl p-3 text-sm text-amber-900">
           Website check: <b>{DOMAIN_STATUS[check.status] ?? check.status}</b>{check.detail && ` — ${check.detail}`}
+        </div>
+      )}
+      {d.languages?.pages && Object.keys(d.languages.pages).length > 0 && (d.languages.primary !== "en" || Object.keys(d.languages.pages).length > 1) && (
+        <div className={`lg:col-span-2 text-sm rounded-lg border p-2 ${d.languages.supported ? "border-slate-200" : "border-amber-300 bg-amber-50"}`}>
+          Website language{Object.keys(d.languages.pages).length > 1 ? "s" : ""}: {Object.entries(d.languages.pages).map(([k, n]: any) => `${LANGS[k] ?? k} (${n})`).join(", ")}.
+          {d.languages.supported ? " Capabilities are matched with keywords in this language and quoted in the original."
+            : " This language is not covered by the keyword packs; findings rely on the LLM extraction."}
         </div>
       )}
       {(pdfs.length > 0 || cachedPages.length > 0) && (

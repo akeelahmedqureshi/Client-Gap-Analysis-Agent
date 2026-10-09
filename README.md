@@ -116,6 +116,8 @@ Platform features:
   sections with a print view.
 - **Industry benchmarks:** capability adoption across every analysed company in an industry, each client's
   position, and capabilities that are rising (projected, labelled as estimates).
+- **Multi-language analysis:** page languages detected; capability keywords in seven languages, with quotes
+  kept in the original; localized sites (hreflang) recognized.
 - **Governance:** job functions (sales, business development, product, technical, management) next to
   the permission roles; an export policy by role and job function; structured exports (comparison matrix,
   gaps, opportunities, recommendations and evidence as CSV, plus the full analysis as JSON); deletion of

@@ -10,6 +10,15 @@ from pathlib import Path
 import yaml
 
 TAXONOMY_PATH = Path(__file__).with_name("taxonomy.yaml")
+I18N_PATH = Path(__file__).with_name("taxonomy_i18n.yaml")
+
+
+@lru_cache
+def i18n_keywords() -> dict[str, tuple[str, ...]]:
+    """Multilingual keywords per feature id (core/taxonomy_i18n.yaml), merged into matching for every taxonomy,
+    including organization-edited ones (by feature id)."""
+    raw = yaml.safe_load(I18N_PATH.read_text()) or {}
+    return {fid: tuple(dict.fromkeys(k.lower() for words in langs.values() for k in words)) for fid, langs in raw.items()}
 
 
 @dataclass(frozen=True)
@@ -145,7 +154,8 @@ def taxonomy_from_dict(raw: dict, strict: bool = False) -> Taxonomy:
                     name=f["name"],
                     category_id=cat["id"],
                     category_name=cat["name"],
-                    keywords=tuple(k.lower() for k in f.get("keywords", [])),
+                    keywords=tuple(dict.fromkeys([*(k.lower() for k in f.get("keywords", [])),
+                                                  *i18n_keywords().get(f["id"], ())])),
                     code_signals=tuple(s.lower() for s in f.get("code_signals", [])),
                     defaults=dict(f.get("defaults", {})),
                     ai=bool(f.get("ai", cat["id"] == "ai")),

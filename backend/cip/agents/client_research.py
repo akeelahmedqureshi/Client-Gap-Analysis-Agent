@@ -28,6 +28,7 @@ from cip.connectors.research.enrichment import (
 from cip.agents.pricing_analysis import record_pricing
 from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.domain import check_domain
+from cip.core.language import summarize as summarize_languages
 from cip.connectors.research.domain import summary as domain_summary
 from cip.connectors.research.web import Page, registrable_domain
 from cip.core.evidence import snippet
@@ -82,7 +83,7 @@ stated in the provided website sources (including legal entity name, revenue/pri
 subsidiaries, business divisions and geographic markets served when stated). For every value give the exact SOURCE url it came from and a short
 verbatim quote (copied exactly from that source) that supports it. If a fact is not stated, omit it.
 Products/services must be offerings of this company (not partners' or customers' products).
-Allowed product kinds: product, service, platform, mobile_app, saas, api, marketplace, other."""
+Allowed product kinds: product, service, platform, mobile_app, saas, api, marketplace, other. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
 
 
 def page_doc(p: Page) -> SourceDoc:
@@ -93,7 +94,8 @@ def page_doc(p: Page) -> SourceDoc:
 def page_summary(p: Page) -> dict:
     return {"url": p.url, "title": p.title, "description": p.description, "headings": p.headings[:40],
             "text": p.text[:PAGE_TEXT_LIMIT], "scripts": p.scripts[:40], "generator": p.generator,
-            "kind": p.content_type, "fetched_at": p.fetched_at.isoformat() if p.fetched_at else None}
+            "kind": p.content_type, "fetched_at": p.fetched_at.isoformat() if p.fetched_at else None,
+            "lang": p.lang, "alternates": p.alternates}
 
 
 def discover_contacts(pages: list[Page], company_domain: str | None) -> tuple[list[Contact], int]:
@@ -415,5 +417,6 @@ class ClientResearchAgent(Agent):
                 "project_pages": [page_summary(p) for p in project_pages],
                 "home_snippet": snippet(home.text if home else None),
                 "domain_check": site_check,
+                "languages": summarize_languages([p.lang for p in all_pages if p.content_type == "html"]),
             },
         )

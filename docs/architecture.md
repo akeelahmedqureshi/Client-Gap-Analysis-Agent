@@ -146,6 +146,17 @@ product, docs or pricing; 2 announcements and case studies; 3 trusted third part
 search or aggregators. Prioritization multiplies a gap's confidence by the factor of its best-supporting
 tier, and QA reports the tier mix and warns when recommendations rest mostly on tier-5 sources.
 
+## Multi-language analysis
+
+`core/language.py` labels every crawled page with its language: the declared `<html lang>`, or a stop-word
+vote. `core/taxonomy_i18n.yaml` adds Spanish, French, German, Portuguese, Italian and Dutch keywords to every
+capability, including in organization-edited taxonomies (matched by id). A non-English site therefore maps
+onto the same capability ids, and its evidence keeps the verbatim quote in the original language.
+`hreflang` alternates on a client page are evidence of localization. The extraction prompts ask the LLM to
+quote in the source language and to answer in English. Client research reports the site's languages, the
+report shows them, and QA warns when the main language has no keyword pack. The workflow, process and
+positioning cue lists are English only.
+
 ## Data model
 
 `Organization → Client → Project → AnalysisRun → {AgentExecution, Evidence, Approval, Report}`

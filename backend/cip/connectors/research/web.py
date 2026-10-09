@@ -29,6 +29,7 @@ from bs4 import BeautifulSoup
 from cip.config import Settings, get_settings
 from cip.connectors.research.browser import BrowserRenderer, looks_script_rendered
 from cip.connectors.research.cache import CachedPage, PageCache
+from cip.core.language import detect as detect_language
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +71,8 @@ class Page:
     structured_data: list[dict] = field(default_factory=list)  # schema.org JSON-LD objects
     link_texts: list[tuple[str, str]] = field(default_factory=list)  # (same-site url, anchor text)
     content_type: str = "html"  # html | pdf
+    lang: str | None = None  # declared <html lang> or detected (core/language.py)
+    alternates: dict[str, str] = field(default_factory=dict)  # hreflang -> URL of the page in that language
     cached: bool = False  # served from the research cache
     fetched_at: datetime | None = None  # set for cached pages: when the page was really fetched
 
@@ -148,6 +151,14 @@ def parse_html(url: str, status: int, html: str) -> Page:
     scripts = [s.get("src") for s in soup.find_all("script") if s.get("src")]
     structured = extract_jsonld(soup)
     gen = soup.find("meta", attrs={"name": "generator"})
+    declared = soup.html.get("lang") if soup.html else None
+    alternates: dict[str, str] = {}
+    for link in soup.find_all("link", hreflang=True, href=True):
+        rel = link.get("rel") or []
+        if "alternate" in (rel if isinstance(rel, list) else [rel]) and link["hreflang"].lower() != "x-default":
+            href = normalize_url(urljoin(url, link["href"]))
+            if is_valid_http_url(href):
+                alternates[link["hreflang"].lower()] = href
     desc = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
     title = soup.title.get_text(strip=True) if soup.title else ""
     headings = [h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"])][:60]
@@ -198,6 +209,7 @@ def parse_html(url: str, status: int, html: str) -> Page:
         text=text, links=list(dict.fromkeys(links)), external_links=list(dict.fromkeys(external)),
         emails=sorted(emails), phones=sorted(phones)[:10], headings=headings, scripts=scripts,
         generator=gen.get("content") if gen else None, structured_data=structured, link_texts=link_texts,
+        lang=detect_language(f"{title} {text}", declared), alternates=dict(list(alternates.items())[:30]),
     )
 
 

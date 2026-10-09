@@ -206,6 +206,12 @@ class QualityAssuranceAgent(Agent):
         for o in ctx.review:
             if o["kind"] == "gap" and o["value"] == "rework":
                 flag("warning", "review", f"A reviewer asked for rework of gap {o['target_id']}: {o['note'] or 'no note'}")
+        langs = ctx.data("client_research").get("languages") or {}
+        if langs.get("primary") and not langs.get("supported"):
+            flag("warning", "language", f"The client's site is mainly in {langs.get('primary_name')}; capability keywords "
+                                        "cover English, Spanish, French, German, Portuguese, Italian and Dutch, so "
+                                        "findings rely on the LLM extraction" + ("" if ctx.settings.llm_enabled else
+                                                                                 " (not configured)") + ".")
         for event in ctx.usage.events:
             flag("warning", "budget", f"{event}: some steps used their deterministic fallback or skipped requests.")
         rec_tiers = [ev.source_tier for r in recs for e in r.get("evidence_ids", [])
@@ -225,6 +231,7 @@ class QualityAssuranceAgent(Agent):
             "assumption_findings": len(assumed), "evidence_items": len(ages), "source_freshness": fresh_counts,
             "source_types": source_types, "conflicts": len(conflicts),
             "source_tiers": source_mix([e.source_tier for e in ledger.all() if e.source_tier]),
+            "languages": langs.get("pages") or None,
             "recommendation_source_tiers": source_mix(rec_tiers),
             "competitors_deep": len(comps), "competitors_target": s.deep_competitors,
             "landscape_size": len(ctx.data("competitor_research").get("landscape", [])),
