@@ -141,6 +141,32 @@ class BrowserRenderer:
                 self._host_ok[host] = False
         return self._host_ok[host]
 
+    async def _past_challenge(self, page, status: int, html: str) -> str:
+        """Bot-protection challenges (SiteGround, Cloudflare, AWS WAF…) run a script in the browser and then reload
+        the real page: wait for that, as a visitor does, up to ``browser_challenge_wait_seconds``."""
+        from cip.connectors.research.web import bot_challenge, parse_html
+
+        def challenged(h: str) -> bool:
+            return bot_challenge(status, None, h, parse_html(page.url, status, h).text) is not None
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.settings.browser_challenge_wait_seconds
+        waited = False
+        while challenged(html) and loop.time() < deadline:
+            waited = True
+            await asyncio.sleep(1.0)
+            try:
+                html = await page.content()
+            except Exception:  # noqa: BLE001 - the page is navigating to the real one
+                continue
+        if waited:
+            try:
+                await page.wait_for_load_state("networkidle", timeout=5000)
+                html = await page.content()
+            except Exception:  # noqa: BLE001
+                pass
+        return html
+
     async def render(self, url: str) -> RenderedPage | None:
         if not self.available:
             return None
@@ -172,10 +198,10 @@ class BrowserRenderer:
                     await page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 8000))
                 except Exception:  # noqa: BLE001
                     pass
+                html = await self._past_challenge(page, response.status, await page.content())
                 final_url = page.url
                 if not await self._allowed(final_url):
                     return None
-                html = await page.content()
                 return RenderedPage(url=final_url, status=response.status, html=html)
             except Exception as exc:  # noqa: BLE001 - rendering is best-effort
                 log.info("render failed for %s: %s", url, exc)

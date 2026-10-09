@@ -83,8 +83,10 @@ async def check_domain(fetcher: WebFetcher, url: str) -> dict:
     if challenge:
         rendered = await _render(fetcher, final_url)
         if rendered is None:
-            out.update(status="blocked", reason="bot_challenge",
-                       detail=f"bot protection: {challenge}. {HINTS['bot_challenge']}")
+            has_browser = fetcher.renderer is not None and fetcher.renderer.available
+            hint = ("The browser could not pass it either: the site blocks automated visitors. Ask the site owner to "
+                    "allow the crawler, or rely on the other sources" if has_browser else HINTS["bot_challenge"])
+            out.update(status="blocked", reason="bot_challenge", detail=f"bot protection: {challenge}. {hint}")
             return out
         out["detail"] = f"Bot protection ({challenge}) passed with the browser"
         body = rendered

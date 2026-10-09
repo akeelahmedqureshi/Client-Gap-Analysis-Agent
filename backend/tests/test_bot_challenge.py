@@ -38,7 +38,14 @@ class PassingBrowser:
         return RenderedPage(url=url, status=202, html=self.html)
 
 
+SITEGROUND = ('<html><head><title>Robot Challenge Screen</title><meta http-equiv="refresh" '
+              'content="0;/.well-known/sgcaptcha/?r=%2F&y=ipc:1.2.3.4:1"></head><body>'
+              '<p>Please wait while your request is being verified...</p></body></html>')
+
+
 def test_challenge_signals():
+    assert bot_challenge(202, {}, SITEGROUND) == "SiteGround"
+    assert bot_challenge(202, {}, "<html><body><p>One moment please.</p></body></html>").startswith("unidentified")
     assert bot_challenge(202, {"x-amzn-waf-action": "challenge"}, "") == "AWS WAF"
     assert bot_challenge(202, {}, AWS_CHALLENGE) == "AWS WAF"
     assert bot_challenge(403, {"cf-mitigated": "challenge"}, "") == "Cloudflare"
@@ -71,6 +78,11 @@ async def test_the_browser_passes_the_challenge():
 
 
 async def test_a_browser_that_only_sees_the_challenge_again_is_a_failure():
-    f = WebFetcher(transport=challenge_transport(), rendering="auto", renderer=PassingBrowser(html=AWS_CHALLENGE))
-    assert await f.fetch("https://www.ajlakes.test/") is None
-    assert f.failures[-1]["reason"] == "bot_challenge"
+    for page in (AWS_CHALLENGE, SITEGROUND):  # the SiteGround screen has some text: still not the site
+        f = WebFetcher(transport=challenge_transport(), rendering="auto", renderer=PassingBrowser(html=page))
+        assert await f.fetch("https://www.ajlakes.test/") is None
+        assert f.failures[-1]["reason"] == "bot_challenge"
+
+        check = await check_domain(WebFetcher(transport=challenge_transport(), rendering="auto",
+                                              renderer=PassingBrowser(html=page)), "www.ajlakes.test")
+        assert check["status"] == "blocked" and "could not pass it either" in check["detail"]

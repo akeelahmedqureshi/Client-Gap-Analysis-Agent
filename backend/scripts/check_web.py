@@ -79,28 +79,29 @@ async def main(urls: list[str]) -> int:
     if fetcher.renderer is not None and not fetcher.renderer.available:
         print(f"Browser renderer unavailable: {fetcher.renderer._unavailable_reason}\n")
     bad = 0
-    for url in urls:
-        check = await check_domain(fetcher, url)
-        print(f"{check['url']}: {check['status'].upper()}")
-        if check.get("final_url"):
-            print(f"  final URL: {check['final_url']} (HTTP {check['http_status']})")
-        if check.get("detail"):
-            print(f"  {check['detail']}")
-        if check.get("reason") == "tls_certificate":
-            await explain_certificate(check["url"])
-        if check["status"] in ("unreachable", "blocked"):
-            bad += 1
-        else:
-            page = await fetcher.fetch(url)
-            print(f"  page read: {'yes' if page else 'no'}" + (f" — “{page.title[:80]}”, {len(page.text):,} characters"
-                                                                 + (" (browser)" if page.rendered else "")
-                                                                 if page else ""))
-            failure = fetcher.last_failure(check["url"]) if page is None else None
-            if failure:
-                print(f"  {failure['reason'].replace('_', ' ')}: {failure.get('detail') or ''}")
-            elif page is not None and len(page.text.strip()) < 200:
-                print("  -> almost no readable text: the site may need the browser renderer or block crawlers")
-        print()
+    async with fetcher._render_session():  # one browser for all checks, closed before exit
+        for url in urls:
+            check = await check_domain(fetcher, url)
+            print(f"{check['url']}: {check['status'].upper()}")
+            if check.get("final_url"):
+                print(f"  final URL: {check['final_url']} (HTTP {check['http_status']})")
+            if check.get("detail"):
+                print(f"  {check['detail']}")
+            if check.get("reason") == "tls_certificate":
+                await explain_certificate(check["url"])
+            if check["status"] in ("unreachable", "blocked"):
+                bad += 1
+            else:
+                page = await fetcher.fetch(url)
+                print(f"  page read: {'yes' if page else 'no'}" + (f" — “{page.title[:80]}”, {len(page.text):,} characters"
+                                                                     + (" (browser)" if page.rendered else "")
+                                                                     if page else ""))
+                failure = fetcher.last_failure(check["url"]) if page is None else None
+                if failure:
+                    print(f"  {failure['reason'].replace('_', ' ')}: {failure.get('detail') or ''}")
+                elif page is not None and len(page.text.strip()) < 200:
+                    print("  -> almost no readable text: the site may need the browser renderer or block crawlers")
+            print()
     return 1 if bad else 0
 
 

@@ -114,6 +114,7 @@ class Settings(BaseSettings):
     browser_rendering: Literal["auto", "always", "never"] = "auto"
     browser_executable: str | None = None   # path to a Chromium binary; default: Playwright's own
     browser_max_pages: int = 3              # concurrent browser pages
+    browser_challenge_wait_seconds: float = 20.0  # time a bot-protection challenge may take to pass in the browser
 
     # --- Source control OAuth --------------------------------------------
     github_client_id: str | None = None

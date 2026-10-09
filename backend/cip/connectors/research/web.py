@@ -290,7 +290,10 @@ CHALLENGE_MARKERS = (("awswaf", "AWS WAF"), ("aws-waf-token", "AWS WAF"), ("chal
                      ("cf-browser-verification", "Cloudflare"), ("_incapsula_resource", "Imperva"),
                      ("incapsula incident", "Imperva"), ("sucuri website firewall", "Sucuri"),
                      ("captcha-delivery.com", "DataDome"), ("px-captcha", "HUMAN (PerimeterX)"),
-                     ("/_sec/cp_challenge", "Akamai"))
+                     ("/_sec/cp_challenge", "Akamai"), ("sgcaptcha", "SiteGround"),
+                     ("robot challenge screen", "SiteGround"), ("just a moment...", "Cloudflare"),
+                     ("checking your browser", "a browser check"), ("verify you are human", "a CAPTCHA"),
+                     ("are you a robot", "a CAPTCHA"), ("captcha", "a CAPTCHA"))
 CHALLENGE_MAX_TEXT = 300
 
 
@@ -308,7 +311,8 @@ def bot_challenge(status: int, headers, body: str, text: str | None = None) -> s
     vendor = next((v for marker, v in CHALLENGE_MARKERS if marker in low), None)
     if vendor:
         return vendor
-    return "unidentified bot protection (HTTP 202 with an empty page)" if status == 202 and not text.strip() else None
+    # 202 ("accepted, not done") instead of a page is how several services answer while a check is pending.
+    return "unidentified bot protection (HTTP 202 without page content)" if status == 202 else None
 
 
 def unsafe_reason(exc: UnsafeURL) -> str:

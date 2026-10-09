@@ -63,6 +63,10 @@ class _Site(BaseHTTPRequestHandler):
             fetch('http://localhost:%PORT%/internal-metadata').catch(() => {});
         """,
         "/logo.png": "png",
+        # A bot-protection screen that solves itself in a real browser after a moment, then reloads the page.
+        "/protected": """<html><head><title>Robot Challenge Screen</title></head><body><p>Verifying...</p>
+            <script>setTimeout(() => { document.cookie = "passed=1; path=/"; location.reload(); }, 1500);</script>
+            </body></html>""",
         "/internal-metadata": "secret",
     }
 
@@ -70,6 +74,8 @@ class _Site(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         _Site.hits[path] = _Site.hits.get(path, 0) + 1
         body = self.pages.get(path)
+        if path == "/protected" and "passed=1" in (self.headers.get("Cookie") or ""):
+            body = STATIC
         if body is None:
             self.send_response(404)
             self.end_headers()
@@ -146,3 +152,10 @@ async def test_static_pages_are_not_rendered_in_auto_mode(renderer):
     renderer.render = spy
     page = await WebFetcher(transport=transport, rendering="auto", renderer=renderer).fetch("https://acme.test/")
     assert page and not page.rendered and calls == []
+
+
+async def test_browser_waits_for_a_bot_challenge_to_pass(site, renderer):
+    f = WebFetcher(check_public=False, rendering="auto", renderer=renderer)
+    page = await f.fetch(site + "/protected")
+    assert page is not None and page.rendered and "SMS reminders" in page.text
+    assert _Site.hits["/protected"] == 3  # plain HTTP, the browser's first load, the reload after the challenge
