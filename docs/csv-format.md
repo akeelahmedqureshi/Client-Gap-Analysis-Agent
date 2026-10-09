@@ -5,10 +5,10 @@ Template: [`examples/client-template.csv`](../examples/client-template.csv) (als
 
 | Column | Needed | What to put | Used for |
 |---|---|---|---|
-| `Client Name` | **Required** | Company name as it appears on its website, e.g. `AJ Lakes` | Search queries, reports, matching search results to the company |
-| `Client Email` | Strongly recommended | A **company** address, e.g. `info@ajlakes.com` (personal addresses such as gmail.com are ignored for the domain) | The email's domain is the client's domain: the website that is researched |
-| `Project Name` | **Required** | The project you built or maintain, e.g. `AJ Lakes Website` | Reports; duplicate detection (same client + project) |
-| `Project URL` | **Required** | The live site or app, with `https://`, e.g. `https://www.ajlakes.com` | Crawled for features; the client's domain when there is no company email |
+| `Client Name` | **Required** | Company name as it appears on its website, e.g. `Bright Smile Dental` | Search queries, reports, matching search results to the company |
+| `Client Email` | Strongly recommended | A **company** address, e.g. `info@brightsmile-dental.example` (personal addresses such as gmail.com are ignored for the domain) | The email's domain is the client's domain: the website that is researched |
+| `Project Name` | **Required** | The project you built or maintain, e.g. `Patient Booking Portal` | Reports; duplicate detection (same client + project) |
+| `Project URL` | **Required** | The live site or app, with `https://`, e.g. `https://www.brightsmile-dental.example` | Crawled for features; the client's domain when there is no company email |
 | `Description` | Recommended | One or two sentences on what the project does | Evidence, industry and gap analysis |
 | `Industry` | Recommended | e.g. `Hospitality`, `Healthcare`, `Logistics` | Competitor discovery, benchmarks, industry profile |
 | `Technology` | Recommended | Stack, separated by `;`, e.g. `WordPress; PHP; MySQL` | Technology and modernisation analysis |

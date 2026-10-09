@@ -12,7 +12,7 @@ from cip.connectors.research.web import WebFetcher, bot_challenge
 AWS_CHALLENGE = ('<html><head><script src="https://abc.token.awswaf.com/abc/challenge.js"></script>'
                  '<script>AwsWafIntegration.checkForceRefresh()</script></head><body><div id="challenge-container">'
                  '</div><noscript>JavaScript is disabled</noscript></body></html>')
-REAL = "<html><head><title>AJ Lakes</title></head><body><h1>AJ Lakes</h1><p>" + \
+REAL = "<html><head><title>Lakeside Resort</title></head><body><h1>Lakeside Resort</h1><p>" + \
        "Family-owned lakeside resort with cabins, boat rentals and fishing trips. " * 12 + "</p></body></html>"
 
 
@@ -58,10 +58,10 @@ def test_challenge_signals():
 
 async def test_challenge_without_a_browser_is_reported_not_read_as_an_empty_page():
     f = WebFetcher(transport=challenge_transport(), rendering="never")
-    assert await f.fetch("https://www.ajlakes.test/") is None
+    assert await f.fetch("https://www.lakeside-resort.test/") is None
     assert f.failures[-1]["reason"] == "bot_challenge" and f.failures[-1]["detail"] == "AWS WAF"
 
-    check = await check_domain(WebFetcher(transport=challenge_transport(), rendering="never"), "www.ajlakes.test")
+    check = await check_domain(WebFetcher(transport=challenge_transport(), rendering="never"), "www.lakeside-resort.test")
     assert check["status"] == "blocked" and check["reason"] == "bot_challenge"
     assert "AWS WAF" in check["detail"] and "playwright install" in check["detail"]
 
@@ -69,22 +69,22 @@ async def test_challenge_without_a_browser_is_reported_not_read_as_an_empty_page
 async def test_the_browser_passes_the_challenge():
     browser = PassingBrowser()
     f = WebFetcher(transport=challenge_transport(), rendering="auto", renderer=browser)
-    page = await f.fetch("https://www.ajlakes.test/")
-    assert page is not None and page.rendered and page.title == "AJ Lakes" and "boat rentals" in page.text
+    page = await f.fetch("https://www.lakeside-resort.test/")
+    assert page is not None and page.rendered and page.title == "Lakeside Resort" and "boat rentals" in page.text
 
     check = await check_domain(WebFetcher(transport=challenge_transport(), rendering="auto", renderer=PassingBrowser()),
-                               "www.ajlakes.test")
+                               "www.lakeside-resort.test")
     assert check["status"] == "ok" and "passed with the browser" in check["detail"]
 
 
 async def test_a_browser_that_only_sees_the_challenge_again_is_a_failure():
     for page in (AWS_CHALLENGE, SITEGROUND):  # the SiteGround screen has some text: still not the site
         f = WebFetcher(transport=challenge_transport(), rendering="auto", renderer=PassingBrowser(html=page))
-        assert await f.fetch("https://www.ajlakes.test/") is None
+        assert await f.fetch("https://www.lakeside-resort.test/") is None
         assert f.failures[-1]["reason"] == "bot_challenge"
 
         check = await check_domain(WebFetcher(transport=challenge_transport(), rendering="auto",
-                                              renderer=PassingBrowser(html=page)), "www.ajlakes.test")
+                                              renderer=PassingBrowser(html=page)), "www.lakeside-resort.test")
         assert check["status"] == "blocked" and "could not pass it either" in check["detail"]
 
 
@@ -102,10 +102,10 @@ async def test_blocked_client_site_profile_is_built_from_search_results(make_ctx
         async def search(self, query, limit=10):
             self.queries.append(query)
             return [
-                SearchResult("AJ Lakes | Lakeside cabins", "https://www.ajlakes.test/",
-                             "AJ Lakes offers lakeside cabins, boat rentals and guided fishing trips."),
-                SearchResult("AJ Lakes - Company profile", "https://directory.example/aj-lakes",
-                             "AJ Lakes is a family-owned resort founded in 1998 in Minnesota."),
+                SearchResult("Lakeside Resort | Lakeside cabins", "https://www.lakeside-resort.test/",
+                             "Lakeside Resort offers lakeside cabins, boat rentals and guided fishing trips."),
+                SearchResult("Lakeside Resort - Company profile", "https://directory.example/lakeside-resort",
+                             "Lakeside Resort is a family-owned resort founded in 1998 in Minnesota."),
                 SearchResult("Unrelated lake news", "https://news.example/lakes", "Water levels are rising."),
             ]
 
@@ -116,9 +116,9 @@ async def test_blocked_client_site_profile_is_built_from_search_results(make_ctx
             self.prompts.append(user)
             return schema(
                 description=SourcedValue(value="Lakeside resort with cabins and boat rentals",
-                                         source_url="https://www.ajlakes.test/",
+                                         source_url="https://www.lakeside-resort.test/",
                                          quote="lakeside cabins, boat rentals and guided fishing trips"),
-                headquarters=SourcedValue(value="Minnesota", source_url="https://directory.example/aj-lakes",
+                headquarters=SourcedValue(value="Minnesota", source_url="https://directory.example/lakeside-resort",
                                           quote="founded in 1998 in Minnesota"),
                 industry=SourcedValue(value="Hospitality", source_url="https://news.example/lakes",
                                       quote="Hospitality"),  # not an offered source: must be dropped
@@ -126,12 +126,12 @@ async def test_blocked_client_site_profile_is_built_from_search_results(make_ctx
 
     llm = LLM()
     ctx = make_ctx(fetcher=WebFetcher(transport=challenge_transport(), rendering="never"), search=Search(), llm=llm)
-    ctx.record.client.name, ctx.record.client.domain = "AJ Lakes", "www.ajlakes.test"
+    ctx.record.client.name, ctx.record.client.domain = "Lakeside Resort", "www.lakeside-resort.test"
     ctx.record.project.url = None
     result = await ClientResearchAgent().run(ctx)
     d = result.data
     assert d["domain_check"]["reason"] == "bot_challenge" and d["website_unavailable"]
-    assert {s["url"] for s in d["search_sources"]} == {"https://www.ajlakes.test/", "https://directory.example/aj-lakes"}
+    assert {s["url"] for s in d["search_sources"]} == {"https://www.lakeside-resort.test/", "https://directory.example/lakeside-resort"}
     assert "news.example" not in llm.prompts[0] and "search results" in llm.prompts[0]
     profile = d["profile"]
     assert profile["description"] == "Lakeside resort with cabins and boat rentals"
