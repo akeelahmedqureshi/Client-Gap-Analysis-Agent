@@ -184,6 +184,21 @@ opened, then reviewed by people. Every change is versioned in `history`.
 | POST | `/api/runs/{id}/outreach/approve` | analyst | `{acknowledge_warnings?, note?}`. 409 while the draft mentions internal-only knowledge or security findings; other claim-check warnings need `acknowledge_warnings: true` |
 | GET | `/api/runs/{id}/outreach.eml` | export | The email as an unsent `.eml` draft (file name ends in `-DRAFT` until approved) |
 
+## Integrations (CRM, email, marketing)
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/integrations` | viewer | `crm`, `marketing` (provider, masked config, `has_secret`, `auto_create`) and `email_sending` (SMTP configured). Secrets are never returned |
+| PUT | `/api/integrations/{crm\|marketing}` | admin | `{provider, secret?, config, enabled, auto_create}`. CRM: `hubspot` (private-app token; `pipeline`, `dealstage`) or `webhook` (`url`, optional signing secret). Marketing: `mailchimp` (API key `…-usNN`; `list_id`; `status_if_new`: `pending` (double opt-in, default), `transactional`, `subscribed`) or `webhook`. Audited |
+| DELETE | `/api/integrations/{kind}` | admin | Remove |
+| POST | `/api/integrations/{kind}/test` | admin | Check the credentials (or send a `test` webhook event) |
+| POST | `/api/runs/{id}/crm` | analyst + export | Create the opportunity from the **approved** sales summary (409 otherwise). HubSpot: company (found by domain or created), deal associated to it, note with the summary, business contact. Webhook: `opportunity.created` |
+| POST | `/api/runs/{id}/marketing` | analyst + export | Upsert the business contact with tags (industry, `cip-analysed`, top improvement). Webhook: `contact.upserted` |
+| POST | `/api/runs/{id}/outreach/send` | analyst + export | `{confirm: true, resend?}`. Sends the **approved** outreach email over SMTP with `Reply-To` set to the sender; once per approved version unless `resend` |
+| GET | `/api/runs/{id}/integrations` | viewer | Push history (action, provider, status, external ids, error, automatic, who, when) |
+
+Only the approved summary's client-facing content is sent; internal-only knowledge-base items, reviewer notes, evidence quotes and credentials never are. Webhooks are public HTTPS only, not redirected, and signed with `X-CIP-Signature: sha256=HMAC(secret, "<X-CIP-Timestamp>.<body>")`. With `auto_create`, approving a sales summary creates the CRM opportunity automatically (failures are recorded, approval still succeeds).
+
 ## Knowledge base
 
 Internal capabilities, reusable solutions, previous projects and case studies (BRS 27). Viewers see

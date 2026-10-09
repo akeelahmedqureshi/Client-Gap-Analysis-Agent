@@ -152,7 +152,24 @@ async def approve_summary(run_id: str, body: ApproveIn, request: Request, user: 
         doc.history = [*doc.history, _entry(user, "approved", doc.version, body.note)]
         audit.record(session, request, user, "sales_summary.approved", "run", run.id, version=doc.version)
         await session.commit()
+        await _auto_opportunity(session, run, user, request)
     return _doc_out(doc)
+
+
+async def _auto_opportunity(session: AsyncSession, run: AnalysisRun, user: User, request: Request) -> None:
+    """Automatic CRM opportunity creation on approval, when the organization turned it on. Never fails approval."""
+    from cip.api.routes.integrations import create_opportunity
+    from cip.db.models import Integration
+
+    crm = (await session.execute(select(Integration).where(Integration.org_id == run.org_id,
+                                                           Integration.kind == "crm"))).scalar_one_or_none()
+    if crm is None or not (crm.enabled and crm.auto_create):
+        return
+    try:
+        await create_opportunity(session, run, user, request, automatic=True)
+        await session.commit()
+    except HTTPException:
+        await session.rollback()
 
 
 @router.patch("/{run_id}/outreach")

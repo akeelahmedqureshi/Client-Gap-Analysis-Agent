@@ -21,7 +21,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cip.core.security.auth import ROLES, role_at_least
-from cip.db.models import (AgentExecution, Alert, AnalysisRun, Approval, Client, EvidenceRecord, Monitor,
+from cip.db.models import (AgentExecution, Alert, AnalysisRun, Approval, Client, EvidenceRecord, IntegrationSync, Monitor,
                            Notification, Organization, Project, ProjectMember, Report, ReviewOverride, SalesDocument,
                            User)
 
@@ -85,7 +85,7 @@ async def delete_runs(session: AsyncSession, run_ids: list[str]) -> int:
     if not run_ids:
         return 0
     for model in (Notification, Alert, ReviewOverride, SalesDocument, Report, Approval, EvidenceRecord,
-                  AgentExecution):
+                  AgentExecution, IntegrationSync):
         await session.execute(delete(model).where(model.run_id.in_(run_ids)))
     # Later versions and comparisons keep working; they just lose the link to the deleted run.
     # (updated_at is kept: unlinking is not activity, and retention ages runs by it.)
@@ -117,7 +117,7 @@ async def delete_projects(session: AsyncSession, project_ids: list[str]) -> dict
     run_ids = list((await session.execute(select(AnalysisRun.id).where(
         AnalysisRun.project_id.in_(project_ids)))).scalars())
     runs = await delete_runs(session, run_ids)
-    for model in (Notification, Alert, SalesDocument, Monitor, ProjectMember):
+    for model in (Notification, Alert, SalesDocument, Monitor, ProjectMember, IntegrationSync):
         await session.execute(delete(model).where(model.project_id.in_(project_ids)))
     projects = (await session.execute(delete(Project).where(Project.id.in_(project_ids)))).rowcount or 0
     return {"projects": projects, "runs": runs}

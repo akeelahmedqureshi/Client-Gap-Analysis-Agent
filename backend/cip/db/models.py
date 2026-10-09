@@ -457,3 +457,45 @@ class ConfigVersion(Base):
     created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Integration(Base):
+    """An organization's CRM or email / marketing integration (services/integrations.py).
+
+    ``kind``: crm | marketing. Credentials and the configuration (which may hold a webhook URL) are encrypted.
+    """
+
+    __tablename__ = "integrations"
+    __table_args__ = (UniqueConstraint("org_id", "kind"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("int"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    provider: Mapped[str] = mapped_column(String(30))
+    encrypted_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_config: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # CRM only: create the opportunity automatically when a run's sales summary is approved.
+    auto_create: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class IntegrationSync(Base):
+    """One push to an external system: a CRM opportunity, a marketing contact or a sent outreach email."""
+
+    __tablename__ = "integration_syncs"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=_id("syn"))
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("analysis_runs.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(30))  # crm.opportunity | marketing.contact | email.sent
+    provider: Mapped[str] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(20))  # ok | failed
+    external_ids: Mapped[dict] = mapped_column(default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    document_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    automatic: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

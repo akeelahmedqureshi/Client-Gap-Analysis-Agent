@@ -4,6 +4,7 @@ import { api, setToken } from "../lib/api";
 import { JOB_FUNCTIONS } from "../lib/types";
 import type { Connection, NotificationPrefs, OrgSettings, User } from "../lib/types";
 import { Badge, Button, Card, Empty, ErrorText } from "../components/ui";
+import { IntegrationSettings } from "../components/IntegrationsCard";
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -85,6 +86,8 @@ export default function SettingsPage() {
       <NotificationSettings />
 
       {isAdmin && <Governance />}
+
+      {isAdmin && <IntegrationSettings />}
 
       {isAdmin && <TeamMembers currentUserId={me.data?.id} />}
 

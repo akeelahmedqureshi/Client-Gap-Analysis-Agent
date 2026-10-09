@@ -97,6 +97,10 @@ def main() -> None:
         return httpx.Response(200, text="ok")
 
     notify.webhook_transport = httpx.MockTransport(capture)
+    from cip.services import integrations
+    # CRM / marketing calls are answered locally so the integration buttons work offline.
+    integrations.transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"id": "demo-1", "results": [], "status": "pending"}))
 
     def use_fakes(ctx) -> None:
         ctx.fetcher = WebFetcher(transport=web_transport(sites))

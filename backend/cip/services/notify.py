@@ -93,7 +93,8 @@ def _smtp_send(settings: Settings, msg: EmailMessage) -> None:
         smtp.send_message(msg)
 
 
-async def send_email(recipients: list[str], subject: str, body: str, settings: Settings | None = None) -> dict:
+async def send_email(recipients: list[str], subject: str, body: str, settings: Settings | None = None,
+                     reply_to: str | None = None) -> dict:
     s = settings or get_settings()
     if not recipients:
         return {"channel": "email", "ok": True, "recipients": 0}
@@ -103,6 +104,8 @@ async def send_email(recipients: list[str], subject: str, body: str, settings: S
     msg["Subject"] = subject.replace("\n", " ")[:200]
     msg["From"] = s.smtp_from
     msg["To"] = ", ".join(recipients)
+    if reply_to:
+        msg["Reply-To"] = reply_to.replace("\n", " ")
     msg.set_content(body)
     try:
         await asyncio.to_thread(_smtp_send, s, msg)

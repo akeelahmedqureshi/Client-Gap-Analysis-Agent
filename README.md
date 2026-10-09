@@ -118,6 +118,9 @@ Platform features:
   position, and capabilities that are rising (projected, labelled as estimates).
 - **Multi-language analysis:** page languages detected; capability keywords in seven languages, with quotes
   kept in the original; localized sites (hreflang) recognized.
+- **CRM, email and marketing:** opportunities created in HubSpot or any CRM via a signed webhook (optionally
+  automatically on approval), approved outreach sent over SMTP, and contacts pushed to Mailchimp with double
+  opt-in. Only approved, client-facing content leaves the platform.
 - **Governance:** job functions (sales, business development, product, technical, management) next to
   the permission roles; an export policy by role and job function; structured exports (comparison matrix,
   gaps, opportunities, recommendations and evidence as CSV, plus the full analysis as JSON); deletion of
@@ -134,8 +137,8 @@ Also built:
 - a CI pipeline;
 - optional Celery + Redis workers for scaling.
 
-Planned for Phase 2/3 (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter,
-and a deeper LLM evaluation set.
+Planned (not built yet): pgvector semantic retrieval, a LinkedIn licensed adapter, a deeper LLM evaluation
+set, and native connectors for more CRMs (Salesforce, Pipedrive) beyond the webhook.
 
 ## Quick start
 

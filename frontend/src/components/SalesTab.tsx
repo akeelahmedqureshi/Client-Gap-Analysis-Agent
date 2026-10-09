@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useCanExport } from "../lib/useOrg";
+import { RunIntegrations } from "./IntegrationsCard";
 import { BasisTag, Badge, Button, Card, Confidence, Empty, ErrorText } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
 
@@ -63,6 +64,8 @@ export default function SalesTab({ runId, canAct }: { runId: string; canAct: boo
         <OutreachCard runId={runId} doc={q.data.outreach} canAct={canAct} onError={setError}
           onSaved={(outreach) => refresh({ ...q.data!, outreach })} />
       )}
+      <RunIntegrations runId={runId} canAct={canAct} summaryApproved={q.data.summary.status === "approved"}
+        outreachApproved={q.data.outreach?.status === "approved"} />
     </div>
   );
 }
