@@ -12,6 +12,7 @@ Run it as the same user and with the same environment (.env, proxy variables) as
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import ssl
 import sys
@@ -66,4 +67,5 @@ async def main(urls: list[str]) -> int:
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(__doc__)
+    logging.basicConfig(level=logging.WARNING, format="  %(message)s")  # shows retries and TLS repair
     sys.exit(asyncio.run(main(sys.argv[1:])))

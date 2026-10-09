@@ -29,8 +29,9 @@ PARKED_MARKERS = (
 )
 BLOCKED_REASONS = ("robots_disallowed", "blocked_address", "unsupported_url")
 HINTS = {
-    "tls_certificate": "The server could not verify the site's certificate: update the CA certificates on the server "
-                       "(e.g. `ca-certificates`, `pip install -U certifi`) or set SSL_CERT_FILE to your proxy's CA bundle",
+    "tls_certificate": "The server could not verify the site's certificate (missing intermediates are already fetched "
+                       "automatically): update the CA certificates on the server (e.g. `ca-certificates`, "
+                       "`pip install -U certifi`) or set SSL_CERT_FILE to your proxy's CA bundle",
     "tls_error": "The TLS handshake failed (an intercepting proxy or an outdated server)",
     "dns_error": "The server's DNS could not resolve the domain",
     "unresolvable": "The server's DNS could not resolve the domain. If this server reaches the internet only through "

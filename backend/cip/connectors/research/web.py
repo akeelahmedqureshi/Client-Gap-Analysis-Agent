@@ -28,6 +28,7 @@ from bs4 import BeautifulSoup
 
 from cip.config import Settings, get_settings
 from cip.connectors.research.browser import BrowserRenderer, looks_script_rendered
+from cip.connectors.research import tls
 from cip.connectors.research.cache import CachedPage, PageCache
 from cip.core.language import detect as detect_language
 
@@ -383,6 +384,7 @@ class WebFetcher:
     def _client(self, follow_redirects: bool = True, accept: str = "text/html,application/xhtml+xml") \
             -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self._timeout, follow_redirects=follow_redirects, transport=self._transport,
+                                 verify=tls.context() if self._transport is None else True,
                                  headers={"User-Agent": self._ua, "Accept": accept},
                                  event_hooks={"request": [_meter_request]})
 
@@ -433,6 +435,7 @@ class WebFetcher:
 
     async def _request(self, client: httpx.AsyncClient, method: str, url: str, **kw) -> tuple[httpx.Response, int]:
         attempt = 0
+        repaired = False
         while True:
             attempt += 1
             try:
@@ -441,6 +444,12 @@ class WebFetcher:
             except BudgetRequestError as exc:
                 raise FetchFailed("budget_exhausted", attempt) from exc
             except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+                cause = network_cause(exc) if not isinstance(exc, httpx.TimeoutException) else ("timeout", "")
+                # A site that doesn't send its intermediate certificate: fetch it as browsers do, then retry.
+                if (cause[0] == "tls_certificate" and "local issuer" in cause[1] and not repaired
+                        and self._transport is None and await tls.repair(url, timeout=self._timeout)):
+                    repaired = True
+                    continue
                 if attempt > self._retries:
                     if isinstance(exc, httpx.TimeoutException):
                         raise FetchFailed("timeout", attempt, type(exc).__name__) from exc
