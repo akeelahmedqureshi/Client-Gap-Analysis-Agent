@@ -230,6 +230,7 @@ It fetches the site exactly as an analysis does and names the cause, with a hint
 | `network unreachable`, `no route to host`, `connection error`, `timeout` | Allow outbound HTTPS (port 443) from the server, or set `HTTPS_PROXY` / `NO_PROXY` for the API process |
 | `proxy error` | Check the proxy address and that it allows the site |
 | `unresolvable`, `dns error` | Fix the server's DNS, or behind an egress-only proxy set `CIP_CRAWLER_PROXY_RESOLVES_DNS=true` |
+| `bot protection` (or `OK` but almost no text) | The site (AWS WAF, Cloudflare, Imperva…) answers crawlers with a challenge page. Install the browser renderer (`pip install -e ".[browser]"` and `playwright install --with-deps chromium`); challenges are then passed with a headless browser like a visitor's. If it still fails, ask the site owner to allow the crawler |
 | `http 403`, `connection reset` | The site's bot protection blocks the crawler: try a browser-like `CIP_CRAWLER_USER_AGENT`, or analyse from another network |
 | `robots disallowed` | The site asks crawlers not to fetch it; the platform respects that |
 

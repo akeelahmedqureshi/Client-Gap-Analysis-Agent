@@ -281,6 +281,36 @@ def network_cause(exc: BaseException) -> tuple[str, str]:
     return reason, " ".join(detail.split())[:200]
 
 
+# Bot-protection services answer automated clients with a challenge page (a script to run, a CAPTCHA) instead of
+# the site. Header signals are definitive; page markers count only on a page with almost no readable text, since
+# some services also add their scripts to normal pages.
+CHALLENGE_HEADERS = (("x-amzn-waf-action", "", "AWS WAF"), ("cf-mitigated", "challenge", "Cloudflare"),
+                     ("x-datadome", "", "DataDome"))
+CHALLENGE_MARKERS = (("awswaf", "AWS WAF"), ("aws-waf-token", "AWS WAF"), ("challenge-platform", "Cloudflare"),
+                     ("cf-browser-verification", "Cloudflare"), ("_incapsula_resource", "Imperva"),
+                     ("incapsula incident", "Imperva"), ("sucuri website firewall", "Sucuri"),
+                     ("captcha-delivery.com", "DataDome"), ("px-captcha", "HUMAN (PerimeterX)"),
+                     ("/_sec/cp_challenge", "Akamai"))
+CHALLENGE_MAX_TEXT = 300
+
+
+def bot_challenge(status: int, headers, body: str, text: str | None = None) -> str | None:
+    """The bot-protection service behind a challenge response, or None for a normal page."""
+    for name, value, vendor in CHALLENGE_HEADERS:
+        got = (headers.get(name) or "").lower() if headers else ""
+        if got and (not value or value in got):
+            return vendor
+    if text is None:
+        text = BeautifulSoup(body or "", "html.parser").get_text(" ", strip=True)
+    if len(text.strip()) > CHALLENGE_MAX_TEXT:
+        return None
+    low = (body or "").lower()
+    vendor = next((v for marker, v in CHALLENGE_MARKERS if marker in low), None)
+    if vendor:
+        return vendor
+    return "unidentified bot protection (HTTP 202 with an empty page)" if status == 202 and not text.strip() else None
+
+
 def unsafe_reason(exc: UnsafeURL) -> str:
     text = str(exc)
     return "unresolvable" if text.startswith("Cannot resolve") else \
@@ -550,7 +580,12 @@ class WebFetcher:
                 return None
             body = resp.text[:MAX_BODY_BYTES]
             page = parse_html(str(resp.url), resp.status_code, body)
-            page, html = await self._maybe_render(page, body)
+            challenge = bot_challenge(resp.status_code, resp.headers, body, page.text)
+            page, html = await self._maybe_render(page, body, force=challenge is not None)
+            if challenge and (not page.rendered or bot_challenge(page.status, None, html, page.text)):
+                # Only the challenge came back (no browser, or it didn't pass): not a page of the site.
+                self.record_failure(url, "bot_challenge", attempts, challenge)
+                return None
             self._mark_live(url, page.url)
             await self._store(url, page, html)
             return page, html
@@ -648,9 +683,9 @@ class WebFetcher:
         resp = await self._simple("GET", url, "*/*", headers=headers or {})
         return resp.text[:max_chars] if resp is not None and resp.status_code < 400 else None
 
-    async def _maybe_render(self, page: Page, raw_html: str) -> tuple[Page, str]:
+    async def _maybe_render(self, page: Page, raw_html: str, force: bool = False) -> tuple[Page, str]:
         if self.renderer is None or not (
-                self.rendering == "always" or looks_script_rendered(raw_html, page.text)):
+                force or self.rendering == "always" or looks_script_rendered(raw_html, page.text)):
             return page, raw_html
         rendered = await self.renderer.render(page.url)
         if rendered is None or rendered.status >= 400:

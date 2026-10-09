@@ -7,7 +7,8 @@ classifies it:
 * ``redirected`` — it answered, but on a different domain (renamed or acquired company, regional site);
 * ``parked`` — a domain-parking or "for sale" page, not a business site;
 * ``unreachable`` — no answer (DNS, connection, timeout) or an error status;
-* ``blocked`` — robots.txt disallows us, or the address is not public.
+* ``blocked`` — robots.txt disallows us, the site's bot protection only returns a challenge, or the address is
+  not public.
 
 Only the homepage is requested; nothing is stored beyond the classification.
 """
@@ -18,7 +19,7 @@ import asyncio
 
 from bs4 import BeautifulSoup
 
-from cip.connectors.research.web import WebFetcher, normalize_url, registrable_domain
+from cip.connectors.research.web import WebFetcher, bot_challenge, normalize_url, parse_html, registrable_domain
 
 PARKED_MARKERS = (
     "this domain is for sale", "this domain name is for sale", "buy this domain", "domain is for sale",
@@ -33,6 +34,9 @@ HINTS = {
                        "automatically): update the CA certificates on the server (e.g. `ca-certificates`, "
                        "`pip install -U certifi`); if a firewall inspects HTTPS, trust its CA with "
                        "CIP_CRAWLER_EXTRA_CA_FILE (scripts/check_web.py names the issuer)",
+    "bot_challenge": "The site's bot protection answers the crawler with a challenge instead of its pages. Install "
+                     "the browser renderer (pip install '.[browser]' && playwright install chromium) so the "
+                     "challenge can be passed like a visitor's browser does, or ask the site owner to allow the crawler",
     "tls_error": "The TLS handshake failed (an intercepting proxy or an outdated server)",
     "dns_error": "The server's DNS could not resolve the domain",
     "unresolvable": "The server's DNS could not resolve the domain. If this server reaches the internet only through "
@@ -70,11 +74,20 @@ async def check_domain(fetcher: WebFetcher, url: str) -> dict:
                    detail=reason.replace("_", " ") + (f": {failure['detail']}" if failure.get("detail") else "")
                    + (f". {hint}" if hint else ""), reason=reason)
         return out
-    status, _, final_url, body = raw
+    status, headers, final_url, body = raw
     out.update(final_url=final_url, http_status=status)
     if status >= 400:
         out.update(status="unreachable", detail=f"HTTP {status}")
         return out
+    challenge = bot_challenge(status, headers, body)
+    if challenge:
+        rendered = await _render(fetcher, final_url)
+        if rendered is None:
+            out.update(status="blocked", reason="bot_challenge",
+                       detail=f"bot protection: {challenge}. {HINTS['bot_challenge']}")
+            return out
+        out["detail"] = f"Bot protection ({challenge}) passed with the browser"
+        body = rendered
     signals = parked_signals(body)
     if signals:
         out.update(status="parked", detail="Parked or for-sale page (" + ", ".join(signals[:3]) + ")")
@@ -85,6 +98,19 @@ async def check_domain(fetcher: WebFetcher, url: str) -> dict:
     if final_url.rstrip("/") != url.rstrip("/"):
         out["detail"] = f"Redirects to {final_url}"
     return out
+
+
+async def _render(fetcher: WebFetcher, url: str) -> str | None:
+    """The page's HTML as a browser sees it, when the browser gets past the challenge (no caching or evidence)."""
+    renderer = fetcher.renderer
+    if renderer is None or not renderer.available:
+        return None
+    async with renderer.session():
+        page = await renderer.render(url)
+    if page is None or page.status >= 400:
+        return None
+    text = parse_html(page.url, page.status, page.html).text
+    return None if bot_challenge(page.status, None, page.html, text) or not text.strip() else page.html
 
 
 async def check_many(fetcher: WebFetcher, urls: dict[int, str]) -> dict[int, dict]:
@@ -103,7 +129,7 @@ def is_problem(check: dict | None) -> bool:
 
 
 DOMAIN_LABELS = {"ok": "reachable", "redirected": "redirects to another domain", "parked": "parked / for sale",
-                 "unreachable": "unreachable", "blocked": "blocked (robots.txt or non-public address)"}
+                 "unreachable": "unreachable", "blocked": "blocked (robots.txt, bot protection or non-public address)"}
 
 
 def summary(check: dict) -> str:

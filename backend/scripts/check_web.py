@@ -53,6 +53,7 @@ def environment() -> None:
             print(f"  extra CA file: {extra} (loaded)")
         except (OSError, ssl.SSLError) as exc:
             print(f"  extra CA file: {extra} — NOT A VALID PEM CERTIFICATE: {exc}")
+    print(f"  browser rendering: {s.browser_rendering}")
     print(f"  crawler timeout: {s.crawler_timeout_seconds}s, retries: {s.crawler_retries}, user agent: {s.crawler_user_agent}")
     print()
 
@@ -74,7 +75,9 @@ async def explain_certificate(url: str) -> None:
 
 async def main(urls: list[str]) -> int:
     environment()
-    fetcher = WebFetcher(rendering="never")
+    fetcher = WebFetcher()  # same rendering setting as analyses (CIP_BROWSER_RENDERING)
+    if fetcher.renderer is not None and not fetcher.renderer.available:
+        print(f"Browser renderer unavailable: {fetcher.renderer._unavailable_reason}\n")
     bad = 0
     for url in urls:
         check = await check_domain(fetcher, url)
@@ -90,7 +93,13 @@ async def main(urls: list[str]) -> int:
         else:
             page = await fetcher.fetch(url)
             print(f"  page read: {'yes' if page else 'no'}" + (f" — “{page.title[:80]}”, {len(page.text):,} characters"
+                                                                 + (" (browser)" if page.rendered else "")
                                                                  if page else ""))
+            failure = fetcher.last_failure(check["url"]) if page is None else None
+            if failure:
+                print(f"  {failure['reason'].replace('_', ' ')}: {failure.get('detail') or ''}")
+            elif page is not None and len(page.text.strip()) < 200:
+                print("  -> almost no readable text: the site may need the browser renderer or block crawlers")
         print()
     return 1 if bad else 0
 
