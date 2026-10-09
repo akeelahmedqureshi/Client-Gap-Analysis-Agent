@@ -2,6 +2,7 @@
 import { Fragment, useState } from "react";
 import { useAgent } from "../lib/useAgent";
 import { EvidenceList } from "./Explain";
+import { RunBenchmark } from "./Benchmarks";
 import { Badge, Card, Empty } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
 
@@ -98,6 +99,7 @@ export function MarketTab({ runId, enabled, comparisonDone }: { runId: string; e
   const kinds: [string, string][] = [["trend", "Industry trends"], ["technology", "Emerging technology"], ["ai_adoption", "AI adoption"], ["automation", "Automation trends"]];
   return (
     <div className="space-y-4">
+      {comparisonDone && <RunBenchmark runId={runId} />}
       <Card title="Industry & market profile">
         <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           {facts.map(([k, v, basis]) => (

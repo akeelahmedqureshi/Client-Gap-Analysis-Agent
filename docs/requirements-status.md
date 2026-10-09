@@ -13,9 +13,9 @@ feature.
 
 | Status | Count |
 |---|---|
-| ✅ Completed | 124 |
+| ✅ Completed | 125 |
 | 🟡 Partially completed | 0 |
-| ❌ Incomplete | 4 |
+| ❌ Incomplete | 3 |
 | **Total** | **128** |
 
 _Baseline audit: 2026-10-08._
@@ -251,7 +251,7 @@ _Baseline audit: 2026-10-08._
 | 125 | CRM integration and automatic opportunity creation | ❌ | |
 | 126 | Email and marketing system integration | ❌ | |
 | 127 | Multi-language analysis | ❌ | |
-| 128 | Industry-wide benchmarking and predicted trends | ❌ | |
+| 128 | Industry-wide benchmarking and predicted trends | ✅ | Capability adoption per industry across analysed clients and their competitors; each client's percentile and standards coverage; rising capabilities projected forward (labelled estimates); sourced trends rolled up |
 
 ## Built beyond the BRS and PRD (not counted)
 

@@ -146,6 +146,16 @@ Deletions and purges are written to the audit log, which is never purged.
 |---|---|---|---|
 | GET | `/api/portfolio?q=&industry=&status=&priority=high\|medium\|low&sort=score\|date\|name\|confidence` | viewer | From each visible project's latest completed run: `summary` (clients, projects, analysed, running, awaiting approval, needs review, failed, never analysed), `projects[]` (industry, status, quality, top priority, opportunity score, evidence coverage, dates; searchable, filterable, sortable), `top_opportunities[]`, `recurring_gaps[]`, `recurring_ai[]`, `recurring_automation[]`, `requested_capabilities[]` (app reviews), `industries[]`, `capability_demand[]` (knowledge-base records matched across clients) and `shared_case_studies[]` |
 
+## Industry benchmarks
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| GET | `/api/portfolio/benchmarks` | viewer | Industries with analysed companies (`clients`, `companies`, `analyses`, `sufficient` when at least 3 companies) |
+| GET | `/api/portfolio/benchmarks/{industry}` | viewer | `capabilities[]` (adoption share and band: standard ≥ 60 %, common ≥ 30 %, emerging), `client_positions[]` (capabilities, percentile, standards covered / not identified), `predicted_trends[]` (adoption earlier → later and a projection, `basis: estimate`), `sourced_trends[]` |
+| GET | `/api/portfolio/runs/{run_id}/benchmark` | viewer | The run's client against its industry: percentile, common capabilities not identified, capabilities few others have, predicted trends |
+
+Benchmarks use only the organization's own completed analyses of projects the caller can see; companies are the clients plus their competitors, deduplicated by domain.
+
 ## Human review
 
 Reviewers correct a finished run (BRS 17). Overrides key on stable labels (capability id, competitor

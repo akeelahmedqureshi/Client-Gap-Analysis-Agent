@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Portfolio } from "../lib/types";
 import { Badge, Card, Empty } from "../components/ui";
+import { IndustryBenchmarks } from "../components/Benchmarks";
 
 const pct = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v * 100)}%`);
 
@@ -123,6 +124,7 @@ export default function PortfolioPage() {
               </ul>
             )}
           </Card>
+          <IndustryBenchmarks />
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Ranked title="Recurring capability gaps" items={d.recurring_gaps} empty="No gaps yet." />
             <Ranked title="Recurring AI opportunities" items={d.recurring_ai} empty="None yet." />
