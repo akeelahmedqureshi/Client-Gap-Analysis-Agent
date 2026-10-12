@@ -79,3 +79,23 @@ async def test_rising_capabilities_are_predicted_as_estimates(client):  # noqa: 
     assert "billing.payments" in rising, bench["trend_note"]
     t = rising["billing.payments"]
     assert t["before"] == 0 and t["after"] > 0 and t["projected"] >= t["after"] and t["basis"] == "estimate"
+
+
+async def test_industry_names_with_slashes_reach_the_benchmark(client, monkeypatch):  # noqa: F811
+    from urllib.parse import quote
+
+    from cip.services import benchmarks
+
+    h = await register(client)
+    seen = []
+
+    async def fake(session, user, industry):
+        seen.append(industry)
+        return {"industry": industry}
+
+    monkeypatch.setattr(benchmarks, "benchmark", fake)
+    name = "Media / Marketing / Advertising"
+    for path in (quote(name, safe=""), quote(name)):  # encodeURIComponent, and a literal "/"
+        r = await client.get(f"/api/portfolio/benchmarks/{path}", headers=h)
+        assert r.status_code == 200 and r.json()["industry"] == name
+    assert seen == [name, name]

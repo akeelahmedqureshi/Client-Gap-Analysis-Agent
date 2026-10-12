@@ -38,7 +38,7 @@ async def list_benchmarks(user: User = Depends(require_role("viewer")),
     return await benchmarks.industries(session, user)
 
 
-@router.get("/benchmarks/{industry}")
+@router.get("/benchmarks/{industry:path}")  # names such as "Media / Marketing / Advertising" contain "/"
 async def get_benchmark(industry: str, user: User = Depends(require_role("viewer")),
                         session: AsyncSession = Depends(get_session)) -> dict:
     """Capability adoption across the industry, each client's position, predicted (estimate) and sourced trends."""
