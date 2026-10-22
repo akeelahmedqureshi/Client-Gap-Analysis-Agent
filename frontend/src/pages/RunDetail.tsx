@@ -5,11 +5,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Evidence, KnowledgeMatch, Run, RunChanges, Usage, User } from "../lib/types";
+import type { Evidence, Run, Usage, User } from "../lib/types";
 import { Badge, BasisTag, Button, Card, Confidence, Empty, ErrorText } from "../components/ui";
 import EvidenceRefs, { EvidenceContext } from "../components/EvidenceRefs";
 import { AnnouncementsCard, CompanyFacts, HiringCard } from "../components/CompanyExtras";
-import { ChangeList, SeverityBadge } from "../components/Changes";
 import SalesTab from "../components/SalesTab";
 import ReviewTab from "../components/ReviewTab";
 import { useAgent } from "../lib/useAgent";
@@ -18,8 +17,8 @@ import { useCanExport } from "../lib/useOrg";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Explain";
 
-const TABS = ["Pipeline", "Changes", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
-  "Cost & AI", "Roadmap", "Our Fit", "Sales", "Review", "Evidence", "Report"] as const;
+const TABS = ["Pipeline", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
+  "Cost & AI", "Sales", "Review", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
 const FINISHED = ["completed", "completed_with_errors", "failed", "cancelled"];
@@ -196,7 +195,6 @@ export default function RunDetailPage() {
 
         <ErrorBoundary resetKey={tab}>
         {tab === "Pipeline" && <>{done("quality_assurance") && <QualityCard runId={runId} />}<Pipeline run={r} /></>}
-        {tab === "Changes" && <ChangesTab runId={runId} status={r.status} />}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
         {tab === "Competitors" && <CompetitorsTab runId={runId} projectId={r.project_id} enabled={done("competitor_research")} />}
@@ -208,9 +206,7 @@ export default function RunDetailPage() {
         {tab === "Comparison" && <ComparisonTab runId={runId} enabled={done("feature_comparison")} />}
         {tab === "Gaps" && <GapsTab runId={runId} enabled={done("gap_analysis")} />}
         {tab === "Opportunities" && <OpportunitiesTab runId={runId} enabled={done("opportunity_prioritization")} />}
-        {tab === "Roadmap" && <RoadmapTab runId={runId} enabled={done("enhancement_planning")} />}
         {tab === "Cost & AI" && <CostAiTab runId={runId} enabled={done("business_process")} prioDone={done("opportunity_prioritization")} />}
-        {tab === "Our Fit" && <FitTab runId={runId} enabled={done("capability_matching")} />}
         {tab === "Sales" && (done("sales_intelligence") ? <SalesTab runId={runId} canAct={canAct} /> : <Pending />)}
         {tab === "Review" && <ReviewTab runId={runId} canAct={canAct}
           finished={["completed", "completed_with_errors", "failed", "cancelled"].includes(r.status)} />}
@@ -323,37 +319,6 @@ function QualityCard({ runId }: { runId: string }) {
 
 function Pending() {
   return <Empty>Available once the corresponding agent has completed.</Empty>;
-}
-
-function ChangesTab({ runId, status }: { runId: string; status: string }) {
-  const res = useQuery({
-    queryKey: ["changes", runId, status],
-    queryFn: () => api.get<RunChanges>(`/api/runs/${runId}/changes`),
-  });
-  const d = res.data;
-  if (!d) return <ErrorText error={res.error} />;
-  if (!["completed", "completed_with_errors"].includes(d.status))
-    return <Empty>Changes are computed when the run completes.</Empty>;
-  if (!d.baseline_run_id) return <Empty>This is the first completed analysis of the project — nothing to compare with yet.</Empty>;
-  return (
-    <Card
-      title={
-        <span>
-          Changes since <Link className="text-indigo-600 underline" to={`/runs/${d.baseline_run_id}`}>the previous analysis</Link>
-          {d.baseline_created_at && <span className="text-sm font-normal text-slate-500"> ({new Date(d.baseline_created_at).toLocaleDateString()})</span>}
-        </span>
-      }
-      actions={(["critical", "warning", "info"] as const).filter((s) => d.summary.counts[s]).map((s) => (
-        <span key={s} className="text-sm"><SeverityBadge value={s} /> {d.summary.counts[s]}</span>
-      ))}
-    >
-      {d.changes.length ? <ChangeList changes={d.changes} /> : <Empty>No material changes detected.</Empty>}
-      <p className="mt-3 text-xs text-slate-500">
-        Categories are compared only when the same research step completed in both runs (a skipped step is never reported as a removal).
-        Competitors are matched by domain.
-      </p>
-    </Card>
-  );
 }
 
 const TIERS: Record<number, string> = {
@@ -980,39 +945,6 @@ function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean 
   );
 }
 
-const PHASES: [string, string][] = [
-  ["phase_1_quick_wins", "Phase 1 — Quick wins (0-4 weeks)"],
-  ["phase_2_growth", "Phase 2 — Growth features (1-3 months)"],
-  ["phase_3_major", "Phase 3 — Major improvements (3-6 months)"],
-  ["phase_4_strategic", "Phase 4 — Strategic / AI (6-12 months)"],
-];
-
-function ArchitectureCard({ arch }: { arch: any }) {
-  const [view, setView] = useState<"current" | "target">("target");
-  return (
-    <Card
-      title="Architecture"
-      actions={
-        <div className="flex rounded-lg border overflow-hidden text-sm">
-          {(["current", "target"] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)}
-              className={`px-3 py-1 ${view === v ? "bg-indigo-600 text-white" : "bg-white text-slate-700"}`}>
-              {v === "current" ? "Current" : "Target (after roadmap)"}
-            </button>
-          ))}
-        </div>
-      }
-    >
-      {/* SVG is rendered server-side with every label escaped (cip/core/architecture.py). */}
-      <div className="w-full overflow-x-auto" dangerouslySetInnerHTML={{ __html: arch[`svg_${view}`] }} />
-      <p className="text-xs text-slate-500 mt-2">
-        Derived from {arch.based_on}.{view === "target" && arch.new_components?.length
-          ? ` ${arch.new_components.length} new component(s) from the roadmap are highlighted in green.` : ""}
-      </p>
-    </Card>
-  );
-}
-
 const LEVEL: Record<string, string> = { high: "text-emerald-700", medium: "text-sky-700", low: "text-slate-500" };
 
 function CostAiTab({ runId, enabled, prioDone }: { runId: string; enabled: boolean; prioDone: boolean }) {
@@ -1079,115 +1011,6 @@ function CostAiTab({ runId, enabled, prioDone }: { runId: string; enabled: boole
         </Card>
       )}
       <p className="text-xs text-slate-500">{d.method}</p>
-    </div>
-  );
-}
-
-function FitTab({ runId, enabled }: { runId: string; enabled: boolean }) {
-  const res = useAgent(runId, "capability_matching", enabled);
-  if (!enabled) return <Pending />;
-  const d = res.data?.data;
-  if (!d) return null;
-  const kb = d.knowledge_base ?? {};
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        Opportunities matched to your <Link className="text-indigo-700 underline" to="/knowledge">knowledge base</Link>{" "}
-        ({kb.records_considered ?? 0} approved record(s), {kb.client_facing_records ?? 0} client-facing). Internal-only
-        matches are for your team; only client-facing ones may be used with the client.
-      </p>
-      {d.matches.length === 0 && (
-        <Card title="No matches">
-          <Empty>
-            {kb.records_considered ? "None of the approved records cover this run's opportunities." :
-              "The knowledge base has no approved records yet."}
-          </Empty>
-        </Card>
-      )}
-      {d.matches.map((m: any) => (
-        <Card key={m.recommendation_id} title={m.need}>
-          <ul className="space-y-2">
-            {m.matches.map((x: KnowledgeMatch) => (
-              <li key={x.record_id} className="border rounded-lg p-3 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{x.title}</span>
-                  <span className="text-xs text-slate-500">{x.kind.replace("_", " ")} · v{x.version}</span>
-                  <span className={`text-xs ${x.client_facing ? "text-emerald-700" : "text-amber-700"}`}>
-                    {x.client_facing ? "client-facing" : "internal only"}
-                  </span>
-                  {x.reference_allowed && x.customer_name && (
-                    <span className="text-xs text-slate-600">reference: {x.customer_name}</span>
-                  )}
-                  <span className="ml-auto"><Confidence value={x.confidence} /></span>
-                </div>
-                <ul className="list-disc ml-5 text-xs text-slate-600 mt-1">
-                  {x.reasons.map((r) => <li key={r}>{r}</li>)}
-                </ul>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ))}
-      {d.unmatched.length > 0 && (
-        <Card title="No internal match">
-          <p className="text-sm text-slate-600">{d.unmatched.join(" · ")}</p>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function RoadmapTab({ runId, enabled }: { runId: string; enabled: boolean }) {
-  const prio = useAgent(runId, "opportunity_prioritization", enabled);
-  const plans = useAgent(runId, "enhancement_planning", enabled);
-  const [open, setOpen] = useState<string | null>(null);
-  if (!enabled) return <Pending />;
-  const recs: any[] = prio.data?.data.recommendations ?? [];
-  const planBy = new Map((plans.data?.data.plans ?? []).map((p: any) => [p.recommendation_id, p]));
-  const arch = plans.data?.data.architecture;
-  return (
-    <div className="space-y-4">
-    {arch && <ArchitectureCard arch={arch} />}
-    <div className="grid lg:grid-cols-2 gap-4">
-      {PHASES.map(([key, label]) => (
-        <Card key={key} title={label}>
-          {recs.filter((r) => r.phase === key).map((r) => {
-            const plan: any = planBy.get(r.id);
-            return (
-              <div key={r.id} className="border rounded-lg p-3 mb-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="font-medium">{r.feature}</span>
-                  <span className="text-xs text-slate-500">{r.complexity} · {plan?.estimated_effort}</span>
-                </div>
-                <div className="text-slate-600">{r.opportunity}<BasisTag basis={r.basis} /></div>
-                <div className="text-xs mt-1"><EvidenceRefs ids={r.evidence_ids} /></div>
-                {plan && (
-                  <button className="text-xs text-indigo-600 underline mt-1" onClick={() => setOpen(open === r.id ? null : r.id)}>
-                    {open === r.id ? "Hide" : "Show"} patch plan
-                  </button>
-                )}
-                {open === r.id && plan && (
-                  <div className="mt-2 space-y-1 text-xs">
-                    <div><b>Objective:</b> {plan.objective}</div>
-                    <div><b>Architecture impact:</b> {plan.architecture_impact}</div>
-                    {[["frontend_changes", "Frontend"], ["backend_changes", "Backend"], ["database_changes", "Database"],
-                      ["api_changes", "API"], ["ai_changes", "AI"], ["infrastructure_changes", "Infrastructure"],
-                      ["security_changes", "Security"], ["testing_requirements", "Testing"],
-                      ["migration_requirements", "Migration"], ["acceptance_criteria", "Acceptance criteria"]]
-                      .filter(([k]) => plan[k]?.length)
-                      .map(([k, l]) => (
-                        <div key={k}><b>{l}:</b><ul className="list-disc pl-5">{plan[k].map((x: string) => <li key={x}>{x}</li>)}</ul></div>
-                      ))}
-                    <div><b>Team:</b> {plan.recommended_team.join(", ")}</div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {!recs.some((r) => r.phase === key) && <Empty>No items.</Empty>}
-        </Card>
-      ))}
-    </div>
     </div>
   );
 }

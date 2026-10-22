@@ -19,6 +19,9 @@ const ANALYSIS_LABELS: Record<string, string> = {
   crawler_max_pages: "Pages crawled per client site", competitor_light_pages: "Pages per candidate competitor",
   competitor_deep_pages: "Pages per deep-analysed competitor", crawler_max_pdfs: "PDFs read per site",
   ux_max_pages: "Pages in the UX review", roadmap_top_n: "Recommendations in the roadmap",
+  outreach_saving_pct_high: "Outreach: “up to” % cost saving quoted for a high-saving process (0 = none)",
+  outreach_saving_pct_medium: "Outreach: “up to” % for a medium-saving process (0 = none)",
+  outreach_saving_pct_low: "Outreach: “up to” % for a low-saving process (0 = none)",
   freshness_fresh_days: "Evidence is fresh up to (days)", freshness_stale_days: "Evidence is stale after (days)",
 };
 const SCORING_LABELS: Record<string, string> = {

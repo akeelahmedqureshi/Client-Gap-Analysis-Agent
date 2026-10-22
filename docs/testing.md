@@ -218,9 +218,8 @@ Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC
 - [ ] Add a second record as a **draft** tagged *AI assistant / chatbot*. As an analyst, **Submit for
       review**: there is no **Approve** button. Edit an approved record as the analyst: it goes back to
       *in review*. **Show history** lists every version with who and when.
-- [ ] Re-run ABC Patient Management. The **Our Fit** tab matches *AI workflow automation / agents* to
-      the approved record with reasons (required capability, same industry, the client's technology). The
-      draft record is never matched; *AI assistant / chatbot* is under *No internal match*.
+- [ ] Re-run ABC Patient Management. In the **Sales** tab, *Relevant company capabilities* lists the
+      approved record for *AI workflow automation / agents*; the draft record is never matched.
 - [ ] **Restrict** a record as admin: analysts and viewers no longer see it, and new runs ignore it.
 - [ ] **Sales** tab: pain points (app reviews and website issues; pricing and security marked *internal
       only*), top 3 competitive gaps with sources, top 3 improvements, AI / automation / cost / revenue
@@ -251,8 +250,8 @@ Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC
       - New gap: Invoicing;
       - New product announcement: Introducing video visits;
       - MediBook new evidence of Online payments.
-- [ ] Open the run: it has a *⟳ scheduled* badge. Its **Changes** tab lists the same changes, each
-      with sources.
+- [ ] Open the run: it has a *⟳ scheduled* badge. The alert on the **Monitoring** page lists the same
+      changes, each with sources.
 - [ ] `curl localhost:8000/demo/webhooks` shows the captured Slack-format message.
 - [ ] Edit the monitor and untick *Generate client-facing report*, then run `/demo/due` again. The
       scheduled run pauses and raises an *approval needed* alert. **Run now** returns *409* while that
@@ -318,7 +317,7 @@ For each project, start an analysis with all gates approved and check:
 | 8 | Security / UX / Apps / Pricing tabs | Findings are plausible for the real site. UX browser checks ran (no "did not run" note) |
 | 9 | Report | The PDF downloads, reads as client-ready, and its citations [E#] resolve in the appendix |
 | 10 | Private repo | After adding a token in **Settings → Source control connections** and picking the repo with **Repos**, a new run analyses it |
-| 11 | Monitoring | **Send test** reaches your Slack webhook or email. **Run now** produces a second run whose **Changes** tab compares it with the first |
+| 11 | Monitoring | **Send test** reaches your Slack webhook or email. **Run now** produces a second run, and its alert on the Monitoring page lists what changed since the first |
 | 12 | Resilience (Celery mode) | `docker compose restart worker` during a run: the run continues and completed agents are not repeated |
 | 13 | Isolation | Repeat § 3.6 on the deployment |
 

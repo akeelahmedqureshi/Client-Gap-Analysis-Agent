@@ -132,7 +132,7 @@ _Baseline audit: 2026-10-08._
 | 61 | Create, edit and archive records: capabilities, projects, case studies, technologies, tags | ✅ | Knowledge Base page, `/api/knowledge` |
 | 62 | Approval and client-facing states | ✅ | draft → in review → approved / restricted / archived; client-facing flag; case-study reference flag |
 | 63 | Versions, change history, search and filter | ✅ | Snapshot per version with who/when/note |
-| 64 | Matching from gap to our capability to a case study | ✅ | `capability_matching` agent, "Our Fit" tab |
+| 64 | Matching from gap to our capability to a case study | ✅ | `capability_matching` agent, shown in the Sales tab |
 
 ## 11. Sales and outreach (4)
 

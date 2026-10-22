@@ -177,3 +177,51 @@ async def test_sales_review_workflow_api(client):  # noqa: F811
     h2 = await register(client, org="Other Co", email="boss@other.example")
     assert (await client.get(f"/api/runs/{run_id}/sales", headers=h2)).status_code == 404
     assert (await client.get(f"/api/runs/{run_id}/outreach.eml", headers=h2)).status_code == 404
+
+
+async def test_outreach_saving_percentage_comes_from_the_analysis_and_configuration(make_ctx):
+    ctx = _ctx(make_ctx)
+    await run_all(ctx)
+    saving = ctx.data("sales_intelligence")["saving_estimate"]
+    expected = {"high": 30, "medium": 20, "low": 10}[saving["level"]]  # the defaults per estimated saving level
+    assert saving["percent"] == expected and saving["basis"] == "estimate"
+    o = ctx.data("outreach")
+    assert f"up to {expected}%" in o["subject"].lower() and f"up to {expected}%" in o["body"]
+    assert len(o["alternative_subjects"]) >= 3 and o["subject"] not in o["alternative_subjects"]
+
+    # An organization that sets every level to 0 never quotes a percentage.
+    quiet = _ctx(make_ctx)
+    quiet.settings = quiet.settings.model_copy(update={"outreach_saving_pct_high": 0, "outreach_saving_pct_medium": 0,
+                                                       "outreach_saving_pct_low": 0})
+    await run_all(quiet)
+    assert quiet.data("sales_intelligence")["saving_estimate"] is None
+    assert "%" not in quiet.data("outreach")["subject"] + quiet.data("outreach")["body"].replace("40%", "")
+
+
+def test_claim_check_keeps_saving_figures_as_estimates():
+    inp = OutreachInput(client="Acme", product="Acme App", industry=None, facts=[
+        Fact("saving", "Estimate: improving scheduling could lower scheduling costs by up to 30%.", estimate=True),
+        Fact("case_study", "Workflow automation for CareCo: admin time down 40%"),
+    ], competitors_allowed=[], competitors_all=[], forbidden_terms=[], top_gaps=[], opportunity=None, capability=None)
+    assert check_claims("What if scheduling cost up to 30% less?", "", inp) == []
+    assert check_claims("Cut scheduling costs by 30%", "", inp)              # a promise, not an estimate
+    assert check_claims("Up to 50% lower costs", "", inp)                    # not from the analysis
+    assert check_claims("Hi", "CareCo cut admin time by 40% with us.", inp) == []  # a stated fact stays as is
+
+
+async def test_llm_alternative_subjects_must_pass_the_claim_check():
+    from cip.core.outreach import EmailDraft, generate_email
+
+    class LLM:
+        async def complete_json(self, system, user, schema, **kw):
+            return EmailDraft(subject="What if scheduling cost up to 30% less to run?", body="Hello Acme team.",
+                              alternative_subjects=["Save 30% on scheduling", "Up to 30% lower scheduling costs?",
+                                                    "Reduce overhead. Improve delivery. Create room to grow."])
+
+    inp = OutreachInput(client="Acme", product="Acme App", industry=None, facts=[
+        Fact("saving", "Estimate: up to 30% lower scheduling costs.", estimate=True)],
+        competitors_allowed=[], competitors_all=[], forbidden_terms=[], top_gaps=[], opportunity=None, capability=None)
+    email = await generate_email(LLM(), inp)
+    assert email.generated_by == "llm" and email.problems == []
+    assert email.alternative_subjects == ["Up to 30% lower scheduling costs?",
+                                          "Reduce overhead. Improve delivery. Create room to grow."]

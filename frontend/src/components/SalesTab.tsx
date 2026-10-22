@@ -276,6 +276,25 @@ function OutreachCard({ runId, doc, canAct, onSaved, onError }: {
       <div className="space-y-2 text-sm">
         <label className="block">To<input className={input} value={to} onChange={(e) => setTo(e.target.value)} disabled={!canAct} /></label>
         <label className="block">Subject<input className={input} value={subject} onChange={(e) => setSubject(e.target.value)} disabled={!canAct} /></label>
+        {(c.alternative_subjects ?? []).length > 0 && (
+          <div className="text-xs">
+            <span className="text-slate-500">Subject ideas{canAct ? " (click one to use it)" : ""}:</span>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {[c.subject, ...c.alternative_subjects].map((s: string) => (
+                <button key={s} type="button" disabled={!canAct} onClick={() => setSubject(s)}
+                  className={`border rounded-full px-2 py-0.5 text-left ${s === subject ? "bg-indigo-50 border-indigo-300 text-indigo-800" : "hover:bg-slate-50"}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {(c.facts ?? []).some((f: any) => f.kind === "saving") && (
+          <p className="text-xs text-slate-500">
+            The “up to” saving percentage is an estimate from this analysis (the process's estimated saving level);
+            admins set the percentage per level under Configuration → Analysis.
+          </p>
+        )}
         <label className="block">Body<textarea className={`${input} font-sans`} rows={16} value={body} onChange={(e) => setBody(e.target.value)} disabled={!canAct} /></label>
         {problems.length > 0 && (
           <div className={`rounded border p-2 text-xs ${blocking.length ? "border-rose-300 bg-rose-50 text-rose-800" : "border-amber-300 bg-amber-50 text-amber-800"}`}>

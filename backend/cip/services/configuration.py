@@ -46,6 +46,9 @@ ANALYSIS_FIELDS: dict[str, tuple[type, float, float]] = {
     "roadmap_top_n": (int, 3, 30),
     "freshness_fresh_days": (int, 1, 365),
     "freshness_stale_days": (int, 7, 3650),
+    "outreach_saving_pct_high": (int, 0, 90),
+    "outreach_saving_pct_medium": (int, 0, 90),
+    "outreach_saving_pct_low": (int, 0, 90),
 }
 SCORING_RANGES: dict[str, tuple[float, float]] = {
     "confidence_weight": (0, 1), "high_min_normalized": (0, 1), "medium_min_normalized": (0, 1),
@@ -122,6 +125,8 @@ def validate_analysis(data: dict) -> dict:
         raise bad("deep_competitors cannot exceed max_competitors")
     if merged["freshness_fresh_days"] >= merged["freshness_stale_days"]:
         raise bad("freshness_fresh_days must be below freshness_stale_days")
+    if not merged["outreach_saving_pct_high"] >= merged["outreach_saving_pct_medium"] >= merged["outreach_saving_pct_low"]:
+        raise bad("Outreach saving percentages must not increase from high to medium to low")
     return out
 
 

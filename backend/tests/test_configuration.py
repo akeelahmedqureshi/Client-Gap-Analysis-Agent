@@ -238,3 +238,16 @@ async def test_llm_configuration_is_validated_and_recorded(client):  # noqa: F81
     assert repro["config_versions"]["llm"] == 1
     assert repro["prompt_version"] == prompts.fingerprint({"reporting.summary": summary["text"]})
     assert repro["prompt_version"] != prompts.fingerprint()
+
+
+def test_outreach_saving_percentages_are_validated():
+    import pytest
+    from fastapi import HTTPException
+
+    from cip.services.configuration import validate_analysis
+
+    assert validate_analysis({"outreach_saving_pct_high": 25, "outreach_saving_pct_low": 0}) == \
+        {"outreach_saving_pct_high": 25, "outreach_saving_pct_low": 0}
+    for bad in ({"outreach_saving_pct_medium": 40}, {"outreach_saving_pct_high": 95}):
+        with pytest.raises(HTTPException):
+            validate_analysis(bad)

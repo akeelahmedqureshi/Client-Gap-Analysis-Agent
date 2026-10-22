@@ -82,7 +82,8 @@ async def _docs(session: AsyncSession, run: AnalysisRun, user: User) -> dict[str
             content = {k: v for k, v in data.items() if k != "outreach_input"}
             content["reviewer_notes"] = ""
         else:
-            content = {k: data.get(k) for k in ("to", "subject", "body", "generated_by", "problems", "notes", "facts")}
+            content = {k: data.get(k) for k in ("to", "subject", "body", "alternative_subjects", "generated_by",
+                                                "problems", "notes", "facts")}
         doc = SalesDocument(org_id=run.org_id, run_id=run.id, project_id=run.project_id, kind=kind, content=content,
                             generated=content, status="draft", version=1,
                             history=[{"version": 1, "action": "generated", "by": None,
@@ -201,7 +202,7 @@ async def regenerate_outreach(run_id: str, body: RegenerateIn, request: Request,
     inp = await _outreach_input(session, run)
     email = await generate_email(get_llm(get_settings()), inp, body.instructions)
     content = {**doc.content, "subject": email.subject, "body": email.body, "generated_by": email.generated_by,
-               "problems": email.problems, "notes": email.notes}
+               "alternative_subjects": email.alternative_subjects, "problems": email.problems, "notes": email.notes}
     doc.content, doc.status, doc.version = content, "draft", doc.version + 1
     doc.updated_by = user.id
     doc.history = [*doc.history, _entry(user, "regenerated", doc.version, body.instructions,

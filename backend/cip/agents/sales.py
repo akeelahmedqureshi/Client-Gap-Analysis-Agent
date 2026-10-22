@@ -61,6 +61,29 @@ def _opp_view(o: dict, rec: dict | None, gap: dict) -> dict:
             "evidence_ids": (rec or gap).get("evidence_ids", [])[:5], "basis": o.get("basis", "estimate")}
 
 
+SAVING_LEVELS = ("high", "medium", "low")
+
+
+def _saving_estimate(ctx, processes: dict, idea_gap: dict) -> dict | None:
+    """The "up to N%" cost-saving estimate for the outreach email, or None.
+
+    Taken from the process behind the idea the email raises, else the process with the highest estimated
+    resource saving; N is the organization's configured percentage for that level (0 = say no number)."""
+    s = ctx.settings
+    pct = {"high": s.outreach_saving_pct_high, "medium": s.outreach_saving_pct_medium, "low": s.outreach_saving_pct_low}
+    linked = processes.get(idea_gap.get("process_id") or "")
+    ranked = sorted(processes.values(), key=lambda p: (SAVING_LEVELS.index(p["cost_reduction"])
+                                                       if p.get("cost_reduction") in SAVING_LEVELS else 9,
+                                                       -p.get("confidence", 0)))
+    for p in ([linked] if linked else []) + ranked:
+        level = p.get("cost_reduction")
+        if pct.get(level, 0) > 0:
+            return {"percent": int(pct[level]), "level": level, "area": p["area"], "process": p["name"],
+                    "process_id": p["process_id"], "evidence_ids": p.get("evidence_ids", [])[:5],
+                    "basis": "estimate"}
+    return None
+
+
 class SalesIntelligenceAgent(Agent):
     name = "sales_intelligence"
     description = "Build a concise, sales-ready summary from the analysis"
@@ -237,6 +260,15 @@ class SalesIntelligenceAgent(Agent):
             facts.append(Fact("opportunity", f"{idea['name']}" + (f" — {value}" if value else ""),
                               idea["evidence_ids"], estimate=True,
                               email_text=f"{idea['name']}" + (f" ({value[0].lower() + value[1:]})." if value else ".")))
+        saving = _saving_estimate(ctx, processes, gaps.get(idea["gap_id"], {}) if idea else {})
+        if saving:
+            pct, area, proc = saving["percent"], saving["area"], saving["process"]
+            facts.append(Fact(
+                "saving", f"Estimate: improving {proc.lower()} could lower {area.lower()} costs by up to {pct}% "
+                          f"({saving['level']} estimated resource saving for this process; not a measured result).",
+                saving["evidence_ids"], estimate=True,
+                email_text=f"Our estimate is that improving {proc.lower()} could lower {area.lower()} costs by "
+                           f"up to {pct}%, a figure we would want to validate with you."))
         for c in client_facing[:1]:
             if any(cs["record_id"] == c["record_id"] for cs in case_studies):
                 continue  # told as a case study below
@@ -260,6 +292,7 @@ class SalesIntelligenceAgent(Agent):
             top_gaps=[g["name"] for g in top_gaps[:2]], opportunity=idea["name"] if idea else None,
             capability=client_facing[0]["title"] if client_facing else None,
             recipient=contact["email"] if contact else None,
+            saving={k: saving[k] for k in ("percent", "area", "process", "level")} if saving else None,
         )
 
         summary = {
@@ -267,11 +300,15 @@ class SalesIntelligenceAgent(Agent):
             "pain_points": pains, "top_gaps": top_gaps, "top_improvements": improvements,
             "ai_opportunity": ai_opp, "automation_opportunity": automation_opp,
             "cost_saving_opportunity": cost_opp, "revenue_opportunity": revenue_opp,
+            "saving_estimate": saving,
             "conversation_angle": angle, "next_step": next_step,
             "relevant_capabilities": client_facing, "internal_capabilities": internal, "case_studies": case_studies,
             "contact": contact,
             "claim_safety": {"min_confidence": MIN_CLAIM_CONFIDENCE, "excluded_gaps": excluded,
                              "notes": ["Cost-saving and revenue opportunities are estimates."]
+                             + ([f"The “up to {saving['percent']}%” saving in the outreach email is an estimate from "
+                                 f"the {saving['level']} resource-saving level of “{saving['process']}” "
+                                 "(Configuration → Analysis sets the percentage per level)."] if saving else [])
                              + (["Security findings are internal-only."] if security else [])},
             "outreach_input": outreach_input.to_dict(),
         }
@@ -299,6 +336,7 @@ class OutreachAgent(Agent):
                               evidence_ids=[e for f in inp.facts for e in f.evidence_ids][:10],
                               confidence=0.6, basis=Basis.ESTIMATE)],
             data={"to": inp.recipient, "subject": email.subject, "body": email.body,
+                  "alternative_subjects": email.alternative_subjects,
                   "generated_by": email.generated_by, "problems": email.problems, "notes": email.notes,
                   "facts": [f.to_dict() for f in inp.facts]},
             errors=email.notes if email.generated_by == "template" and email.notes else [],

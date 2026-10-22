@@ -165,6 +165,12 @@ class Settings(BaseSettings):
 
     # --- Prioritization ---------------------------------------------------
     roadmap_top_n: int = 10
+    # Outreach emails may say "up to N% lower costs" for the client's most promising process improvement. N comes
+    # from that process's estimated resource-saving level in the process catalog (an estimate, never a measured
+    # result); 0 means no percentage is quoted for that level.
+    outreach_saving_pct_high: int = 30
+    outreach_saving_pct_medium: int = 20
+    outreach_saving_pct_low: int = 10
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     @property
