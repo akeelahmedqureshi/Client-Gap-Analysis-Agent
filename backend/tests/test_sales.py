@@ -69,7 +69,7 @@ async def test_outreach_template_without_llm_passes_the_claim_check(make_ctx):
     assert o["to"] and o["subject"]
     body = o["body"]
     assert body.startswith("Hi ") and "[Your name]" in body and "30-minute call" in body
-    assert "could not find publicly" in body and "Confidential" not in body and "BankCo" not in body
+    assert "could not find it publicly" in body and "Confidential" not in body and "BankCo" not in body
     assert "CareCo" in body, "approved, referenceable case study is used"
 
 
@@ -225,3 +225,29 @@ async def test_llm_alternative_subjects_must_pass_the_claim_check():
     assert email.generated_by == "llm" and email.problems == []
     assert email.alternative_subjects == ["Up to 30% lower scheduling costs?",
                                           "Reduce overhead. Improve delivery. Create room to grow."]
+
+
+async def test_outreach_lists_three_gaps_explains_one_and_invites_to_a_call(make_ctx):
+    ctx = _ctx(make_ctx)
+    await run_all(ctx)
+    s, o = ctx.data("sales_intelligence"), ctx.data("outreach")
+    names = [g["name"] for g in s["top_gaps"][:3]]
+    assert len(names) == 3 and o["problems"] == []
+    body = o["body"]
+    for i, name in enumerate(names, 1):
+        assert f"{i}. {name}:" in body                              # each top gap named once, briefly
+    assert body.count("What it could bring") == 1                    # only the first gap is explained
+    assert f"The first one, {names[0]}," in body
+    more = s["further_findings"]
+    assert more["count"] > 0 and f"found {more['count']} more" in body and "operating costs and growth" in body
+    assert "30-minute call" in body and "full gap analysis" in body
+    detail = next(f for f in s["outreach_input"]["facts"] if f["kind"] == "gap_detail")
+    assert detail["estimate"] and names[0] in detail["text"]
+
+
+def test_list_numbering_is_not_a_numeric_claim():
+    inp = OutreachInput(client="Acme", product="Acme App", industry=None, facts=[],
+                        competitors_allowed=[], competitors_all=[], forbidden_terms=[], top_gaps=[],
+                        opportunity=None, capability=None)
+    assert check_claims("Hi", "1. Free trial\n2. Live chat\n3. Online payments", inp) == []
+    assert check_claims("Hi", "We found 3 gaps.", inp)  # a count that is not in the facts is still flagged

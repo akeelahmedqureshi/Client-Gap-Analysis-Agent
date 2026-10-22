@@ -248,12 +248,43 @@ class SalesIntelligenceAgent(Agent):
         products = profile.get("products") or []
         if products and products[0].get("description"):
             facts.append(Fact("product", products[0]["description"], products[0].get("evidence_ids", [])[:2]))
-        for g in top_gaps[:2]:
+        # The email names the top three gaps and explains only the first one in detail.
+        for g in top_gaps[:3]:
             both = "both " if len(g["competitors"]) == 2 else ""
             verb = "offers" if len(g["competitors"]) == 1 else "offer"
             facts.append(Fact("gap", g["statement"], g["evidence_ids"],
-                              email_text=f"{_join(g['competitors'])} {both}{verb} {g['name']}, which we could not "
-                                         f"find publicly for {product}."))
+                              email_text=f"{g['name']}: {_join(g['competitors'])} {both}{verb} it, and we could not "
+                                         f"find it publicly for {product}."))
+        if top_gaps:
+            lead_gap, lead_rec = top_gaps[0], recs.get(top_gaps[0]["gap_id"]) or {}
+            reasons = [x.strip().rstrip(".") for x in (lead_gap.get("why"), lead_rec.get("user_impact"))
+                       if x and x.strip()]
+            if reasons:
+                why, users = lead_gap.get("why", "").strip().rstrip("."), lead_rec.get("user_impact", "").strip().rstrip(".")
+                bring = [f"{why[0].lower() + why[1:]} for the business" if why else "",
+                         f"{users[0].lower() + users[1:]} for your users" if users else ""]
+                names = lead_gap["competitors"]
+                facts.append(Fact(
+                    "gap_detail", f"Why {lead_gap['name']} matters for {product}: " + "; ".join(reasons) + ".",
+                    lead_gap["evidence_ids"], estimate=True,
+                    email_text=f"{_join(names)} already offer{'s' if len(names) == 1 else ''} it "
+                               f"({lead_gap['coverage']} competitors we analysed in depth). What it could bring: "
+                               + ", and ".join(b for b in bring if b) + "."))
+        # What else the analysis found that bears on operating cost and growth (an invitation to the call).
+        shown = {g["gap_id"] for g in top_gaps[:3]}
+        further = [o for o in opps if o["gap_id"] not in shown and gaps.get(o["gap_id"], {}).get("gap_type")
+                   not in (None, "security")]
+        cost_related = [o for o in further if o.get("factors", {}).get("cost_saving", 0) >= 3]
+        growth_related = [o for o in further if o.get("factors", {}).get("revenue_potential", 0) >= 3]
+        more = len({o["gap_id"] for o in cost_related + growth_related})
+        further_findings = {"count": more, "cost_related": len(cost_related), "growth_related": len(growth_related)}
+        if more:
+            items = "gap or opportunity" if more == 1 else "gaps and opportunities"
+            facts.append(Fact("more", f"The analysis of {product} found {more} further {items} that could affect "
+                                      f"operating costs or growth ({len(cost_related)} cost-related, "
+                                      f"{len(growth_related)} growth-related).",
+                              email_text=f"Beyond these three, our analysis of {product} found {more} more {items} "
+                                         f"that could affect your operating costs and growth."))
         facts += [Fact("pain", p["text"] + ".", p["evidence_ids"]) for p in pains if not p["internal_only"]][:2]
         if idea:
             value = (idea.get("impact") or "").rstrip(".")
@@ -287,9 +318,9 @@ class SalesIntelligenceAgent(Agent):
         contact = _pick_contact(ctx, profile)
         outreach_input = OutreachInput(
             client=client, product=product, industry=industry, facts=facts,
-            competitors_allowed=sorted({n for g in top_gaps[:2] for n in g["competitors"]}),
+            competitors_allowed=sorted({n for g in top_gaps[:3] for n in g["competitors"]}),
             competitors_all=sorted(comp_names.values()), forbidden_terms=sorted(set(forbidden)),
-            top_gaps=[g["name"] for g in top_gaps[:2]], opportunity=idea["name"] if idea else None,
+            top_gaps=[g["name"] for g in top_gaps[:3]], opportunity=idea["name"] if idea else None,
             capability=client_facing[0]["title"] if client_facing else None,
             recipient=contact["email"] if contact else None,
             saving={k: saving[k] for k in ("percent", "area", "process", "level")} if saving else None,
@@ -300,7 +331,7 @@ class SalesIntelligenceAgent(Agent):
             "pain_points": pains, "top_gaps": top_gaps, "top_improvements": improvements,
             "ai_opportunity": ai_opp, "automation_opportunity": automation_opp,
             "cost_saving_opportunity": cost_opp, "revenue_opportunity": revenue_opp,
-            "saving_estimate": saving,
+            "saving_estimate": saving, "further_findings": further_findings,
             "conversation_angle": angle, "next_step": next_step,
             "relevant_capabilities": client_facing, "internal_capabilities": internal, "case_studies": case_studies,
             "contact": contact,

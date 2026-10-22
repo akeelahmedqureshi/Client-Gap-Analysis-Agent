@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from cip.core.llm import LLMClient, LLMError, LLMUnavailable
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+_LIST_NUMBER = re.compile(r"^\s*\d{1,2}[.)]\s", re.MULTILINE)
 _PERCENT = re.compile(r"(\d+(?:[.,]\d+)?)\s?(?:%|percent)", re.IGNORECASE)
 MAX_ALTERNATIVES = 5
 ALWAYS_ALLOWED_NUMBERS = {"30"}  # "a 30-minute call"
@@ -39,7 +40,7 @@ SECURITY_WORDS = ("vulnerab", "security header", "exploit", "breach", "cve-", "i
 
 @dataclass
 class Fact:
-    kind: str  # product | gap | pain | opportunity | saving | capability | case_study
+    kind: str  # product | gap | gap_detail | pain | opportunity | saving | more | capability | case_study
     text: str
     evidence_ids: list[str] = field(default_factory=list)
     estimate: bool = False
@@ -98,18 +99,22 @@ already offer. If a [saving] fact is given you may use its figure, always as "up
 e.g. "What if scheduling cost up to 30% less to run?" or "Up to 30% lower support costs. What could that mean
 for you?". Also give 4 alternative subjects in different styles.
 
-BODY (120-200 words, short paragraphs):
-- open with a one-line hook about the business outcome that matters to them, then one concrete observation
-  about their product;
-- mention at most two competitive gaps, naming competitors only as given in the facts and phrasing them as
-  capabilities competitors offer that were not publicly identified for the client — never claim they lack it;
-- present at most one AI or automation idea as an idea; if a [saving] fact is given, state it as an estimate
-  ("could", "up to N%") for that area only — never as a promise or a measured result;
-- mention our experience only from the capability/case_study facts, exactly as given;
-- end with a low-pressure call to action (a 30-minute call) and the placeholders [Your name] and
-  [Your organization] as the signature.
-Use no numbers, names or claims that are not in the facts, no hype words ("revolutionary", "game-changing"),
-and no bullet list of every finding.
+BODY (150-230 words, short paragraphs), in this order:
+1. a one-line hook about the business outcome that matters to them, then one sentence on what we looked at
+   (their product compared with competitors);
+2. the top three gaps from the [gap] facts, one short line each (a numbered list of exactly these, at most
+   three), naming competitors only as given and phrasing each as something competitors offer that was not
+   publicly identified for the client — never claim they lack it;
+3. explain ONLY the first gap in detail (2-3 sentences): what competitors offer, why it matters for their
+   customers and business (the [gap_detail] fact, as an estimate where marked), and a [pain] fact only if it
+   is clearly about the same topic. Do not explain the other gaps;
+4. say the full gap analysis has more: use the [more] fact (its numbers exactly) about further gaps that affect
+   operating costs and growth; if a [saving] fact is given you may add it as an estimate ("could", "up to N%")
+   for that area only — never as a promise or a measured result;
+5. optionally one line of our experience, only from the capability/case_study facts, exactly as given;
+6. invite them to a 30-minute call to walk through the full gap analysis and what it means for their
+   operating costs and growth; sign with the placeholders [Your name] and [Your organization].
+Use no numbers, names or claims that are not in the facts and no hype words ("revolutionary", "game-changing").
 Return JSON {"subject": "...", "body": "...", "alternative_subjects": ["...", "...", "...", "..."]}."""
 
 
@@ -138,7 +143,8 @@ def check_claims(subject: str, body: str, inp: OutreachInput) -> list[str]:
         problems.append("Mentions security weaknesses; keep them out of outreach")
     fact_text = " ".join(f.text for f in inp.facts) + f" {inp.client} {inp.product}"
     fact_numbers = set(_NUMBER.findall(fact_text)) | ALWAYS_ALLOWED_NUMBERS
-    unsupported = sorted({n for n in _NUMBER.findall(text) if n not in fact_numbers})
+    claims = _LIST_NUMBER.sub("", text)  # "1. ", "2) " numbering is layout, not a claim
+    unsupported = sorted({n for n in _NUMBER.findall(claims) if n not in fact_numbers})
     if unsupported:
         problems.append(f"Uses numbers that are not in the facts: {', '.join(unsupported)}")
     # A saving percentage is an estimate: it must read "up to N%", never as a promise or a measured result.
@@ -181,9 +187,10 @@ def subject_ideas(inp: OutreachInput) -> list[str]:
 
 def template_email(inp: OutreachInput) -> EmailDraft:
     """Deterministic, claim-safe email used without an LLM or when an LLM draft fails the claim check."""
-    gaps = [f for f in inp.facts if f.kind == "gap"][:2]
+    gaps = [f for f in inp.facts if f.kind == "gap"][:3]
+    detail = next((f for f in inp.facts if f.kind == "gap_detail"), None)
     pains = [f for f in inp.facts if f.kind == "pain"][:1]
-    opp = next((f for f in inp.facts if f.kind == "opportunity"), None)
+    more = next((f for f in inp.facts if f.kind == "more"), None)
     proof = next((f for f in inp.facts if f.kind == "case_study"), None) or \
         next((f for f in inp.facts if f.kind == "capability"), None)
     product = inp.product or inp.client
@@ -195,19 +202,27 @@ def template_email(inp: OutreachInput) -> EmailDraft:
     if saving:
         para += [f"What if {inp.saving['area'].lower()} could run on less effort, without slowing growth?", ""]
     para += [f"I spent some time looking at {product}"
-            + (f" and how it compares with other {inp.industry} products" if inp.industry else
-               " and how it compares with similar products") + "."]
-    if gaps or pains:
-        para += ["", "A few things stood out:"]
-        para += [f"- {f.say}" for f in gaps + pains]
-    if opp:
-        para += ["", f"One idea that could be worth exploring: {opp.say}"]
-    if saving:
-        para += ["", saving.say]
+             + (f" and how it compares with other {inp.industry} products" if inp.industry else
+                " and how it compares with similar products") + "."]
+    if gaps:
+        para += ["", f"The top {'three gaps' if len(gaps) == 3 else 'gaps' if len(gaps) > 1 else 'gap'} we found:"]
+        para += [f"{i}. {f.say}" for i, f in enumerate(gaps, 1)]
+        # Only the first gap is explained in detail; the rest are for the call.
+        lead = inp.top_gaps[0] if inp.top_gaps else "the first one"
+        if detail:
+            para += ["", f"The first one, {lead}, is where I would start. {detail.say}"]
+    elif pains:
+        para += ["", "One thing stood out: " + pains[0].say]
+    extra = [x.say for x in (more, saving) if x]
+    if extra:
+        para += ["", " ".join(extra)]
+    else:
+        para += ["", f"The full gap analysis goes further, including what affects {product}'s operating costs "
+                     "and growth."]
     if proof:
         para += ["", f"This is close to work we have done before: {proof.say}"]
-    para += ["", "Would a 30-minute call be useful to walk through the comparison and what it could mean for "
-                 f"{product}? Happy to share the findings either way.",
+    para += ["", "Would you be open to a 30-minute call? We will walk you through the full gap analysis and what "
+                 "it could mean for your operating costs and growth.",
              "", "Best regards,", "[Your name]", "[Your organization]"]
     return EmailDraft(subject=subject, body="\n".join(para), alternative_subjects=ideas[1:1 + MAX_ALTERNATIVES])
 
