@@ -85,7 +85,7 @@ async def test_report_follows_the_brs_structure(make_ctx):
     md = ctx.data("report")["markdown"]
     sections = {title: md.index(f"## {i}. {title}") for i, title in enumerate(CONTENTS, 1)}
     body = lambda title: md[sections[title]:md.index("\n## ", sections[title] + 5)]  # noqa: E731
-    assert "| Gap | Category | Priority |" in body("Feature Gap Analysis")
+    assert "| Gap | Verdict | Category | Priority |" in body("Feature Gap Analysis")
     assert "(assumption)" in body("Business Cost-Reduction Opportunities")
     assert "### AI opportunities" in body("AI & Automation Opportunities")
     assert "### High priority" in body("Prioritized Recommendations")

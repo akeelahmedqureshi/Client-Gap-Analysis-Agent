@@ -615,15 +615,23 @@ def render_markdown(report: dict) -> str:
 
     # 8 ---------------------------------------------------------------------------------------
     opps = {o["gap_id"]: o for o in s["opportunities"]}
+    verdict_label = {"confirmed": "Confirmed", "potential": "Potential (needs validation)", "optional": "Optional"}
+    order = {"confirmed": 0, "potential": 1, "optional": 2}
     out += ["## 8. Feature Gap Analysis",
-            "| Gap | Category | Priority | Offered by | Description | Confidence | Evidence |", "|---|---|---|---|---|---|---|"]
+            "_Confirmed: the competitor capability is verified, the client's status established, customers care and the "
+            "value justifies the effort. Potential: worth it if the evidence holds; needs validation. Optional: the "
+            "value does not clearly justify the effort._", "",
+            "| Gap | Verdict | Category | Priority | Offered by | Description | Confidence | Evidence |",
+            "|---|---|---|---|---|---|---|---|"]
     names = {c["id"]: c["name"] for c in comps}
-    for g in s["gap_analysis"]:
+    for g in sorted(s["gap_analysis"], key=lambda g: order.get(opps.get(g["id"], {}).get("verdict"), 3)):
         o = opps.get(g["id"], {})
         est = " _(estimate)_" if g.get("basis") == "estimate" else ""
         offered = ", ".join(names.get(c, c) for c in g.get("competitors_with", [])) or "—"
-        out.append(f"| {_cell(g['name'])} | {o.get('business_category') or g['gap_type']} | {o.get('priority', '—')} | "
-                   f"{_cell(offered)} | {_cell(g['description'])}{est} | {g['confidence']:.0%} | {g['cite'].strip() or '—'} |")
+        category = (g.get("classification") or "").replace("_", " ") or o.get("business_category") or g["gap_type"]
+        out.append(f"| {_cell(g['name'])} | {verdict_label.get(o.get('verdict'), '—')} | {category} | "
+                   f"{o.get('priority', '—')} | {_cell(offered)} | {_cell(g['description'])}{est} | "
+                   f"{g['confidence']:.0%} | {g['cite'].strip() or '—'} |")
     out.append("")
 
     # 9 ---------------------------------------------------------------------------------------

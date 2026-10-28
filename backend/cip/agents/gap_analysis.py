@@ -6,6 +6,76 @@ from cip.agents.base import Agent, RunContext
 from cip.core.schemas import AgentResult, Basis, FeatureStatus, Finding, Gap, GapType
 
 UX_CATEGORIES = {"experience"}
+CLASSIFICATIONS = {
+    "competitive_feature": "Competitive feature gap", "product_functionality": "Product functionality gap",
+    "customer_experience": "Customer experience gap", "operational_efficiency": "Operational efficiency gap",
+    "ai_automation": "AI and automation opportunity", "pricing_packaging": "Pricing or packaging opportunity",
+    "market_positioning": "Market positioning gap", "strategic_product": "Strategic product opportunity",
+    "security_compliance": "Security and compliance (internal)",
+}
+RELEVANT_CLASSES = ("industry_standard", "emerging")
+
+
+def classify(g: Gap) -> str:
+    t = g.gap_type.value
+    if t == "ai":
+        return "ai_automation" if g.competitors_with or g.basis != Basis.ESTIMATE else "strategic_product"
+    if t == "pricing":
+        return "market_positioning" if "above market" in g.name.lower() else "pricing_packaging"
+    return {"missing": "competitive_feature", "partial": "product_functionality", "ux": "customer_experience",
+            "process": "operational_efficiency", "technology": "operational_efficiency",
+            "security": "security_compliance"}.get(t, "product_functionality")
+
+
+def assess(g: Gap, competitors: dict, client_obs: dict, coverage: dict, requests: dict) -> dict[str, dict]:
+    """Checks 1-3 of the gap assessment: is the capability (or issue) verified, what does the client offer,
+    and does it matter to the client's customers. Checks 4-6 (value, advantage, effort) are scored later."""
+    out: dict[str, dict] = {}
+    if g.competitors_with:
+        grades = []
+        for cid in g.competitors_with:
+            ob = next((o for o in competitors.get(cid, {}).get("features", []) if o["feature_id"] == g.feature_id), None)
+            grades.append((competitors.get(cid, {}).get("name", cid), (ob or {}).get("verification") or "evidenced"))
+        strong = [n for n, v in grades if v in ("documented", "evidenced")]
+        out["competitor_verified"] = {"passed": bool(strong), "detail": ", ".join(f"{n} ({v})" for n, v in grades)}
+    else:
+        out["competitor_verified"] = {"passed": g.basis == Basis.EVIDENCE and bool(g.evidence_ids),
+                                      "detail": "no competitor involved; " + ("the issue is directly evidenced"
+                                                                              if g.basis == Basis.EVIDENCE else
+                                                                              "it rests on inference or assumptions")}
+    ob = client_obs.get(g.feature_id or "", {})
+    status, grade = ob.get("status"), ob.get("verification", "")
+    inspected = [k for k, v in coverage.items() if v]
+    if g.gap_type.value == "process":
+        out["client_status"] = {"passed": False, "detail": "the client's internal process is an assumption to "
+                                                           "validate with the client"}
+    elif not g.feature_id:
+        out["client_status"] = {"passed": g.basis == Basis.EVIDENCE, "detail": "observed in the client's own "
+                                                                               "systems or pages"}
+    elif status == "missing":
+        out["client_status"] = {"passed": True, "detail": "the client's own pages say it is not offered"}
+    elif status == "partial":
+        out["client_status"] = {"passed": True, "detail": "the client offers a partial version"}
+    elif grade == "mentioned":
+        out["client_status"] = {"passed": False, "detail": "mentioned once on the client's site; may already exist"}
+    elif ob.get("confidence", 0) >= 0.6:
+        out["client_status"] = {"passed": True, "detail": f"not publicly identified after inspecting the client's "
+                                                          f"{', '.join(inspected)}"}
+    else:
+        out["client_status"] = {"passed": False, "detail": "little of the client's product could be inspected"}
+    share, asks = g.landscape_share, requests.get(g.feature_id or "")
+    reasons = []
+    if g.market_class in RELEVANT_CLASSES:
+        reasons.append(g.market_class.replace("_", " "))
+    if share is not None and share >= 0.3:
+        reasons.append(f"{share:.0%} of the competitive landscape offers it")
+    if asks:
+        reasons.append(f"{asks} app-store review(s) ask for it")
+    if g.gap_type.value in ("ux", "technology", "security", "pricing") and g.basis == Basis.EVIDENCE:
+        reasons.append("observed issue affecting the client's customers or delivery")
+    out["relevant"] = {"passed": bool(reasons), "detail": "; ".join(reasons) or "no evidence that the client's "
+                                                                                  "customers expect it"}
+    return out
 
 # Technology gaps derived from code-analysis debt indicators.
 TECH_GAP_RULES: list[tuple[str, str, str, str]] = [
@@ -171,6 +241,16 @@ class GapAnalysisAgent(Agent):
             if r:
                 g.market_class = r.get("market_class")
                 g.landscape_share = round(r["top10_count"] / r["top10_total"], 3) if r.get("top10_total") else None
+        # Classification, the evidence on each side and checks 1-3 of the assessment.
+        requests = {r["feature_id"]: r.get("count", 0) for r in apps.get("requests", []) if r.get("feature_id")}
+        for g in gaps:
+            g.classification = classify(g)
+            if g.feature_id:
+                g.client_evidence_ids = list(client_obs.get(g.feature_id, {}).get("evidence_ids", []))[:4]
+                g.competitor_evidence = {
+                    cid: [e for o in competitors.get(cid, {}).get("features", []) if o["feature_id"] == g.feature_id
+                          for e in o["evidence_ids"][:3]] for cid in g.competitors_with}
+            g.assessment = assess(g, competitors, client_obs, coverage, requests)
         by_type: dict[str, int] = {}
         for g in gaps:
             g.evidence_ids = ledger.validate_refs(g.evidence_ids)

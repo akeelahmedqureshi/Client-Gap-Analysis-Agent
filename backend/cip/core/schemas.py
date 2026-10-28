@@ -369,6 +369,14 @@ class Gap(BaseModel):
     process_id: str | None = None  # set for process gaps (see agents/business_process.py)
     market_class: str | None = None  # from the comparison: industry_standard, emerging, ...
     landscape_share: float | None = None  # share of the Top-10 landscape offering it
+    # competitive_feature | product_functionality | customer_experience | operational_efficiency | ai_automation |
+    # pricing_packaging | market_positioning | strategic_product | security_compliance (agents/gap_analysis.py)
+    classification: str = ""
+    # Evidence checks made when the gap is identified (the value / advantage / effort checks and the verdict are
+    # added by the prioritization): name -> {"passed", "detail"}
+    assessment: dict[str, dict] = Field(default_factory=dict)
+    client_evidence_ids: list[str] = Field(default_factory=list)
+    competitor_evidence: dict[str, list[str]] = Field(default_factory=dict)  # competitor id -> evidence ids
 
 
 class Opportunity(BaseModel):

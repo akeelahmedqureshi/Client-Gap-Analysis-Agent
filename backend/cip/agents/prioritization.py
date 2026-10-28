@@ -286,6 +286,55 @@ def default_narrative(gap: dict, process: dict | None = None) -> dict[str, str]:
             "user_impact_text": f"Users gain {gap['name'].lower()} without switching products."}
 
 
+VERDICTS = ("confirmed", "potential", "optional")
+CHECK_LABELS = {"competitor_verified": "Competitor capability (or issue) verified", "client_status": "Client's status established",
+                "relevant": "Relevant to the client's customers", "value": "Meaningful business value",
+                "advantage": "Competitive advantage", "effort_justified": "Benefit justifies the effort"}
+
+
+def gap_verdict(g: dict, factors: dict[str, float], priority: str) -> tuple[str, list[dict], list[str]]:
+    """The six-point assessment (requirement: a competitor offering something does not make it a gap to build).
+
+    Checks 1-3 come from the gap analysis (evidence); 4-6 from the deterministic scoring factors. Verdict:
+    *optional* when the value or the effort check fails; *confirmed* when every evidence check passes too;
+    otherwise *potential* (worth it if the evidence holds — needs validation)."""
+    a = dict(g.get("assessment") or {})
+    benefit = (factors.get("business_value", 0) + factors.get("user_impact", 0) + factors.get("revenue_potential", 0)
+               + max(factors.get("cost_saving", 0), factors.get("productivity", 0))) / 4
+    effort = factors.get("complexity", 3)
+    a["value"] = {"passed": max(factors.get("business_value", 0), factors.get("revenue_potential", 0),
+                                factors.get("cost_saving", 0), factors.get("productivity", 0)) >= 3,
+                  "detail": f"business value {factors.get('business_value', 0):g}/5, revenue {factors.get('revenue_potential', 0):g}/5, "
+                            f"cost saving {factors.get('cost_saving', 0):g}/5, productivity {factors.get('productivity', 0):g}/5"}
+    a["advantage"] = {"passed": factors.get("competitive_gap", 0) >= 3 or factors.get("strategic_alignment", 0) >= 4
+                      or g.get("market_class") in ("emerging", "differentiator"),
+                      "detail": f"competitive gap {factors.get('competitive_gap', 0):g}/5, strategic alignment "
+                                f"{factors.get('strategic_alignment', 0):g}/5"
+                                + (f", {g['market_class'].replace('_', ' ')}" if g.get("market_class") else "")}
+    a["effort_justified"] = {"passed": benefit >= effort - 0.5 or priority == "high",
+                             "detail": f"expected benefit {benefit:.1f}/5 against complexity {effort:g}/5"}
+    checks = [{"name": k, "label": CHECK_LABELS[k], **a[k]} for k in CHECK_LABELS if k in a]
+    evidence_ok = all(a.get(k, {}).get("passed", False) for k in ("competitor_verified", "client_status", "relevant"))
+    if not (a["value"]["passed"] and a["effort_justified"]["passed"]):
+        verdict = "optional"
+    elif evidence_ok:
+        verdict = "confirmed"
+    else:
+        verdict = "potential"
+    risks = []
+    if not a.get("client_status", {}).get("passed", True):
+        risks.append(f"Client side to validate: {a['client_status']['detail']}.")
+    if not a.get("competitor_verified", {}).get("passed", True):
+        risks.append(f"Evidence to validate: {a['competitor_verified']['detail']}.")
+    if g.get("gap_type") == "ai":
+        risks.append("AI output quality, data governance and running cost need validation.")
+    if effort >= 4:
+        risks.append("High implementation complexity.")
+    if g.get("basis") == "estimate":
+        risks.append("Based on an estimate, not on observed evidence.")
+    return verdict, checks, risks
+
+
 class PrioritizationAgent(Agent):
     name = "opportunity_prioritization"
     description = "Translate gaps into business opportunities and rank them with a transparent score"
@@ -323,6 +372,7 @@ class PrioritizationAgent(Agent):
         processes = {o["process_id"]: o for o in ctx.data("business_process").get("opportunities", [])}
         n_comp = max(1, len(ctx.data("competitor_research").get("competitors", [])))
         scored: list[tuple[float, dict, Opportunity, Recommendation]] = []
+        assessed: dict[str, dict] = {}
         for g in gaps:
             factors = baseline_factors(ctx, g, stack)
             if g["gap_type"] == "security" and ("critical" in g["description"] or "high" in g["description"]):
@@ -394,9 +444,12 @@ class PrioritizationAgent(Agent):
                 evidence_ids=g.get("evidence_ids", []) + ([hiring["evidence_id"]] if hiring else [])
                 + (request["evidence_ids"] if request else []), score=score,
             )
+            verdict, checks, risks = gap_verdict(g, factors, priority)
             scored.append((normalized(score, ctx.scoring), g, opp, rec))
+            assessed[g["id"]] = {"verdict": verdict, "checks": checks, "risks": risks}
 
         scored.sort(key=lambda x: -x[0])
+        verdicts = {k: sum(1 for a in assessed.values() if a["verdict"] == k) for k in VERDICTS}
         top = scored[: ctx.settings.roadmap_top_n]
         recommendations = [r for _, _, _, r in top]
         roadmap: dict[str, list[str]] = {k: [] for k in PHASE_LABELS}
@@ -413,8 +466,12 @@ class PrioritizationAgent(Agent):
             data={
                 "scoring_weights": ctx.scoring.weights,
                 "opportunities": [{"normalized_score": n, **o.model_dump(), "score": r.score.model_dump(),
-                                   "gap_type": g["gap_type"], "phase": r.phase}
+                                   "gap_type": g["gap_type"], "phase": r.phase, **assessed[g["id"]],
+                                   "classification": g.get("classification", ""),
+                                   "technical_approach": r.technical_approach, "dependencies": r.dependencies,
+                                   "complexity": r.complexity, "user_impact": r.user_impact}
                                   for n, g, o, r in scored],
+                "verdicts": verdicts,
                 "recommendations": [r.model_dump() for r in recommendations],
                 "roadmap": roadmap,
             },

@@ -20,6 +20,7 @@ import ClientContacts from "../components/ClientContacts";
 import { DocumentedWorkflows, FeatureInventory } from "../components/Offering";
 import CompetitorProfiles from "../components/Competitors";
 import { PlanComparison, PricingImplications, PricingTerms } from "../components/PricingDetail";
+import GapsView from "../components/Gaps";
 
 const TABS = ["Pipeline", "Client", "Products & Services", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Sales", "Review", "Evidence", "Report"] as const;
@@ -811,52 +812,15 @@ function AppsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   );
 }
 
-const GAP_TITLES: Record<string, string> = {
-  ai: "AI", ux: "UX", process: "Process (cost & automation)", missing: "Missing", partial: "Partial",
-  technology: "Technology", pricing: "Pricing", security: "Security",
-};
-
 function GapsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const res = useAgent(runId, "gap_analysis", enabled);
   const prio = useAgent(runId, "opportunity_prioritization", enabled);
-  const byGap = new Map<string, any>((prio.data?.data.opportunities ?? []).map((o: any) => [o.gap_id, o]));
+  const comps = useAgent(runId, "competitor_research", enabled);
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
-  const groups: Record<string, any[]> = {};
-  for (const g of d.gaps) (groups[g.gap_type] ??= []).push(g);
-  return (
-    <div className="space-y-4">
-      <Card title="Existing capabilities">
-        <div className="flex flex-wrap gap-2">
-          {d.existing.map((f: any) => <span key={f.feature_id} className="text-sm"><Badge value={f.status} /> {f.name}</span>)}
-        </div>
-      </Card>
-      {Object.entries(groups).map(([type, gaps]) => (
-        <Card key={type} title={`${GAP_TITLES[type] ?? type} gaps (${gaps.length})`}>
-          <ul className="space-y-2 text-sm">
-            {gaps.map((g) => {
-              const o = byGap.get(g.id);
-              return (
-                <li key={g.id}>
-                  <span className="font-medium">{g.name}</span><BasisTag basis={g.basis} /> <Confidence value={g.confidence} />{" "}
-                  {o && <><Badge value={o.priority} /> <span className="text-xs text-slate-500">{o.business_category}</span></>}{" "}
-                  <EvidenceRefs ids={g.evidence_ids} />
-                  <div className="text-slate-600">{g.description}</div>
-                  {o?.attributes && (
-                    <div className="text-xs text-slate-500">
-                      relevance {o.attributes.business_relevance} · customer value {o.attributes.customer_value} · revenue {o.attributes.revenue_impact} ·
-                      efficiency {o.attributes.efficiency_impact} · complexity {o.attributes.complexity}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      ))}
-    </div>
-  );
+  return <GapsView gaps={d.gaps} opportunities={prio.data?.data.opportunities ?? []}
+    competitors={comps.data?.data.competitors ?? []} existing={d.existing ?? []} />;
 }
 
 function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean }) {
