@@ -208,6 +208,9 @@ class CompanyProfile(BaseModel):
     products: list[ProductDiscovery] = Field(default_factory=list)
     contacts: list[Contact] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
+    # Where each company fact came from and how it was checked: field -> one entry per value
+    # ({value, evidence_id, source_url, origin, verification, detail}); see agents/client_research.py.
+    fact_sources: dict[str, list[dict]] = Field(default_factory=dict)
 
 
 class TechSignal(BaseModel):

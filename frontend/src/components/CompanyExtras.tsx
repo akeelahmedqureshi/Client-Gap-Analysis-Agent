@@ -1,25 +1,58 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Card, Empty } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
+import { SourceLink, VerificationBadge } from "./Verification";
 
 /** Extended company facts, hiring signals and recent announcements (shared by run & client pages). */
-export function CompanyFacts({ profile }: { profile: any }) {
-  const rows: [string, any][] = [
-    ["Legal name", profile.legal_name], ["Headquarters", profile.headquarters], ["Founded", profile.founded_year],
-    ["Company size", profile.company_size], ["Business model", profile.business_model],
-    ["Revenue model", profile.revenue_model], ["Markets served", profile.geographic_markets?.join(", ")],
-    ["Brands", profile.brands?.join(", ")], ["Subsidiaries", profile.subsidiaries?.join(", ")],
-    ["Business divisions", profile.divisions?.join(", ")], ["Locations", profile.locations?.join(", ")],
-    ["Target customers", profile.target_customers?.join(", ")],
-  ];
-  const shown = rows.filter(([, v]) => v);
-  if (!shown.length) return null;
+const ORIGIN: Record<string, string> = {
+  official_site: "official website", schema_org: "schema.org (official website)",
+  search_snippet: "search snippet", third_party: "third-party page", csv: "CSV",
+};
+const RANK = ["unverified", "partial", "verified"];
+
+/** One fact's sources: where it came from and how it was checked. */
+function FactSource({ entries }: { entries?: any[] }) {
+  if (!entries?.length) return <span className="text-xs text-slate-400">source not recorded</span>;
+  const worst = entries.reduce((a, e) => (RANK.indexOf(e.verification) < RANK.indexOf(a) ? e.verification : a), "verified");
+  const detail = entries.map((e) => `${e.value}: ${e.detail}`).join("\n");
+  const origins = Array.from(new Set(entries.map((e) => ORIGIN[e.origin] ?? e.origin)));
+  const urls = Array.from(new Set(entries.map((e) => e.source_url).filter(Boolean)));
   return (
-    <dl className="mt-3 text-sm grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
-      {shown.map(([k, v]) => (
-        <div key={k} className="contents"><dt className="text-slate-500">{k}</dt><dd>{String(v)}</dd></div>
-      ))}
-    </dl>
+    <span className="inline-flex flex-wrap items-center gap-1 ml-1 align-middle">
+      <VerificationBadge status={worst} detail={detail} />
+      <span className="text-xs text-slate-500">{origins.join(", ")}</span>
+      {urls.slice(0, 2).map((u: any) => <span key={u} className="text-xs"><SourceLink url={u} /></span>)}
+      {urls.length > 2 && <span className="text-xs text-slate-400">+{urls.length - 2}</span>}
+    </span>
+  );
+}
+
+export function CompanyFacts({ profile }: { profile: any }) {
+  const rows: [string, string, any][] = [
+    ["Legal name", "legal_name", profile.legal_name], ["Industry", "industry", profile.industry],
+    ["Headquarters", "headquarters", profile.headquarters], ["Founded", "founded_year", profile.founded_year],
+    ["Company size", "company_size", profile.company_size], ["Business model", "business_model", profile.business_model],
+    ["Revenue model", "revenue_model", profile.revenue_model], ["Markets served", "geographic_markets", profile.geographic_markets?.join(", ")],
+    ["Brands", "brands", profile.brands?.join(", ")], ["Subsidiaries", "subsidiaries", profile.subsidiaries?.join(", ")],
+    ["Business divisions", "divisions", profile.divisions?.join(", ")], ["Locations", "locations", profile.locations?.join(", ")],
+    ["Target customers", "target_customers", profile.target_customers?.join(", ")],
+  ];
+  const shown = rows.filter(([, , v]) => v);
+  if (!shown.length) return null;
+  // Profiles analysed before per-fact sources were recorded have none: say so once instead of on every row.
+  const tracked = profile.fact_sources !== undefined;
+  return (
+    <>
+      <dl className="mt-3 text-sm grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5">
+        {shown.map(([k, field, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-slate-500">{k}</dt>
+            <dd>{String(v)}{tracked && <FactSource entries={profile.fact_sources?.[field]} />}</dd>
+          </div>
+        ))}
+      </dl>
+      {!tracked && <p className="text-xs text-slate-400 mt-1">Per-fact sources are recorded from the next analysis.</p>}
+    </>
   );
 }
 

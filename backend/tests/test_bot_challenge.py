@@ -137,6 +137,14 @@ async def test_blocked_client_site_profile_is_built_from_search_results(make_ctx
     assert profile["description"] == "Lakeside resort with cabins and boat rentals"
     assert profile["headquarters"] == "Minnesota"
     assert profile["industry"] != "Hospitality"
+    # Each fact says where it came from: a snippet of the official site or a third-party page is never
+    # "verified", because the page itself was not read; an industry taken from the CSV is unverified.
+    src = profile["fact_sources"]
+    assert src["description"][0]["origin"] == "search_snippet" and src["description"][0]["verification"] == "partial"
+    assert src["headquarters"][0]["origin"] == "third_party" and src["headquarters"][0]["verification"] == "partial"
+    assert src["headquarters"][0]["source_url"] == "https://directory.example/lakeside-resort"
+    if ctx.record.client.industry:
+        assert src["industry"][0]["origin"] == "csv" and src["industry"][0]["verification"] == "unverified"
     cited = [ctx.ledger.get(i) for i in profile["evidence_ids"]]
     assert {e.source_type for e in cited} == {"search"} and all(e.source_url for e in cited)
     assert any("search result" in f.title for f in result.findings)

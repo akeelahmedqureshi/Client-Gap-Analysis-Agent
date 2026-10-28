@@ -108,6 +108,37 @@ async def search_docs(search, name: str, domain: str | None) -> list[SourceDoc]:
     return list(docs.values())[:MAX_SEARCH_DOCS]
 
 
+# Where a company fact came from (shown next to the fact on the Client tab).
+FACT_ORIGINS = {"official_site": "official website", "schema_org": "schema.org data on the official website",
+                "search_snippet": "search-result snippet of the official site",
+                "third_party": "third-party page found by search", "csv": "uploaded CSV"}
+
+
+def note_fact(profile: CompanyProfile, field: str, value, ev=None, *, verified: bool = True,
+              origin: str | None = None, replace: bool = False) -> None:
+    """Record the source and verification of one company fact.
+
+    *verified*: the quote was found in an official page or the site's own structured data. A quote found
+    only in a search snippet is *partial* (the page itself was not read); a quote not found anywhere, or a
+    value from the CSV, is *unverified*."""
+    if origin is None:
+        on_site = bool(profile.domain and ev and registrable_domain(ev.source_url) == registrable_domain(profile.domain))
+        origin = "official_site" if ev and ev.source_type == "website" else \
+            "search_snippet" if on_site else "third_party"
+    official = origin in ("official_site", "schema_org")
+    status = "verified" if verified and official else "partial" if verified else "unverified"
+    detail = {"verified": f"Quote found on the {FACT_ORIGINS[origin]}",
+              "partial": f"Quote found in a {FACT_ORIGINS[origin]}; the page itself was not read",
+              "unverified": "Provided in the uploaded CSV; not confirmed by a public source" if origin == "csv"
+              else f"Cited from a {FACT_ORIGINS[origin]}, but the quote was not found there"}[status]
+    entry = {"value": str(value), "evidence_id": ev.id if ev else None, "source_url": ev.source_url if ev else None,
+             "origin": origin, "verification": status, "detail": detail}
+    entries = profile.fact_sources.setdefault(field, [])
+    if replace:
+        entries.clear()
+    entries[:] = [e for e in entries if e["value"] != entry["value"]] + [entry]
+
+
 def page_doc(p: Page) -> SourceDoc:
     header = " | ".join(x for x in (p.title, p.description) if x)
     return SourceDoc(p.url, f"{header}\n{' / '.join(p.headings[:25])}\n{p.text}"[: PAGE_TEXT_LIMIT * 2], "website")
@@ -154,23 +185,28 @@ class ClientResearchAgent(Agent):
                 continue  # schema.org sameAs profiles are collected and verified with the other contacts
             ev = ctx.ledger.add(f"{name} {f.label.replace('_', ' ')}: {f.value}", f.source_url, "website",
                                 f.confidence, extracted_text=f.extracted_text)
+            origin = "schema_org" if f.confidence >= 0.9 else "official_site"   # the footer is page text
             if f.label in list_fields:
                 values = getattr(profile, list_fields[f.label])
                 if f.value not in values:
                     values.append(f.value)
                     profile.evidence_ids.append(ev.id)
+                    note_fact(profile, list_fields[f.label], f.value, ev, origin=origin)
             elif f.label == "founded_year":
                 profile.founded_year = int(f.value)
                 profile.evidence_ids.append(ev.id)
+                note_fact(profile, "founded_year", f.value, ev, origin=origin, replace=True)
             elif f.label == "description":
                 if not profile.description:
                     profile.description = f.value
                     profile.evidence_ids.append(ev.id)
+                    note_fact(profile, "description", f.value, ev, origin=origin, replace=True)
             elif f.label in ("legal_name", "headquarters", "company_size"):
                 # The company's own structured data wins over text extraction (footer only fills blanks).
                 if f.confidence >= 0.9 or not getattr(profile, f.label):
                     setattr(profile, f.label, f.value)
                     profile.evidence_ids.append(ev.id)
+                    note_fact(profile, f.label, f.value, ev, origin=origin, replace=True)
 
     @staticmethod
     async def _hiring(ctx: RunContext, pages: list[Page], findings: list[Finding]) -> dict:
@@ -255,6 +291,7 @@ class ClientResearchAgent(Agent):
                             0.9, extracted_text=home.description)
             profile.description = home.description
             profile.evidence_ids.append(ev.id)
+            note_fact(profile, "description", home.description, ev)
 
         # Products from providers (website structure, search) ---------------
         products: dict[str, ProductDiscovery] = {}
@@ -323,28 +360,26 @@ class ClientResearchAgent(Agent):
                 if ev:
                     setattr(profile, attr, sv.value)
                     profile.evidence_ids.append(ev.id)
+                    note_fact(profile, attr, sv.value, ev, verified=grounder.is_verified(sv.source_url, sv.quote),
+                              replace=True)
             if extracted.founded_year:
                 ev = grounder.ground_value(f"{rec.client.name} founded", extracted.founded_year)
                 m = re.search(r"(18|19|20)\d{2}", extracted.founded_year.value)
                 if ev and m:
                     profile.founded_year = int(m.group(0))
                     profile.evidence_ids.append(ev.id)
-            for sv in extracted.locations:
-                ev = grounder.ground_value(f"{rec.client.name} location", sv, 0.8)
-                if ev:
-                    profile.locations.append(sv.value)
-                    profile.evidence_ids.append(ev.id)
-            for sv in extracted.target_customers:
-                ev = grounder.ground_value(f"{rec.client.name} targets", sv, 0.75)
-                if ev:
-                    profile.target_customers.append(sv.value)
-            for attr, label in (("geographic_markets", "serves market"), ("brands", "brand"),
-                                ("subsidiaries", "subsidiary"), ("divisions", "business division")):
+                    note_fact(profile, "founded_year", m.group(0), ev, replace=True,
+                              verified=grounder.is_verified(extracted.founded_year.source_url,
+                                                            extracted.founded_year.quote))
+            for attr, label, weight in (("locations", "location", 0.8), ("target_customers", "targets", 0.75),
+                                        ("geographic_markets", "serves market", 0.75), ("brands", "brand", 0.75),
+                                        ("subsidiaries", "subsidiary", 0.75), ("divisions", "business division", 0.75)):
                 for sv in getattr(extracted, attr):
-                    ev = grounder.ground_value(f"{rec.client.name} {label}", sv, 0.75)
+                    ev = grounder.ground_value(f"{rec.client.name} {label}", sv, weight)
                     if ev and sv.value not in getattr(profile, attr):
                         getattr(profile, attr).append(sv.value)
                         profile.evidence_ids.append(ev.id)
+                        note_fact(profile, attr, sv.value, ev, verified=grounder.is_verified(sv.source_url, sv.quote))
             for lp in extracted.products:
                 ev = grounder.ground(f"{rec.client.name} offers '{lp.name}'", lp.source_url, lp.quote, 0.85)
                 if not ev:
@@ -390,6 +425,7 @@ class ClientResearchAgent(Agent):
 
         if not profile.industry and rec.client.industry:
             profile.industry = rec.client.industry
+            note_fact(profile, "industry", rec.client.industry, origin="csv", verified=False, replace=True)
         profile.products = list(products.values())
         for p in profile.products:
             findings.append(Finding(category="product", title=f"{p.kind.replace('_', ' ')}: {p.name}",

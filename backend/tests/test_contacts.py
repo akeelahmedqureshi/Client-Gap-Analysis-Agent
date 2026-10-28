@@ -131,3 +131,7 @@ async def test_client_research_stores_verified_contacts_with_evidence(make_ctx):
     sources = {ctx.ledger.get(e).source_url.rstrip("/") for e in li["evidence_ids"]}
     assert sources == {SITE, li["value"]}  # where it is published, and the profile that names the company
     assert result.data["linkedin_url"] == li["value"]
+    # Company facts from the official website are verified and cite the page.
+    src = result.data["profile"]["fact_sources"]
+    assert src and all(e["origin"] in ("official_site", "schema_org") and e["verification"] == "verified"
+                       and e["source_url"] for entries in src.values() for e in entries if e["origin"] != "csv")

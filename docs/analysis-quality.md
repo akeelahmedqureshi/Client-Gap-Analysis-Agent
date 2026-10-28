@@ -36,6 +36,18 @@ collected.
 | Possibly wrong account | The destination opened but does not identify this company. |
 | Unverified | Not published on the official website and not confirmed. |
 
+### Company facts
+
+Every company fact (legal name, industry, headquarters, founding year, size, business and revenue model,
+markets, brands, subsidiaries, divisions, locations, target customers) shows where it came from and how
+it was checked:
+
+| Badge | Meaning |
+|---|---|
+| Verified | The quote was found on the official website or in its schema.org data. |
+| Partially verified | The quote was found in a search-result snippet or on a third-party page found by search. The page itself was not read (for example, the official site blocks automated access). |
+| Unverified | Taken from the uploaded CSV, or the cited quote was not found in the source. |
+
 ## Features: status and evidence grade
 
 Each capability has a **status**:
