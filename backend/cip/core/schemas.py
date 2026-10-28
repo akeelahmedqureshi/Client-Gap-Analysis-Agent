@@ -296,6 +296,7 @@ class Competitor(BaseModel):
     target_market: str | None = None
     pricing: str | None = None
     pricing_profile: dict | None = None  # structured plans/prices (see connectors/research/pricing.py)
+    pricing_detail: dict | None = None  # plan-level detail, grounded and normalized (core/pricing_detail.py)
     verified: bool = False
     rationale: str = ""
     features: list[FeatureObservation] = Field(default_factory=list)

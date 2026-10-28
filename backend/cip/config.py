@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     # Detailed feature extraction reads whole pages in batches of ~30,000 characters (core/offering.py):
     # more batches read more of the site, at the cost of one LLM call each.
     feature_extraction_batches: int = 3
+    # Pricing comparison: prices are also shown in this currency, converted with these rates (value of one unit
+    # of each currency in a common reference, here USD). They are approximate defaults: set
+    # CIP_PRICING_FX_RATES (JSON) and CIP_PRICING_FX_DATE for current rates. Original prices are always shown.
+    pricing_base_currency: str = "USD"
+    pricing_fx_rates: dict[str, float] = Field(default_factory=lambda: {
+        "USD": 1.0, "EUR": 1.08, "GBP": 1.27, "CAD": 0.73, "AUD": 0.66, "NZD": 0.6, "CHF": 1.12, "INR": 0.012,
+        "JPY": 0.0067, "SEK": 0.095, "NOK": 0.093, "DKK": 0.145, "PLN": 0.25, "BRL": 0.18, "MXN": 0.055,
+        "ZAR": 0.055, "SGD": 0.74, "AED": 0.27})
+    pricing_fx_date: str = "approximate default rates"
     competitor_feature_batches: int = 2  # the same, per deep-analysed competitor
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"

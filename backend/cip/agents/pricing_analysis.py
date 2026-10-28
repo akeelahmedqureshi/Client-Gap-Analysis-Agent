@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from cip.agents.base import Agent, RunContext
 from cip.connectors.research.pricing import Plan, PricingProfile, market_summary
+from cip.core import pricing_detail
 from cip.core.evidence import EvidenceLedger
 from cip.core.schemas import AgentResult, Basis, Finding, Gap, GapType
 
@@ -58,6 +59,68 @@ def _profile_from_dict(d: dict) -> PricingProfile:
                           annual_discount_pct=d.get("annual_discount_pct"))
 
 
+def comparison_rows(subject: str, kind: str, detail: dict | None, profile: dict | None, ledger: EvidenceLedger,
+                    settings) -> list[dict]:
+    """One row per plan: the grounded plan-level detail when available, else the price parser's plans."""
+    base, rates = settings.pricing_base_currency, settings.pricing_fx_rates
+    if detail and detail.get("available") and detail.get("plans"):
+        return [{**p, "subject": subject, "kind": kind, "detailed": True} for p in detail["plans"]]
+    rows = []
+    for p in (profile or {}).get("plans", []):
+        ev = ledger.get(p.get("evidence_id") or "")
+        cur = (profile or {}).get("currency")
+        rows.append({"subject": subject, "kind": kind, "detailed": False, "name": p["name"], "price": p.get("price"),
+                     "currency": cur, "period": p.get("period"), "unit": p.get("unit"), "monthly": p.get("monthly"),
+                     "monthly_normalized": pricing_detail.convert(p.get("monthly"), cur, base, rates),
+                     "annual_price_per_month": None, "quote_based": p.get("quote_based", False),
+                     "free": p.get("price") == 0, "included_features": [], "limits": [], "add_ons": [],
+                     "evidence_id": p.get("evidence_id"), "source_url": (profile or {}).get("source_url"),
+                     "accessed_at": ev.collected_at.isoformat() if ev else None,
+                     "listing": "quote-based" if p.get("quote_based") else "public list price"})
+    return rows
+
+
+def implications(rows: list[dict], details: dict[str, dict], base: str) -> list[dict]:
+    """What the pricing differences mean for customers, each statement tied to its plan evidence."""
+    out: list[dict] = []
+    subjects = sorted({r["subject"] for r in rows})
+    paid = [r for r in rows if r.get("monthly_normalized") and not r.get("quote_based")]
+    entries: dict[str, dict] = {}
+    for r in sorted(paid, key=lambda r: r["monthly_normalized"]):
+        entries.setdefault(r["subject"], r)
+    if len(entries) >= 2:
+        ordered = sorted(entries.values(), key=lambda r: r["monthly_normalized"])
+        lo, hi = ordered[0], ordered[-1]
+        out.append({"text": f"Lowest published paid entry: {lo['subject']} ({lo['name']}, ≈{lo['monthly_normalized']:g} "
+                            f"{base}/month); highest: {hi['subject']} ({hi['name']}, ≈{hi['monthly_normalized']:g} "
+                            f"{base}/month). Entry price is about {hi['monthly_normalized'] / lo['monthly_normalized']:.1f}x "
+                            "apart, before plan contents are considered.",
+                    "evidence_ids": [x for x in (lo.get("evidence_id"), hi.get("evidence_id")) if x]})
+    seat = sorted({r["subject"] for r in paid if r.get("unit") in ("user", "seat")})
+    flat = sorted({r["subject"] for r in paid if r.get("unit") in (None, "flat")} - set(seat))
+    if seat:
+        out.append({"text": f"Per-user / per-seat pricing at {', '.join(seat)}: cost grows with team size"
+                            + (f"; {', '.join(flat)} price per plan, which favours larger teams." if flat else "."),
+                    "evidence_ids": [r["evidence_id"] for r in paid if r["subject"] in seat and r.get("evidence_id")][:4]})
+    free = sorted({r["subject"] for r in rows if r.get("free")})
+    if free:
+        out.append({"text": f"Free plan: {', '.join(free)} — a no-cost way to start"
+                            + (f"; not found for {', '.join(s for s in subjects if s not in free)}." if len(free) < len(subjects) else "."),
+                    "evidence_ids": [r["evidence_id"] for r in rows if r.get("free") and r.get("evidence_id")][:4]})
+    quote = sorted({r["subject"] for r in rows if r.get("quote_based")})
+    if quote:
+        out.append({"text": f"Custom / contact-sales plans at {', '.join(quote)}: their price is not public and cannot "
+                            "be compared.",
+                    "evidence_ids": [r["evidence_id"] for r in rows if r.get("quote_based") and r.get("evidence_id")][:4]})
+    for key, label in (("transaction_fees", "Transaction or processing fees"), ("onboarding_fees", "Onboarding fees"),
+                       ("contract_terms", "Contract requirements")):
+        who = sorted(s for s, d in details.items() if (d or {}).get("terms", {}).get(key))
+        if who:
+            out.append({"text": f"{label} published by {', '.join(who)}: they change the real cost beyond the list price.",
+                        "evidence_ids": [t["evidence_id"] for s in who for t in details[s]["terms"][key]][:4]})
+    return out
+
+
 class PricingAnalysisAgent(Agent):
     name = "pricing_analysis"
     description = "Compare the client's pricing with the market and identify pricing gaps"
@@ -66,6 +129,21 @@ class PricingAnalysisAgent(Agent):
     async def run(self, ctx: RunContext) -> AgentResult:
         client_d = ctx.data("client_research").get("pricing")
         competitors = ctx.data("competitor_research").get("competitors", [])
+        s = ctx.settings
+        client_name = ctx.record.client.name
+        research = ctx.data("client_research")
+        client_detail = await pricing_detail.extract(
+            ctx.llm, ctx.ledger, research.get("pages", []) + research.get("project_pages", []), client_name,
+            base_currency=s.pricing_base_currency, rates=s.pricing_fx_rates, rates_date=s.pricing_fx_date,
+            deterministic=client_d)
+        details = {client_name: client_detail, **{c["name"]: c.get("pricing_detail") for c in competitors}}
+        table = comparison_rows(client_name, "client", client_detail, client_d, ctx.ledger, s)
+        for c in competitors:
+            table += comparison_rows(c["name"], "competitor", c.get("pricing_detail"), c.get("pricing_profile"),
+                                     ctx.ledger, s)
+        comparison = {"rows": table, "implications": implications(table, details, s.pricing_base_currency),
+                      "base_currency": s.pricing_base_currency, "rates_date": s.pricing_fx_date,
+                      "details": details}
         priced = [(c, c["pricing_profile"]) for c in competitors if c.get("pricing_profile")]
         market = market_summary([_profile_from_dict(p) for _, p in priced])
         rows = [{"competitor_id": c["id"], "name": c["name"], "classification": c["classification"],
@@ -86,7 +164,7 @@ class PricingAnalysisAgent(Agent):
                                     confidence=0.8, basis=Basis.INFERRED))
             return AgentResult(confidence=0.3, findings=findings,
                                data={"client": client_d, "market": market, "competitors": rows,
-                                     "position": position, "gaps": []})
+                                     "position": position, "gaps": [], "comparison": comparison})
 
         ids_where = lambda pred: [e for c, p in priced if pred(p) for e in p.get("evidence_ids", [])[:2]]  # noqa: E731
         names_where = lambda pred: [c["id"] for c, p in priced if pred(p)]  # noqa: E731
@@ -140,5 +218,5 @@ class PricingAnalysisAgent(Agent):
             confidence=0.7 if client_d else 0.5,
             findings=findings,
             data={"client": client_d, "market": market, "competitors": rows, "position": position,
-                  "gaps": [g.model_dump(mode="json") for g in gaps]},
+                  "gaps": [g.model_dump(mode="json") for g in gaps], "comparison": comparison},
         )

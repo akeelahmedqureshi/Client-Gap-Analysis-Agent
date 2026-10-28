@@ -30,7 +30,7 @@ from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind
 from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.web import registrable_domain
 from cip.connectors.source_control.base import parse_repo_url
-from cip.core import offering
+from cip.core import offering, pricing_detail
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
@@ -537,6 +537,12 @@ class CompetitorResearchAgent(Agent):
         comp.overlap = feature_overlap(ctx, comp.features, client_feats)
         comp.pages_analysed = list(dict.fromkeys([*comp.pages_analysed, *(p.url for p in pages)]))
         comp.pricing_profile = record_pricing(ledger, comp.name, extract_pricing(pages))
+        s = ctx.settings
+        priced_page = next((p for p in pages if kind_of(p.url) == "pricing"), None)
+        comp.pricing_detail = await pricing_detail.extract(
+            ctx.llm, ledger, pages, comp.name, base_currency=s.pricing_base_currency, rates=s.pricing_fx_rates,
+            rates_date=s.pricing_fx_date, deterministic=comp.pricing_profile,
+            accessed_at=priced_page.fetched_at if priced_page else None)
         if comp.pricing_profile and not comp.pricing:
             entry = comp.pricing_profile.get("entry_price_monthly")
             comp.pricing = (f"from {entry:g} {comp.pricing_profile.get('currency') or ''}/month".strip()

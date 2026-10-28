@@ -19,6 +19,7 @@ import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Exp
 import ClientContacts from "../components/ClientContacts";
 import { DocumentedWorkflows, FeatureInventory } from "../components/Offering";
 import CompetitorProfiles from "../components/Competitors";
+import { PlanComparison, PricingImplications, PricingTerms } from "../components/PricingDetail";
 
 const TABS = ["Pipeline", "Client", "Products & Services", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Sales", "Review", "Evidence", "Report"] as const;
@@ -566,7 +567,9 @@ function PricingTab({ runId, enabled }: { runId: string; enabled: boolean }) {
           </div>
         ))}
       </div>
-      <Card title="Pricing comparison (per month)">
+      <PlanComparison cmp={d.comparison} />
+      <PricingImplications cmp={d.comparison} />
+      <Card title="At a glance (per month)">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500">
@@ -582,6 +585,7 @@ function PricingTab({ runId, enabled }: { runId: string; enabled: boolean }) {
         </div>
         {m.excluded_other_currency > 0 && <p className="text-xs text-slate-500 mt-2">{m.excluded_other_currency} competitor(s) priced in another currency are excluded from the market statistics.</p>}
       </Card>
+      <PricingTerms cmp={d.comparison} />
       <Card title="Pricing gaps">
         {d.gaps.length ? (
           <ul className="space-y-2 text-sm">
