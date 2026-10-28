@@ -164,7 +164,7 @@ domain, gap name, recommendation name) so they survive re-runs; applying them cr
 | Method | Path | Role | Description |
 |---|---|---|---|
 | GET | `/api/runs/{id}/review` | viewer | Overrides of the run: kind, target, value, note, who, when, `pending` / `applied` |
-| PUT | `/api/runs/{id}/review` | analyst | `{kind, target_id, field?, value, note?}` (upserts by kind + target + field). Kinds: `capability_status` (value `available` / `partial` / `unknown` / `missing` — the only way to *confirmed missing*), `competitor` (`exclude`), `gap` (`reject` / `approve` / `rework`), `recommendation` (field `priority` / `phase` / `business_category` / `business_impact`) |
+| PUT | `/api/runs/{id}/review` | analyst | `{kind, target_id, field?, value, note?}` (upserts by kind + target + field). Kinds: `capability_status` (value `available` / `partial` / `unknown` / `missing` — besides a quoted statement on the company's own pages, the only way to *confirmed unavailable*), `competitor` (`exclude`), `gap` (`reject` / `approve` / `rework`), `recommendation` (field `priority` / `phase` / `business_category` / `business_impact`) |
 | DELETE | `/api/runs/{id}/review/{override_id}` | analyst | Remove a pending override |
 | POST | `/api/runs/{id}/review/apply` | analyst | → `{run_id, applied, stages}`: a new run version with the overrides written into the reused stages and the affected stages re-run. Applied overrides carry over to every later version |
 

@@ -18,7 +18,7 @@ from cip.config import Settings, get_settings
 _ICONS = {
     "✅": '<span class="dot ok" title="available">●</span>',
     "🟡": '<span class="dot partial" title="partial">●</span>',
-    "❌": '<span class="dot missing" title="confirmed missing">●</span>',
+    "❌": '<span class="dot missing" title="confirmed unavailable">●</span>',
     "❔": '<span class="dot unknown" title="not publicly identified">○</span>',
 }
 

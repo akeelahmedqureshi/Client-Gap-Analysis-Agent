@@ -887,13 +887,19 @@ function GapsTab({ runId, enabled }: { runId: string; enabled: boolean }) {
     competitors={comps.data?.data.competitors ?? []} existing={d.existing ?? []} />;
 }
 
+const VERDICT_STYLE: Record<string, [string, string]> = {
+  confirmed: ["Confirmed", "bg-emerald-100 text-emerald-800"], potential: ["Potential", "bg-amber-100 text-amber-800"],
+  optional: ["Optional", "bg-slate-100 text-slate-600"],
+};
+
 function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   const res = useAgent(runId, "opportunity_prioritization", enabled);
   const [why, setWhy] = useState<string | null>(null);
+  const [verdict, setVerdict] = useState("");
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
-  const opps: any[] = d.opportunities;
+  const opps: any[] = d.opportunities.filter((o: any) => !verdict || o.verdict === verdict);
   // Opportunity matrix: business impact (y) vs technical complexity (x)
   const impact = (o: any) => (o.factors.business_value + o.factors.user_impact + o.factors.revenue_potential) / 3;
   return (
@@ -912,7 +918,11 @@ function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean 
           ))}
         </div>
       </Card>
-      <Card title="Scored opportunities">
+      <Card title="Scored opportunities" actions={d.verdicts && (
+        <select className="border rounded-lg px-2 py-1 text-sm" value={verdict} onChange={(e) => setVerdict(e.target.value)}>
+          <option value="">All verdicts ({d.opportunities.length})</option>
+          {Object.entries(VERDICT_STYLE).map(([k, [label]]) => <option key={k} value={k}>{label} ({d.verdicts[k] ?? 0})</option>)}
+        </select>)}>
         <table className="w-full text-sm">
           <thead className="text-left text-slate-500">
             <tr><th className="py-1 pr-2">#</th><th className="pr-2">Opportunity</th><th className="pr-2">Priority</th><th className="pr-2">Business opportunity</th><th className="px-2">AI</th><th className="px-2">Complexity</th><th className="px-2">Score</th></tr>
@@ -922,7 +932,12 @@ function OpportunitiesTab({ runId, enabled }: { runId: string; enabled: boolean 
               <Fragment key={o.gap_id}>
               <tr className="border-t align-top">
                 <td className="py-1.5">{i + 1}</td>
-                <td className="font-medium">{o.name}<div className="text-xs font-normal text-slate-500">{o.business_category}</div>
+                <td className="font-medium">{o.name}
+                  {o.verdict && <span title={(o.checks ?? []).filter((c: any) => !c.passed).map((c: any) => c.label).join("\n") || "All checks passed"}
+                    className={`ml-1.5 text-[10px] rounded px-1.5 py-0.5 uppercase ${VERDICT_STYLE[o.verdict]?.[1] ?? ""}`}>{VERDICT_STYLE[o.verdict]?.[0] ?? o.verdict}</span>}
+                  <div className="text-xs font-normal text-slate-500">{o.business_category}{o.classification && ` · ${o.classification.replaceAll("_", " ")}`}</div>
+                  {o.verdict && o.verdict !== "confirmed" && (o.checks ?? []).some((c: any) => !c.passed) && (
+                    <div className="text-xs font-normal text-amber-800">Open: {(o.checks ?? []).filter((c: any) => !c.passed).map((c: any) => c.label.toLowerCase()).join("; ")}</div>)}
                   <button className="text-xs font-normal text-indigo-700 underline" onClick={() => setWhy(why === o.gap_id ? null : o.gap_id)}>{why === o.gap_id ? "hide why" : "why?"}</button></td>
                 <td className="pr-2"><Badge value={o.priority} /></td>
                 <td>{o.business_opportunity}<BasisTag basis={o.basis} /><div className="text-xs text-slate-500">{o.revenue_opportunity}</div></td>

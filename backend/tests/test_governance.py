@@ -52,15 +52,23 @@ async def test_structured_exports_and_export_permissions(client):  # noqa: F811
     lines = matrix.text.lstrip("﻿").splitlines()
     assert lines[0].startswith("Capability,Category,Client,") and "Market class" in lines[0] and len(lines) > 5
     assert "not publicly identified" in matrix.text or "available" in matrix.text
+    assert lines[0].startswith("Capability,Category,Client,Client evidence grade,")
     for name in ("gaps.csv", "opportunities.csv", "recommendations.csv", "evidence.csv"):
         r = await client.get(f"/api/runs/{run_id}/export/{name}", headers=h)
         assert r.status_code == 200 and len(r.text.splitlines()) > 1, name
+    # Gaps and opportunities carry the verdict, classification and the checks still open.
+    import csv
+    gap_rows = list(csv.DictReader((await client.get(f"/api/runs/{run_id}/export/gaps.csv", headers=h)).text.lstrip("\ufeff").splitlines()))
+    assert {r["Verdict"] for r in gap_rows} <= {"confirmed", "potential", "optional"} and gap_rows[0]["Classification"]
+    assert any(r["Verdict"] == "potential" and r["Checks not passed"] for r in gap_rows)
+    opp_header = (await client.get(f"/api/runs/{run_id}/export/opportunities.csv", headers=h)).text.lstrip("\ufeff").splitlines()[0]
+    assert opp_header.startswith("Opportunity,Verdict,Checks not passed,Classification,Priority,")
     analysis = (await client.get(f"/api/runs/{run_id}/export/analysis.json", headers=h)).json()
     assert analysis["run"]["id"] == run_id and analysis["evidence"]
     assert analysis["agents"]["opportunity_prioritization"]["result"]["data"]["recommendations"]
     assert (await client.get(f"/api/runs/{run_id}/export/secrets.csv", headers=h)).status_code == 404
     assert (await client.get(f"/api/runs/{run_id}/export/matrix.json", headers=h)).status_code == 404
-    assert await _count(AuditLog, AuditLog.action == "run.exported") == 6
+    assert await _count(AuditLog, AuditLog.action == "run.exported") == 8
 
     # Other organizations can't export (404, not 403).
     other = await register(client, org="Other Co", email="boss@other.example")

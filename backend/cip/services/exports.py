@@ -45,35 +45,48 @@ def _label(status: str | None) -> str:
 
 def matrix_csv(data: dict) -> str:
     comps = data.get("comparison", {}).get("competitors", [])
-    header = ["Capability", "Category", "Client"] + [c["name"] for c in comps] + [
+    header = ["Capability", "Category", "Client", "Client evidence grade"] + [
+        x for c in comps for x in (c["name"], f"{c['name']} evidence grade")] + [
         "Top-3 coverage", "Top-10 coverage", "Market class", "Must have"]
     rows = []
     for r in data.get("comparison", {}).get("rows", []):
-        rows.append([r["feature_name"], r["category"], _label(r["client"])]
-                    + [_label(r["competitors"].get(c["id"])) for c in comps]
+        cells = r.get("cells") or {}
+        grade = lambda key: (cells.get(key) or {}).get("verification", "")  # noqa: E731
+        rows.append([r["feature_name"], r["category"], _label(r["client"]), grade("client")]
+                    + [x for c in comps for x in (_label(r["competitors"].get(c["id"])), grade(c["id"]))]
                     + [f"{r.get('top3_count', 0)}/{r.get('top3_total', 0)}",
                        f"{r.get('top10_count', 0)}/{r.get('top10_total', 0)}", r.get("market_class"),
                        r.get("must_have", False)])
     return to_csv(header, rows)
 
 
+def _open_checks(o: dict) -> list[str]:
+    return [c["label"] for c in o.get("checks", []) if not c["passed"]]
+
+
 def gaps_csv(data: dict) -> str:
     names = {c["id"]: c["name"] for c in data.get("comparison", {}).get("competitors", [])}
-    rows = [[g["name"], g["gap_type"], g["category"], g["description"], [names.get(c, c) for c in g["competitors_with"]],
-             g.get("market_class"), g.get("landscape_share"), g["confidence"], g["basis"], g["evidence_ids"]]
+    opps = {o["gap_id"]: o for o in data.get("prioritization", {}).get("opportunities", [])}
+    rows = [[g["name"], opps.get(g["id"], {}).get("verdict"), g.get("classification"), g["gap_type"], g["category"],
+             g["description"], [names.get(c, c) for c in g["competitors_with"]], g.get("market_class"),
+             g.get("landscape_share"), opps.get(g["id"], {}).get("priority"), _open_checks(opps.get(g["id"], {})),
+             opps.get(g["id"], {}).get("risks", []), (g.get("review") or {}).get("decision"), g["confidence"],
+             g["basis"], g["evidence_ids"]]
             for g in data.get("gaps", {}).get("gaps", [])]
-    return to_csv(["Gap", "Type", "Category", "Description", "Competitors with it", "Market class",
-                   "Top-10 share", "Confidence", "Basis", "Evidence ids"], rows)
+    return to_csv(["Gap", "Verdict", "Classification", "Type", "Category", "Description", "Competitors with it",
+                   "Market class", "Top-10 share", "Priority", "Checks not passed", "Risks", "Reviewer decision",
+                   "Confidence", "Basis", "Evidence ids"], rows)
 
 
 def opportunities_csv(data: dict) -> str:
     opps = sorted(data.get("prioritization", {}).get("opportunities", []), key=lambda o: -o.get("normalized_score", 0))
     factors = sorted({f for o in opps for f in o.get("factors", {})})
-    rows = [[o["name"], o.get("priority"), o.get("business_category"), o.get("phase"), o.get("gap_type"),
+    rows = [[o["name"], o.get("verdict"), _open_checks(o), o.get("classification"), o.get("priority"),
+             o.get("business_category"), o.get("phase"), o.get("gap_type"),
              o.get("normalized_score"), o.get("score", {}).get("total"), o.get("score", {}).get("confidence"),
              o.get("business_opportunity"), o.get("revenue_opportunity"), o.get("basis")]
             + [o.get("factors", {}).get(f) for f in factors] for o in opps]
-    return to_csv(["Opportunity", "Priority", "Category", "Horizon", "Gap type", "Normalized score", "Score",
+    return to_csv(["Opportunity", "Verdict", "Checks not passed", "Classification", "Priority", "Category", "Horizon", "Gap type", "Normalized score", "Score",
                    "Evidence confidence", "Business opportunity", "Revenue opportunity", "Basis"] + factors, rows)
 
 

@@ -252,8 +252,8 @@ class FeatureStatus(str, Enum):
     """Public-evidence state of a capability (BRS 7.9).
 
     UNKNOWN is "Not publicly identified": no reliable public evidence was found. It is never proof of
-    absence. MISSING is "Not available / confirmed missing" and needs positive evidence of absence (for
-    example a reviewer's override); it is never inferred from silence.
+    absence. MISSING is "Confirmed unavailable" and needs positive evidence of absence (a quoted statement on
+    the company's own pages that it is not offered, or a reviewer's override); it is never inferred from silence.
     """
 
     AVAILABLE = "available"
@@ -266,7 +266,7 @@ STATUS_LABELS = {
     "available": "available",
     "partial": "partially available",
     "unknown": "not publicly identified",
-    "missing": "confirmed missing",
+    "missing": "confirmed unavailable",
 }
 
 

@@ -143,7 +143,7 @@ class GapAnalysisAgent(Agent):
                 gaps.append(Gap(
                     feature_id=tf.id, name=tf.name, category=tf.category_name, gap_type=gtype,
                     description=(f"{', '.join(names)} offer{'s' if len(names) == 1 else ''} {tf.name}; "
-                                 + ("it is confirmed missing for the client." if confirmed else
+                                 + ("it is confirmed unavailable for the client." if confirmed else
                                     "the client's status could not be checked (little of its product was "
                                     "inspected)." if uncertain else
                                     "it is not publicly identified in the client's offering.")),

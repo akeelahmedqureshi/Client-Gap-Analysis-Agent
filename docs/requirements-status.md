@@ -59,7 +59,7 @@ _Baseline audit: 2026-10-08._
 | 23 | Products, services, target customers, geography | ✅ | |
 | 24 | Capability inventory with evidence and confidence | ✅ | |
 | 25 | Value proposition, use cases, customer problems | ✅ | Extracted verbatim from the client's pages (headline promise, solution/industry pages, pain statements), each with an evidence quote; Products & Services tab and report section 3 |
-| 26 | Four statuses and the "Not publicly identified" rule | ✅ | No signal is "not publicly identified"; "confirmed missing" needs proof |
+| 26 | Four statuses and the "Not publicly identified" rule | ✅ | No signal is "not publicly identified"; "confirmed unavailable" needs proof |
 | 27 | User, customer and business workflows | ✅ | Workflow catalogue (`core/workflows.yaml`) mapped onto the client's capabilities and page mentions; steps supported / mentioned / not publicly identified |
 
 ## 4. Industry and market (3)

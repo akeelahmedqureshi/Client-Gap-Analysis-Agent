@@ -3,8 +3,8 @@
 Reviewers can correct what the analysis concluded:
 
 * ``capability_status`` — the client's status of a capability (available, partial, not publicly
-  identified, **confirmed missing**). A reviewer's knowledge is the only way a capability becomes
-  *confirmed missing*;
+  identified, **confirmed unavailable**). Besides an explicit, quoted statement on the company's own pages
+  (``core/negation.py``), a reviewer's knowledge is the only way a capability becomes *confirmed unavailable*;
 * ``competitor`` — exclude a competitor that is not relevant;
 * ``gap`` — reject a gap, approve it, or request rework. Approval makes the gap's verdict *confirmed*
   (validated by the reviewer), so the sales summary and outreach may state it; rework makes it *potential*;

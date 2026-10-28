@@ -197,7 +197,7 @@ Restart the demo with `python scripts/demo_server.py --landscape` and re-run ABC
       dialog offers to open the existing run. **Cancel** a waiting run: the remaining stages are skipped.
 - [ ] **Projects**: tick several projects → **Analyze selected**: one run per project.
 
-- [ ] **Review** tab (finished run): set *AI voice* to *Confirmed missing*, exclude a competitor, reject
+- [ ] **Review** tab (finished run): set *AI voice* to *Confirmed unavailable*, exclude a competitor, reject
       one gap, request rework on another and raise a recommendation to *high*, each with a note.
       **Apply**: a new version opens; the comparison shows ❌ for voice, the competitor is listed as
       *Excluded by reviewer*, the rejected gap is gone, the priority is high, and the quality card

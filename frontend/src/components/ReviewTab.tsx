@@ -20,7 +20,7 @@ interface Override {
   created_at: string;
 }
 
-const STATUS = [["available", "Available"], ["partial", "Partially available"], ["unknown", "Not publicly identified"], ["missing", "Confirmed missing"]];
+const STATUS = [["available", "Available"], ["partial", "Partially available"], ["unknown", "Not publicly identified"], ["missing", "Confirmed unavailable"]];
 const PRIORITY = ["high", "medium", "low"];
 const PHASES = [["phase_1_quick_wins", "Quick win"], ["phase_2_growth", "Growth (1-3 months)"], ["phase_3_major", "Major (3-6 months)"], ["phase_4_strategic", "Strategic (6-12 months)"]];
 const CATEGORIES = ["Critical competitive gap", "High-value product gap", "Customer experience gap", "Operational efficiency gap",
@@ -119,7 +119,7 @@ export default function ReviewTab({ runId, finished, canAct }: { runId: string; 
               <input className={`${sel} flex-1 min-w-[12rem]`} placeholder="Evidence or reason (e.g. confirmed by the client)" value={capNote} onChange={(e) => setCapNote(e.target.value)} />
               <Button variant="secondary" disabled={!cap} onClick={() => put({ kind: "capability_status", target_id: cap, value: capStatus, note: capNote }, false)}>Set status</Button>
             </div>
-            <p className="text-xs text-slate-500 mt-1">Only a reviewer can mark a capability <b>confirmed missing</b>; the analysis never infers it from silence.</p>
+            <p className="text-xs text-slate-500 mt-1">A capability is <b>confirmed unavailable</b> only when the company's own pages say so or a reviewer sets it; the analysis never infers it from silence.</p>
           </Card>
 
           <Card title="Competitor selection">
