@@ -20,6 +20,7 @@ const ANALYSIS_LABELS: Record<string, string> = {
   competitor_deep_pages: "Pages per deep-analysed competitor", crawler_max_pdfs: "PDFs read per site",
   feature_extraction_batches: "Feature extraction: batches of whole pages read (one AI call each)",
   competitor_feature_batches: "Feature extraction per deep-analysed competitor: batches of pages",
+  market_max_sources: "Market analysis: third-party pages read (0 = off)",
   ux_max_pages: "Pages in the UX review", roadmap_top_n: "Recommendations in the roadmap",
   outreach_saving_pct_high: "Outreach: “up to” % cost saving quoted for a high-saving process (0 = none)",
   outreach_saving_pct_medium: "Outreach: “up to” % for a medium-saving process (0 = none)",

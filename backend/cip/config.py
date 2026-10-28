@@ -71,6 +71,7 @@ class Settings(BaseSettings):
         "ZAR": 0.055, "SGD": 0.74, "AED": 0.27})
     pricing_fx_date: str = "approximate default rates"
     competitor_feature_batches: int = 2  # the same, per deep-analysed competitor
+    market_max_sources: int = 8  # third-party pages read for the market analysis (0 = off)
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"
     # Politeness and resilience per domain (BRS 20; PRD 10.24): concurrent requests to one domain, minimum

@@ -33,7 +33,11 @@ TRUSTED_THIRD_PARTY = ("g2.com", "capterra.com", "trustradius.com", "getapp.com"
 PUBLICATIONS = ("techcrunch.com", "forbes.com", "reuters.com", "bloomberg.com", "wsj.com", "ft.com", "theverge.com",
                 "venturebeat.com", "zdnet.com", "businesswire.com", "prnewswire.com", "globenewswire.com")
 TYPE_TIERS = {"github": 1, "gitlab": 1, "csv": 2, "documentation": 1, "advisory": 3, "app_store": 3,
-              "marketplace": 3, "linkedin": 3, "social": 4, "search": 5}
+              "marketplace": 3, "linkedin": 3, "social": 4, "search": 5, "publication": 4}
+# Official statistics and research bodies: trusted third parties for market figures.
+OFFICIAL_STATISTICS = (".gov", ".gov.uk", ".gob", ".gouv.fr", ".europa.eu", ".int", ".edu", ".ac.uk", "oecd.org",
+                       "worldbank.org", "imf.org", "census.gov", "ons.gov.uk", "eurostat.ec.europa.eu", "who.int",
+                       "un.org", "bls.gov")
 
 
 def _host(url: str) -> str:
@@ -58,6 +62,8 @@ def tier(source_type: str, source_url: str) -> int:
             return 4
         path = (urlparse(source_url).path or "").lower()
         return 2 if any(h in path for h in ANNOUNCEMENT_HINTS) else 1
+    if source_type == "publication":
+        return 3 if any(host.endswith(d) or host == d.lstrip(".") for d in OFFICIAL_STATISTICS) else 4
     if source_type in TYPE_TIERS:
         return TYPE_TIERS[source_type]
     return 4

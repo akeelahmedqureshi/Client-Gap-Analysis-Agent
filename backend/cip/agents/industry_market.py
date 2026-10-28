@@ -25,6 +25,8 @@ from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
 from cip.core.positioning import audiences
+from cip.connectors.research.search import NullSearchProvider
+from cip.core import market_research
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.relevance import model_signals
@@ -152,7 +154,7 @@ class IndustryMarketAgent(Agent):
                     out["customer_segment"].append(sv.value)
                     out["evidence_ids"].append(ev.id)
             for t in llm.trends[:8]:
-                ev = grounder.ground(f"Market trend: {t.statement}", t.source_url, t.quote, 0.5)
+                ev = grounder.ground_verified(f"Market trend: {t.statement}", t.source_url, t.quote, 0.5)
                 if ev:
                     out["trends"].append({"statement": t.statement, "kind": t.kind if t.kind in TREND_KINDS
                                           else _kind(t.statement), "source_url": t.source_url, "evidence_id": ev.id})
@@ -165,9 +167,27 @@ class IndustryMarketAgent(Agent):
                     ev = ledger.add(f"Market trend ({r.title}): {sentence}", r.url, "search", 0.45,
                                     extracted_text=sentence)
                     out["trends"].append({"statement": sentence, "kind": _kind(sentence), "source_url": r.url,
-                                          "evidence_id": ev.id})
+                                          "evidence_id": ev.id, "snippet_only": True})
         except LLMError as exc:
             errors.append(f"LLM industry analysis failed: {exc}")
+
+        # Deep market research from pages that were read (core/market_research.py). Its verified trend
+        # statements replace the snippet-based ones, so benchmarks and findings use the same data.
+        if searched and not isinstance(ctx.search, NullSearchProvider) and ctx.settings.market_max_sources:
+            profile_for_research = {k: out.get(k) for k in ("industry", "market_segment", "product_category",
+                                                            "customer_segment", "business_model", "geography")}
+            profile_for_research["product"] = rec.project.name
+            rs = await market_research.research(ctx.search, ctx.fetcher, ctx.llm, ledger, profile_for_research,
+                                                client_domain=rec.client.domain,
+                                                max_sources=ctx.settings.market_max_sources)
+            errors += rs.get("errors", [])
+            out["research"] = rs
+            kinds = {"trends": None, "technology_trends": "technology", "ai_automation": None}
+            read_trends = [{"statement": i["statement"], "kind": kind or _kind(i["statement"]),
+                            "source_url": i["source_url"], "evidence_id": i["evidence_id"]}
+                           for field, kind in kinds.items() for i in rs.get("sections", {}).get(field, [])]
+            if read_trends:
+                out["trends"] = read_trends[:12]
 
         out["keywords"] = keywords(out["market_segment"] or "", out["industry"] or "",
                                    " ".join(out["customer_segment"]), rec.project.description or "")

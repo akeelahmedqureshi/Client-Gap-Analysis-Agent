@@ -3,7 +3,7 @@ import { Fragment, useState } from "react";
 import { useAgent } from "../lib/useAgent";
 import { EvidenceList } from "./Explain";
 import { RunBenchmark } from "./Benchmarks";
-import { Badge, Card, Empty } from "./ui";
+import { Badge, BasisTag, Card, Empty } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
 
 const FACTOR_LABEL: Record<string, string> = {
@@ -96,7 +96,6 @@ export function MarketTab({ runId, enabled, comparisonDone }: { runId: string; e
     ["Customer segment", (d.customer_segment ?? []).join(", "), d.basis?.customer_segment],
     ["Business model", d.business_model, d.basis?.business_model], ["Geography", (d.geography ?? []).join(", "), undefined],
   ];
-  const kinds: [string, string][] = [["trend", "Industry trends"], ["technology", "Emerging technology"], ["ai_adoption", "AI adoption"], ["automation", "Automation trends"]];
   return (
     <div className="space-y-4">
       {comparisonDone && <RunBenchmark runId={runId} />}
@@ -111,36 +110,122 @@ export function MarketTab({ runId, enabled, comparisonDone }: { runId: string; e
         </dl>
         <div className="mt-2"><EvidenceRefs ids={d.evidence_ids} /></div>
       </Card>
-      {m && (
-        <Card title="Across the competitive landscape">
-          <div className="grid sm:grid-cols-3 gap-3 text-sm">
-            <div className="rounded border p-2"><div className="text-xs text-slate-500">AI adoption</div><div className="text-xl font-semibold">{pct(m.ai_adoption)}</div><div className="text-xs text-slate-500">of {m.landscape_size} competitors offer an AI capability</div></div>
-            <div className="rounded border p-2"><div className="text-xs text-slate-500">Automation adoption</div><div className="text-xl font-semibold">{pct(m.automation_adoption)}</div><div className="text-xs text-slate-500">offer automation capabilities</div></div>
-            <div className="rounded border p-2"><div className="text-xs text-slate-500">Industry standards the client offers</div><div className="text-xl font-semibold">{pct(m.client_standard_coverage)}</div><div className="text-xs text-slate-500">of {m.industry_standards.length} must-have capabilities</div></div>
+      <MarketResearch r={d.research} m={m} trends={d.trends ?? []} notes={d.notes} />
+    </div>
+  );
+}
+
+
+const SECTIONS: Record<string, [string, string][]> = {
+  A: [["industry_definition", "Industry definition and market segment"], ["business_models", "Common business models"],
+      ["customer_segments", "Key customer segments"], ["use_cases", "Major use cases"], ["value_chain", "Industry structure and value chain"]],
+  B: [["trends", "Emerging industry trends"], ["customer_expectations", "Changing customer expectations"],
+      ["technology_trends", "Product and technology trends"], ["ai_automation", "AI and automation adoption"],
+      ["regulation", "Regulatory and compliance considerations"], ["emerging_models", "Emerging business models"]],
+  C: [["customer_needs", "Common customer problems and needs"], ["buying_motivations", "Buying motivations"],
+      ["selection_criteria", "Product selection criteria"]],
+  D: [["market_participants", "Major market participants named in sources"], ["differentiation", "How products differentiate"],
+      ["underserved_segments", "Potentially underserved segments"]],
+  E: [["opportunities", "Growth opportunities"], ["product_extensions", "Potential product extensions"],
+      ["threats", "Competitive and technology risks"], ["barriers", "Barriers to adoption"]],
+};
+const TITLES: Record<string, string> = { A: "A. Industry overview", B: "B. Market trends", C: "C. Customers and demand",
+  D: "D. Competitive landscape", E: "E. Opportunities and risks" };
+
+function Statements({ section, data }: { section: string; data: any }) {
+  const found = SECTIONS[section].filter(([k]) => data?.[k]?.length);
+  const missing = SECTIONS[section].filter(([k]) => !data?.[k]?.length).map(([, l]) => l.toLowerCase());
+  return (
+    <>
+      {found.length > 0 && <div className="grid md:grid-cols-2 gap-4">{found.map(([k, label]) => (
+        <div key={k}><h4 className="font-medium text-sm">{label}</h4>
+          <ul className="list-disc ml-5 text-sm space-y-0.5">{data[k].map((i: any) => <li key={i.evidence_id}>{i.statement} <EvidenceRefs ids={[i.evidence_id]} /></li>)}</ul></div>
+      ))}</div>}
+      {missing.length > 0 && <p className="text-xs text-slate-500 mt-2">Not found in the sources read: {missing.join(", ")}.</p>}
+    </>
+  );
+}
+
+function Landscape({ m }: { m: any }) {
+  if (!m) return null;
+  return (
+    <div className="mt-3 border-t pt-3">
+      <h4 className="font-medium text-sm mb-2">From this analysis's competitor research</h4>
+      <div className="grid sm:grid-cols-3 gap-3 text-sm">
+        <div className="rounded border p-2"><div className="text-xs text-slate-500">AI adoption</div><div className="text-xl font-semibold">{pct(m.ai_adoption)}</div><div className="text-xs text-slate-500">of {m.landscape_size} competitors offer an AI capability</div></div>
+        <div className="rounded border p-2"><div className="text-xs text-slate-500">Automation adoption</div><div className="text-xl font-semibold">{pct(m.automation_adoption)}</div><div className="text-xs text-slate-500">offer automation capabilities</div></div>
+        <div className="rounded border p-2"><div className="text-xs text-slate-500">Industry standards the client offers</div><div className="text-xl font-semibold">{pct(m.client_standard_coverage)}</div><div className="text-xs text-slate-500">of {m.industry_standards.length} must-have capabilities</div></div>
+      </div>
+      <div className="mt-3 text-sm space-y-1">
+        <div><span className="text-slate-500">Common industry features (must-have):</span> {m.industry_standards.join(", ") || "—"}</div>
+        <div><span className="text-slate-500">Emerging capabilities:</span> {m.emerging.join(", ") || "—"}</div>
+        <div><span className="text-slate-500">Differentiators / niche:</span> {m.differentiators.join(", ") || "—"}</div>
+        {m.unique_to_client.length > 0 && <div><span className="text-slate-500">Unique to the client:</span> {m.unique_to_client.join(", ")}</div>}
+      </div>
+      <p className="text-xs text-slate-500 mt-2">Based on the {m.basis === "top10" ? `top ${m.landscape_size} competitors` : `${m.deep_size} deep-analysed competitors`}; direct and indirect competitors are listed in the Competitors tab.</p>
+    </div>
+  );
+}
+
+/** Sections A-E from the sources read, market figures with their context, and the sources. */
+function MarketResearch({ r, m, trends, notes }: { r: any; m: any; trends: any[]; notes?: string[] }) {
+  if (!r?.available) {
+    return (
+      <>
+        {r?.reason && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">Deep market research: {r.reason}</p>}
+        <Card title="Market trends (from search results)">
+          {trends.length === 0 ? <Empty>{notes?.[0] ?? "No sourced trends found."}</Empty> : (
+            <ul className="list-disc ml-5 text-sm">{trends.map((t: any) => <li key={t.evidence_id}>{t.statement} <EvidenceRefs ids={[t.evidence_id]} />
+              {t.snippet_only && <span className="text-xs text-slate-500"> (search snippet; the page was not read)</span>}</li>)}</ul>
+          )}
+        </Card>
+        {m && <Card title={TITLES.D}><Landscape m={m} /></Card>}
+      </>
+    );
+  }
+  const s = r.sections ?? {};
+  return (
+    <>
+      <Card title="Market figures">
+        {r.figures?.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-slate-500 border-b"><tr><th className="py-1 pr-2">Metric</th><th className="pr-2">Value</th><th className="pr-2">Period</th>
+                <th className="pr-2">Geography</th><th className="pr-2">Definition</th><th className="pr-2">Original source</th><th /></tr></thead>
+              <tbody>{r.figures.map((f: any) => (
+                <tr key={f.metric + f.value} className="border-t align-top">
+                  <td className="py-1.5 pr-2">{f.metric}</td><td className="pr-2 font-medium">{f.value}</td>
+                  <td className="pr-2">{f.period ?? <span className="text-amber-700">not stated</span>}</td>
+                  <td className="pr-2">{f.geography ?? <span className="text-amber-700">not stated</span>}</td>
+                  <td className="pr-2 text-xs">{f.definition ?? "—"}</td>
+                  <td className="pr-2 text-xs">{f.original_source ?? "—"}</td>
+                  <td><EvidenceRefs ids={f.evidence_id ? [f.evidence_id] : []} /></td>
+                </tr>))}</tbody>
+            </table>
+            <p className="text-xs text-slate-500 mt-2">Only figures stated, with their number, on the page cited. Figures without a period or geography should be read with care.</p>
           </div>
-          <div className="mt-3 text-sm space-y-1">
-            <div><span className="text-slate-500">Industry standards (must-have):</span> {m.industry_standards.join(", ") || "—"}</div>
-            <div><span className="text-slate-500">Emerging expectations:</span> {m.emerging.join(", ") || "—"}</div>
-            <div><span className="text-slate-500">Differentiators / niche:</span> {m.differentiators.join(", ") || "—"}</div>
-            {m.unique_to_client.length > 0 && <div><span className="text-slate-500">Unique to the client:</span> {m.unique_to_client.join(", ")}</div>}
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Based on the {m.basis === "top10" ? `top ${m.landscape_size} competitors` : `${m.deep_size} deep-analysed competitors`}.</p>
+        ) : <Empty>No reliable market figure (size, growth, share) was found in the sources read; the assessment below is qualitative.</Empty>}
+      </Card>
+      {(["A", "B", "C", "D", "E"] as const).map((k) => (
+        <Card key={k} title={TITLES[k]}>
+          <Statements section={k} data={s} />
+          {k === "D" && <Landscape m={m} />}
+        </Card>
+      ))}
+      {r.qualitative_assessment && (
+        <Card title={<>Qualitative assessment <BasisTag basis="estimate" /></>}>
+          <p className="text-sm">{r.qualitative_assessment}</p>
+          <p className="text-xs text-slate-500 mt-1">The analyst's interpretation of the sources above, not a sourced fact.</p>
         </Card>
       )}
-      <Card title="Market trends (from public sources)">
-        {d.trends.length === 0 && <Empty>{d.notes?.[0] ?? "No sourced trends found."}</Empty>}
-        {kinds.map(([k, label]) => {
-          const items = d.trends.filter((t: any) => t.kind === k);
-          if (!items.length) return null;
-          return (
-            <div key={k} className="mb-2">
-              <h3 className="text-xs font-semibold text-slate-500">{label}</h3>
-              <ul className="list-disc ml-5 text-sm">{items.map((t: any) => <li key={t.evidence_id}>{t.statement} <EvidenceRefs ids={[t.evidence_id]} /></li>)}</ul>
-            </div>
-          );
-        })}
+      <Card title="Sources read">
+        <ul className="text-sm space-y-0.5">{(r.sources ?? []).map((x: any) => (
+          <li key={x.url}><a className="text-indigo-700 underline" href={x.url} target="_blank" rel="noreferrer">{x.title || x.url}</a>
+            <span className="text-xs text-slate-500"> · accessed {new Date(x.accessed_at).toLocaleDateString()}</span></li>))}</ul>
+        {r.unread?.length > 0 && <p className="text-xs text-slate-500 mt-2">Could not be read: {r.unread.join(", ")}.</p>}
+        {r.dropped > 0 && <p className="text-xs text-slate-500 mt-1">{r.dropped} statement(s) were left out because their quote was not found in the cited page.</p>}
       </Card>
-    </div>
+    </>
   );
 }
 

@@ -44,6 +44,7 @@ ANALYSIS_FIELDS: dict[str, tuple[type, float, float]] = {
     "crawler_max_pdfs": (int, 0, 10),
     "feature_extraction_batches": (int, 1, 6),
     "competitor_feature_batches": (int, 1, 6),
+    "market_max_sources": (int, 0, 20),
     "ux_max_pages": (int, 1, 10),
     "roadmap_top_n": (int, 3, 30),
     "freshness_fresh_days": (int, 1, 365),
