@@ -318,6 +318,8 @@ class Competitor(BaseModel):
     profile: dict = Field(default_factory=dict)
     inventory: list[dict] = Field(default_factory=list)  # detailed features (core/offering.py)
     workflows: list[dict] = Field(default_factory=list)  # documented workflows / use cases
+    # recent public announcements on its own site: {title, url, date, is_product, evidence_id}
+    announcements: list[dict] = Field(default_factory=list)
     # {"shared": [...], "competitor_only": [...], "client_only": [...]} of {"feature_id", "name"}
     overlap: dict = Field(default_factory=dict)
 

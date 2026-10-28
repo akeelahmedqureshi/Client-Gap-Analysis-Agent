@@ -44,6 +44,49 @@ function Overlap({ o }: { o: any }) {
   );
 }
 
+const price = (p: any) =>
+  p.quote_based ? "contact sales" : p.free ? "free" : p.price != null
+    ? `${p.price.toLocaleString()} ${p.currency ?? ""}${p.period ? ` / ${p.period}` : ""}${p.unit && p.unit !== "flat" ? ` per ${p.unit}` : ""}`.trim()
+    : "not stated";
+
+/** The competitor's own plans: grounded plan detail when available, else the price parser's reading. */
+function Plans({ c }: { c: any }) {
+  const detailed = c.pricing_detail?.available && c.pricing_detail.plans?.length;
+  const plans: any[] = detailed ? c.pricing_detail.plans : c.pricing_profile?.plans ?? [];
+  if (!plans.length) return null;
+  return (
+    <div>
+      <h4 className="font-medium text-sm mb-1">Plans and published prices</h4>
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs text-slate-500 border-b"><tr><th className="py-1 pr-2">Plan</th><th className="pr-2">Published price</th><th className="pr-2">Includes</th><th /></tr></thead>
+        <tbody>{plans.map((p) => (
+          <tr key={p.name} className="border-t align-top">
+            <td className="py-1.5 pr-2 font-medium">{p.name}{p.conflict && <span className="ml-1 text-xs text-amber-700">(conflicting readings)</span>}</td>
+            <td className="pr-2">{price(p)}{p.annual_price_per_month != null && <div className="text-xs text-slate-500">{p.annual_price_per_month} / month billed annually</div>}</td>
+            <td className="pr-2 text-xs text-slate-600">{(p.included_features ?? []).slice(0, 4).map((x: any) => x.text).join("; ") || "—"}</td>
+            <td>{p.evidence_id && <EvidenceRefs ids={[p.evidence_id]} />}</td>
+          </tr>))}</tbody>
+      </table>
+      <p className="text-xs text-slate-500 mt-1">{detailed ? "Each price is quoted from the competitor's pricing page." : "Read by the price parser; plan details need the AI extraction."} The Pricing tab compares plans side by side.</p>
+    </div>
+  );
+}
+
+function Announcements({ items }: { items?: any[] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <h4 className="font-medium text-sm mb-1">Recent public announcements</h4>
+      <ul className="text-sm space-y-0.5">{items.map((a) => (
+        <li key={a.url}>
+          {a.is_product && <span className="mr-1 rounded bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 uppercase">product</span>}
+          <a className="text-indigo-700 underline" href={a.url} target="_blank" rel="noreferrer">{a.title}</a>
+          {a.date && <span className="text-xs text-slate-500"> · {a.date}</span>} <EvidenceRefs ids={[a.evidence_id]} />
+        </li>))}</ul>
+    </div>
+  );
+}
+
 function Profile({ c, open }: { c: any; open: boolean }) {
   const profile = c.profile ?? {};
   const found = SECTIONS.filter(([k]) => profile[k]?.length);
@@ -88,6 +131,8 @@ function Profile({ c, open }: { c: any; open: boolean }) {
           </div>
         )}
         {c.workflows?.length > 0 && <DocumentedWorkflows flows={c.workflows} subject={c.name} />}
+        <Plans c={c} />
+        <Announcements items={c.announcements} />
         {c.pages_analysed?.length > 0 && (
           <details className="text-xs"><summary className="cursor-pointer text-slate-600">Pages analysed ({c.pages_analysed.length})</summary>
             <ul className="mt-1 space-y-0.5">{c.pages_analysed.map((u: string) => <li key={u}><SourceLink url={u} /></li>)}</ul>

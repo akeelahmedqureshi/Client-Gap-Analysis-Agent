@@ -86,6 +86,7 @@ SITES: dict[str, str] = {
         "<a href='https://apps.apple.com/us/app/medibook/id2222222222'>Download on the App Store</a>"
         "<a href='https://play.google.com/store/apps/details?id=com.medibook.app'>Get it on Google Play</a>"
         "<a href='/signup'>Start free trial</a><a href='/login'>Log in</a><a href='/help'>Help center</a>"
+        "<a href='/news/medibook-5-release'>MediBook 5 released with a redesigned calendar</a>"
         "<p>Trusted by 3,000 clinics.</p><script src='https://widget.intercom.io/widget/mb1'></script>",
         "Clinic scheduling with an AI assistant", head=VIEWPORT, lang="en"),
     "https://clinicflow.com/pricing": html(

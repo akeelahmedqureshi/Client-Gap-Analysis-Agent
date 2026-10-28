@@ -87,10 +87,14 @@ export function LandscapeCard({ landscape, ranking }: { landscape: any[]; rankin
 export function MarketTab({ runId, enabled, comparisonDone }: { runId: string; enabled: boolean; comparisonDone: boolean }) {
   const res = useAgent(runId, "industry_market", enabled);
   const fc = useAgent(runId, "feature_comparison", comparisonDone);
+  // feature_comparison runs after competitor research and pricing, so both are ready with it.
+  const cr = useAgent(runId, "competitor_research", comparisonDone);
+  const pa = useAgent(runId, "pricing_analysis", comparisonDone);
   if (!enabled) return <Pending />;
   const d = res.data?.data;
   if (!d) return null;
   const m = fc.data?.data.market;
+  const players = { landscape: cr.data?.data.landscape ?? [], pricing: pa.data?.data.comparison };
   const facts: [string, string, string | undefined][] = [
     ["Industry", d.industry, d.basis?.industry], ["Market segment", d.market_segment, d.basis?.market_segment],
     ["Product category", d.product_category, d.basis?.product_category],
@@ -111,7 +115,7 @@ export function MarketTab({ runId, enabled, comparisonDone }: { runId: string; e
         </dl>
         <div className="mt-2"><EvidenceRefs ids={d.evidence_ids} /></div>
       </Card>
-      <MarketResearch r={d.research} m={m} trends={d.trends ?? []} notes={d.notes} />
+      <MarketResearch r={d.research} m={m} players={players} trends={d.trends ?? []} notes={d.notes} />
     </div>
   );
 }
@@ -147,6 +151,56 @@ function Statements({ section, data }: { section: string; data: any }) {
   );
 }
 
+const CLASS_GROUPS: [string, string[]][] = [
+  ["Direct competitors", ["direct", "enterprise", "emerging"]], ["Indirect and adjacent", ["indirect", "adjacent", "open_source"]],
+];
+
+/** Who competes, directly or indirectly, and at what published prices (from the competitor and pricing research). */
+function Participants({ landscape, pricing }: { landscape: any[]; pricing?: any }) {
+  if (!landscape.length) return null;
+  const rows: any[] = pricing?.rows ?? [];
+  const base = pricing?.base_currency;
+  const range = (name: string) => {
+    const own = rows.filter((r) => r.subject === name);
+    const paid = own.filter((r) => r.monthly_normalized && !r.quote_based).map((r) => r.monthly_normalized);
+    const parts = [];
+    if (own.some((r) => r.free)) parts.push("free plan");
+    if (paid.length) {
+      const lo = Math.min(...paid), hi = Math.max(...paid);
+      parts.push(`≈${lo.toLocaleString()}${hi !== lo ? `–${hi.toLocaleString()}` : ""} ${base}/month`);
+    }
+    if (own.some((r) => r.quote_based)) parts.push("contact sales");
+    return parts.join(", ");
+  };
+  const all = rows.filter((r) => r.kind === "competitor" && r.monthly_normalized && !r.quote_based).map((r) => r.monthly_normalized);
+  return (
+    <div className="mt-3 border-t pt-3">
+      <h4 className="font-medium text-sm mb-2">Competitors identified in this analysis</h4>
+      <div className="grid md:grid-cols-2 gap-4">
+        {CLASS_GROUPS.map(([title, classes]) => {
+          const items = landscape.filter((c) => classes.includes(c.classification));
+          return (
+            <div key={title}>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{title} ({items.length})</div>
+              {items.length ? (
+                <ul className="text-sm space-y-0.5">{items.map((c) => (
+                  <li key={c.id}>{c.rank && <span className="text-slate-400">#{c.rank} </span>}<span className="font-medium">{c.name}</span>
+                    {c.classification !== classes[0] && <span className="text-xs text-slate-500"> ({c.classification.replace("_", " ")})</span>}
+                    {range(c.name) && <span className="text-xs text-slate-600"> · {range(c.name)}</span>}</li>))}</ul>
+              ) : <Empty>None identified.</Empty>}
+            </div>
+          );
+        })}
+      </div>
+      {all.length > 0 && (
+        <p className="text-sm mt-2"><span className="text-slate-500">Published paid price range of the deep-analysed competitors:</span>{" "}
+          ≈{Math.min(...all).toLocaleString()}–{Math.max(...all).toLocaleString()} {base}/month
+          <span className="text-xs text-slate-500"> (converted list prices; quote-based plans excluded; see the Pricing tab)</span></p>
+      )}
+    </div>
+  );
+}
+
 function Landscape({ m }: { m: any }) {
   if (!m) return null;
   return (
@@ -163,13 +217,13 @@ function Landscape({ m }: { m: any }) {
         <div><span className="text-slate-500">Differentiators / niche:</span> {m.differentiators.join(", ") || "—"}</div>
         {m.unique_to_client.length > 0 && <div><span className="text-slate-500">Unique to the client:</span> {m.unique_to_client.join(", ")}</div>}
       </div>
-      <p className="text-xs text-slate-500 mt-2">Based on the {m.basis === "top10" ? `top ${m.landscape_size} competitors` : `${m.deep_size} deep-analysed competitors`}; direct and indirect competitors are listed in the Competitors tab.</p>
+      <p className="text-xs text-slate-500 mt-2">Based on the {m.basis === "top10" ? `top ${m.landscape_size} competitors` : `${m.deep_size} deep-analysed competitors`}.</p>
     </div>
   );
 }
 
 /** Sections A-E from the sources read, market figures with their context, and the sources. */
-function MarketResearch({ r, m, trends, notes }: { r: any; m: any; trends: any[]; notes?: string[] }) {
+function MarketResearch({ r, m, players, trends, notes }: { r: any; m: any; players: any; trends: any[]; notes?: string[] }) {
   if (!r?.available) {
     return (
       <>
@@ -180,7 +234,7 @@ function MarketResearch({ r, m, trends, notes }: { r: any; m: any; trends: any[]
               {t.snippet_only && <span className="text-xs text-slate-500"> (search snippet; the page was not read)</span>}</li>)}</ul>
           )}
         </Card>
-        {m && <Card title={TITLES.D}><Landscape m={m} /></Card>}
+        {(m || players.landscape.length > 0) && <Card title={TITLES.D}><Participants {...players} /><Landscape m={m} /></Card>}
       </>
     );
   }
@@ -210,7 +264,7 @@ function MarketResearch({ r, m, trends, notes }: { r: any; m: any; trends: any[]
       {(["A", "B", "C", "D", "E"] as const).map((k) => (
         <Card key={k} title={TITLES[k]}>
           <Statements section={k} data={s} />
-          {k === "D" && <Landscape m={m} />}
+          {k === "D" && <><Participants {...players} /><Landscape m={m} /></>}
         </Card>
       ))}
       {r.qualitative_assessment && (

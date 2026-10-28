@@ -67,3 +67,14 @@ async def test_top3_profiles_are_specific_quoted_and_compared_with_the_client(ma
     only = {x["feature_id"] for x in mb["overlap"]["competitor_only"]}
     assert shared <= client and not (only & client) and "ai.assistant" in only
     assert {x["feature_id"] for x in mb["overlap"]["client_only"]} <= client
+
+
+async def test_competitor_announcements_are_recorded_with_evidence(make_ctx):
+    from test_pipeline import run_all
+
+    ctx = make_ctx()
+    await run_all(ctx)
+    mb = next(c for c in ctx.data("competitor_research")["competitors"] if c["name"] == "MediBook")
+    news = next(a for a in mb["announcements"] if "MediBook 5" in a["title"])
+    assert news["url"] == "https://medibook.io/news/medibook-5-release" and news["is_product"]
+    assert ctx.ledger.get(news["evidence_id"]).source_url.rstrip("/") == "https://medibook.io"

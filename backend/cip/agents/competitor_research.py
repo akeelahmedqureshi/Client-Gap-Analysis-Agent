@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
 from cip.agents.pricing_analysis import record_pricing
+from cip.connectors.research.enrichment import find_announcements
 from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind_of
 from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.web import registrable_domain
@@ -547,6 +548,13 @@ class CompetitorResearchAgent(Agent):
             ctx.llm, ledger, pages, comp.name, base_currency=s.pricing_base_currency, rates=s.pricing_fx_rates,
             rates_date=s.pricing_fx_date, deterministic=comp.pricing_profile,
             accessed_at=priced_page.fetched_at if priced_page else None)
+        # Public announcements (blog, news, changelog) on its own pages: product moves to watch.
+        comp.announcements = []
+        for a in find_announcements(pages, limit=8):
+            e = ledger.add(f"{comp.name} announcement: {a.title}", a.source_url, "website", 0.8 if a.date else 0.7,
+                           extracted_text=f"{a.title} — {a.url}" + (f" ({a.date})" if a.date else ""))
+            comp.announcements.append({"title": a.title, "url": a.url, "date": a.date, "is_product": a.is_product,
+                                       "evidence_id": e.id})
         if comp.pricing_profile and not comp.pricing:
             entry = comp.pricing_profile.get("entry_price_monthly")
             comp.pricing = (f"from {entry:g} {comp.pricing_profile.get('currency') or ''}/month".strip()
