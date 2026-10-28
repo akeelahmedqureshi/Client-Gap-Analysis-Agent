@@ -147,15 +147,34 @@ class NormalizedRecord(BaseModel):
 # --------------------------------------------------------------------------
 
 
+ContactStatus = Literal[
+    "verified",       # published on the official website and, for links, the destination opened and names the company
+    "official_link",  # published on the official website; the destination could not be checked (sign-in, robots…)
+    "redirected",     # the link leads somewhere else (another site or a generic page)
+    "inaccessible",   # the destination did not open (not found, server error)
+    "mismatch",       # the destination opened but does not identify this company: possibly the wrong account
+    "unverified",     # not published on the official website and not confirmed
+]
+
+
 class Contact(BaseModel):
+    # twitter / facebook / instagram / youtube are no longer collected; the types stay so older runs still load.
     type: Literal[
-        "email", "phone", "address", "contact_page", "linkedin", "twitter", "facebook",
+        "website", "about_page", "email", "phone", "address", "contact_page", "linkedin", "twitter", "facebook",
         "instagram", "youtube", "github", "gitlab", "docs", "developer_portal",
         "community", "app_store", "google_play",
     ]
     value: str
-    source: str
+    source: str  # where it was published (an official page, the CSV, a search result)
     confidence: float = Field(ge=0.0, le=1.0)
+    account_name: str = ""  # the company / account name shown at the destination
+    status: ContactStatus = "unverified"
+    status_detail: str = ""  # why it has this status, in plain words
+    method: str = ""  # how it was checked
+    verified_at: datetime | None = None  # when the check was made
+    final_url: str | None = None  # where the link ended up, if it redirected
+    official_source: bool = False  # published on the company's own website
+    evidence_ids: list[str] = Field(default_factory=list)
 
 
 class ProductDiscovery(BaseModel):

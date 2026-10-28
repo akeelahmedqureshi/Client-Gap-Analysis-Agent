@@ -37,7 +37,8 @@ PREFERRED_MAILBOXES = ("sales", "hello", "info", "contact", "partnerships", "bus
 def _pick_contact(ctx: RunContext, profile: dict) -> dict | None:
     if ctx.record.client.email:
         return {"email": ctx.record.client.email, "source": "CSV"}
-    emails = [c for c in profile.get("contacts", []) if c.get("type") == "email"]
+    # Only addresses published on the company's own website and domain (status "verified"); older runs had no status.
+    emails = [c for c in profile.get("contacts", []) if c.get("type") == "email" and c.get("status", "verified") == "verified"]
     emails.sort(key=lambda c: next((i for i, p in enumerate(PREFERRED_MAILBOXES)
                                     if c["value"].split("@")[0].lower() == p), 99))
     return {"email": emails[0]["value"], "source": emails[0].get("source")} if emails else None

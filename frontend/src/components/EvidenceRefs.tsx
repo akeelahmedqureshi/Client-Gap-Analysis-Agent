@@ -24,6 +24,7 @@ export default function EvidenceRefs({ ids }: { ids: string[] | undefined }) {
               <div className="font-medium text-slate-800">{e.claim}</div>
               <div className="text-slate-500">
                 {e.source_type} · confidence {Math.round(e.confidence * 100)}%
+                {e.collected_at && <> · accessed {new Date(e.collected_at).toLocaleDateString()}</>}
                 {e.repository_path && <> · <code>{e.repository_path}{e.line_range ? `:${e.line_range}` : ""}</code></>}
               </div>
               {e.source_url.startsWith("http") ? (

@@ -27,6 +27,7 @@ from cip.connectors.research.enrichment import (
 )
 from cip.agents.pricing_analysis import record_pricing
 from cip.connectors.research.pricing import extract_pricing
+from cip.connectors.research import contacts as contact_research
 from cip.connectors.research.domain import check_domain
 from cip.core.language import summarize as summarize_languages
 from cip.connectors.research.domain import summary as domain_summary
@@ -40,16 +41,7 @@ log = logging.getLogger(__name__)
 
 PAGE_TEXT_LIMIT = 8_000
 VALID_KINDS = set(get_args(ProductDiscovery.model_fields["kind"].annotation))
-ROLE_EMAIL_LOCALPARTS = {
-    "info", "contact", "hello", "sales", "support", "help", "press", "media", "partners", "partnerships",
-    "careers", "jobs", "hr", "billing", "accounts", "office", "enquiries", "inquiries", "team", "admin",
-    "marketing", "security", "privacy", "legal", "service", "customerservice", "customercare", "care",
-}
-SOCIAL_TYPES = {
-    "linkedin.com": "linkedin", "twitter.com": "twitter", "x.com": "twitter", "facebook.com": "facebook",
-    "instagram.com": "instagram", "youtube.com": "youtube", "github.com": "github", "gitlab.com": "gitlab",
-    "apps.apple.com": "app_store", "itunes.apple.com": "app_store", "play.google.com": "google_play",
-}
+
 
 
 class _LLMProduct(BaseModel):
@@ -128,48 +120,6 @@ def page_summary(p: Page) -> dict:
             "lang": p.lang, "alternates": p.alternates}
 
 
-def discover_contacts(pages: list[Page], company_domain: str | None) -> tuple[list[Contact], int]:
-    contacts: dict[tuple[str, str], Contact] = {}
-    ignored_personal = 0
-
-    def add(c: Contact) -> None:
-        key = (c.type, c.value.lower().rstrip("/"))
-        if key not in contacts or contacts[key].confidence < c.confidence:
-            contacts[key] = c
-
-    for p in pages:
-        path = urlparse(p.url).path.lower()
-        if "contact" in path:
-            add(Contact(type="contact_page", value=p.url, source=p.url, confidence=0.95))
-        for email in p.emails:
-            local, _, dom = email.partition("@")
-            if local.split("+")[0] not in ROLE_EMAIL_LOCALPARTS:
-                ignored_personal += 1  # avoid collecting personal data
-                continue
-            same = company_domain and registrable_domain(dom) == company_domain
-            add(Contact(type="email", value=email, source=p.url, confidence=0.95 if same else 0.6))
-        if "contact" in path or p.url.rstrip("/") == pages[0].url.rstrip("/"):
-            for phone in p.phones[:3]:
-                add(Contact(type="phone", value=phone, source=p.url, confidence=0.7))
-        for link in p.external_links:
-            host = registrable_domain(link)
-            ctype = next((t for h, t in SOCIAL_TYPES.items() if host == h or host.endswith("." + h)), None)
-            if ctype:
-                if ctype == "linkedin" and "/in/" in link:
-                    continue  # personal profile
-                add(Contact(type=ctype, value=link, source=p.url, confidence=0.85))
-            elif host.startswith(("docs.", "developer.", "developers.", "api.")):
-                add(Contact(type="docs" if host.startswith("docs.") else "developer_portal",
-                            value=link, source=p.url, confidence=0.8))
-            elif host.startswith(("community.", "forum.")):
-                add(Contact(type="community", value=link, source=p.url, confidence=0.75))
-        for link in p.links:
-            lp = urlparse(link).path.lower()
-            if re.search(r"^/(docs|documentation|developers?|api)(/|$)", lp):
-                add(Contact(type="docs", value=link, source=p.url, confidence=0.75))
-    return list(contacts.values()), ignored_personal
-
-
 class ClientResearchAgent(Agent):
     name = "client_research"
     description = "Research the client company and its public website"
@@ -201,13 +151,7 @@ class ClientResearchAgent(Agent):
         list_fields = {"brand": "brands", "subsidiary": "subsidiaries", "geographic_market": "geographic_markets"}
         for f in facts:
             if f.label == "social_profile":
-                host = registrable_domain(f.value)
-                ctype = next((t for h, t in SOCIAL_TYPES.items() if host == h or host.endswith("." + h)), None)
-                if ctype and not any(c.value.rstrip("/") == f.value.rstrip("/") for c in contacts):
-                    contacts.append(Contact(type=ctype, value=f.value, source=f.source_url, confidence=f.confidence))
-                    ctx.ledger.add(f"{ctype.title()}: {f.value}", f.source_url, "website", f.confidence,
-                                   extracted_text=f.extracted_text)
-                continue
+                continue  # schema.org sameAs profiles are collected and verified with the other contacts
             ev = ctx.ledger.add(f"{name} {f.label.replace('_', ' ')}: {f.value}", f.source_url, "website",
                                 f.confidence, extracted_text=f.extracted_text)
             if f.label in list_fields:
@@ -329,11 +273,25 @@ class ClientResearchAgent(Agent):
             leadership.append({"name": person.name, "title": person.title, "evidence_ids": [ev.id]})
 
         # Contacts & social --------------------------------------------------
-        contacts, ignored = discover_contacts(all_pages, profile.domain)
+        # Collected from the official website; CSV and search links are checked but never trusted on their own.
+        extra = [(u, f"csv://row/{rec.row_number}") for u in rec.sources.linkedin] + \
+            [(c.linkedin_url, c.source_url or "") for c in companies if c.linkedin_url and c.source_url]
+        contacts, ignored = contact_research.collect(all_pages, rec.client.name, profile.domain, extra)
+        contacts = await contact_research.verify(ctx.fetcher, contacts, rec.client.name, profile.domain, all_pages)
         for c in contacts:
-            ev = ledger.add(f"{c.type.replace('_', ' ').title()}: {c.value}", c.source, "website", c.confidence,
-                            extracted_text=c.value)
-            evidence_ids.append(ev.id)
+            label = contact_research.LABELS.get(c.type, c.type)
+            stype = "website" if c.official_source else "csv" if c.source.startswith("csv://") else "search"
+            weight = {"verified": 0.95, "official_link": 0.7}.get(c.status, 0.4)
+            ev = ledger.add(f"{label}: {c.value} ({c.status.replace('_', ' ')})", c.source, stype, weight,
+                            extracted_text=c.status_detail or c.value)
+            c.evidence_ids.append(ev.id)
+            if c.status == "verified" and c.type not in ("website", "contact_page", "about_page", "email", "phone",
+                                                         "address"):
+                dest = ledger.add(f"{label} profile identifies {rec.client.name}", c.final_url or c.value, stype,
+                                  0.9, extracted_text=c.status_detail)
+                c.evidence_ids.append(dest.id)
+            c.confidence = weight
+            evidence_ids.extend(c.evidence_ids)
         profile.contacts = contacts
         if ignored:
             findings.append(Finding(category="privacy", title=f"Ignored {ignored} personal email address(es)",
@@ -437,8 +395,9 @@ class ClientResearchAgent(Agent):
             findings.append(Finding(category="product", title=f"{p.kind.replace('_', ' ')}: {p.name}",
                                     detail=p.description, evidence_ids=p.evidence_ids, confidence=p.confidence))
 
-        linkedin = next((c.value for c in contacts if c.type == "linkedin"), None) or \
-            next((c.linkedin_url for c in companies if c.linkedin_url), None)
+        # Only a LinkedIn page the official website publishes is shown as the company's LinkedIn.
+        linkedin = next((c.value for c in contacts if c.type == "linkedin" and c.status in ("verified", "official_link")),
+                        None)
         return AgentResult(
             findings=findings,
             evidence=[ledger.get(i) for i in {*profile.evidence_ids, *evidence_ids,

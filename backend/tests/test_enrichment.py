@@ -51,7 +51,8 @@ async def test_pipeline_enrichment_end_to_end(make_ctx):
     assert p["founded_year"] == 2012 and p["headquarters"] == "Austin, TX, US"
     assert p["company_size"] == "51-200"
     assert p["geographic_markets"] == ["United States", "Canada"] and "Patient Scheduler" in p["brands"]
-    assert any(c["type"] == "youtube" for c in p["contacts"])   # sameAs -> social profile
+    # Facebook, Instagram, X and YouTube are excluded, even when schema.org sameAs or a footer link lists them.
+    assert not any(c["type"] in ("youtube", "twitter", "facebook", "instagram") for c in p["contacts"])
 
     hiring = research["hiring"]
     assert hiring["job_count"] == 4 and hiring["sources"] == ["greenhouse:https://boards.greenhouse.io/abchealth"]

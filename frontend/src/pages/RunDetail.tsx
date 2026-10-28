@@ -16,6 +16,7 @@ import ErrorBoundary from "../components/ErrorBoundary";
 import { useCanExport } from "../lib/useOrg";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Explain";
+import ClientContacts from "../components/ClientContacts";
 
 const TABS = ["Pipeline", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Sales", "Review", "Evidence", "Report"] as const;
@@ -406,15 +407,7 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
       </Card>
       <HiringCard hiring={d.hiring} />
       <AnnouncementsCard items={d.announcements ?? []} />
-      <Card title="Contact & social">
-        {p.contacts?.length ? (
-          <ul className="text-sm space-y-1">
-            {p.contacts.map((c: any) => (
-              <li key={c.type + c.value}><Badge value={c.type} /> <span className="break-all">{c.value}</span> <Confidence value={c.confidence} /></li>
-            ))}
-          </ul>
-        ) : <Empty>None found.</Empty>}
-      </Card>
+      <ClientContacts contacts={p.contacts} />
     </div>
   );
 }

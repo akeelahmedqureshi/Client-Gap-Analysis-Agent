@@ -352,7 +352,11 @@ def render_markdown(report: dict) -> str:
     if ci["leadership"]:
         out += ["### Leadership", _md_list([f"{p['name']} — {p['title']}{p['cite']}" for p in ci["leadership"]]), ""]
     if ci["contacts"]:
-        out += ["### Contact & social", _md_list([f"{x['type']}: {x['value']}" for x in ci["contacts"]]), ""]
+        excluded = {"facebook", "instagram", "twitter", "youtube"}
+        out += ["### Contact & official profiles", _md_list([
+            f"{x['type'].replace('_', ' ')}: {x['value']} — {(x.get('status') or 'not checked').replace('_', ' ')}"
+            + (f" ({x['status_detail']})" if x.get("status_detail") else "")
+            for x in ci["contacts"] if x["type"] not in excluded]), ""]
     hiring = ci.get("hiring") or {}
     if hiring.get("signals"):
         out += ["### Hiring signals",

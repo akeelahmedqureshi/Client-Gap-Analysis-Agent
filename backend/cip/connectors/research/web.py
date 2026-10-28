@@ -76,6 +76,8 @@ class Page:
     alternates: dict[str, str] = field(default_factory=dict)  # hreflang -> URL of the page in that language
     cached: bool = False  # served from the research cache
     fetched_at: datetime | None = None  # set for cached pages: when the page was really fetched
+    site_name: str = ""  # the name the page declares for its owner (og:site_name, else og:title)
+    addresses: list[str] = field(default_factory=list)  # text of <address> elements
 
 
 def normalize_url(url: str) -> str:
@@ -174,6 +176,10 @@ def parse_html(url: str, status: int, html: str) -> Page:
                 alternates[link["hreflang"].lower()] = href
     desc = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
     title = soup.title.get_text(strip=True) if soup.title else ""
+    og = {m.get("property", "").lower(): (m.get("content") or "").strip()
+          for m in soup.find_all("meta", property=True) if m.get("property", "").lower() in ("og:site_name", "og:title")}
+    site_name = og.get("og:site_name") or og.get("og:title") or ""
+    addresses = [" ".join(a.get_text(" ", strip=True).split())[:300] for a in soup.find_all("address")]
     headings = [h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"])][:60]
 
     links: list[str] = []
@@ -223,6 +229,7 @@ def parse_html(url: str, status: int, html: str) -> Page:
         emails=sorted(emails), phones=sorted(phones)[:10], headings=headings, scripts=scripts,
         generator=gen.get("content") if gen else None, structured_data=structured, link_texts=link_texts,
         lang=detect_language(f"{title} {text}", declared), alternates=dict(list(alternates.items())[:30]),
+        site_name=site_name[:200], addresses=[a for a in dict.fromkeys(addresses) if a][:5],
     )
 
 
