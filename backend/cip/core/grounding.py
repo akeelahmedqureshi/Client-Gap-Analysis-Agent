@@ -75,6 +75,16 @@ class Grounder:
         return self.ledger.add(claim, doc.url, doc.source_type, confidence,
                                extracted_text=extracted, repository_path=doc.repository_path)
 
+    def is_verified(self, source_url: str, quote: str) -> bool:
+        """The quote really is in the cited source (normalized whitespace and punctuation)."""
+        doc = self.docs.get(self._key(source_url or ""))
+        return bool(doc and quote and quote_in_text(quote, doc.text))
+
+    def ground_verified(self, claim: str, source_url: str, quote: str, base_confidence: float = 0.85
+                        ) -> Evidence | None:
+        """Evidence only when the quote is found in the source; nothing is recorded otherwise."""
+        return self.ground(claim, source_url, quote, base_confidence) if self.is_verified(source_url, quote) else None
+
     def ground_value(self, label: str, sv: SourcedValue | None, base_confidence: float = 0.85) -> Evidence | None:
         if sv is None or not sv.value:
             return None

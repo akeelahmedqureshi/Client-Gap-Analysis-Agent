@@ -17,8 +17,9 @@ import { useCanExport } from "../lib/useOrg";
 import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTabs";
 import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Explain";
 import ClientContacts from "../components/ClientContacts";
+import { DocumentedWorkflows, FeatureInventory } from "../components/Offering";
 
-const TABS = ["Pipeline", "Client", "Project", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
+const TABS = ["Pipeline", "Client", "Products & Services", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Sales", "Review", "Evidence", "Report"] as const;
 type Tab = (typeof TABS)[number];
 const ACTIVE = new Set(["queued", "running"]);
@@ -197,7 +198,7 @@ export default function RunDetailPage() {
         <ErrorBoundary resetKey={tab}>
         {tab === "Pipeline" && <>{done("quality_assurance") && <QualityCard runId={runId} />}<Pipeline run={r} /></>}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
-        {tab === "Project" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} />}
+        {tab === "Products & Services" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} client="the client" />}
         {tab === "Competitors" && <CompetitorsTab runId={runId} projectId={r.project_id} enabled={done("competitor_research")} />}
         {tab === "Security" && <SecurityTab runId={runId} enabled={done("security_review")} />}
         {tab === "Pricing" && <PricingTab runId={runId} enabled={done("pricing_analysis")} />}
@@ -412,7 +413,7 @@ function ClientTab({ runId, enabled }: { runId: string; enabled: boolean }) {
   );
 }
 
-function ProjectTab({ runId, enabled, codeDone }: { runId: string; enabled: boolean; codeDone: boolean }) {
+function ProjectTab({ runId, enabled, codeDone, client }: { runId: string; enabled: boolean; codeDone: boolean; client: string }) {
   const features = useAgent(runId, "product_features", enabled);
   const code = useAgent(runId, "code_analysis", codeDone);
   if (!enabled) return <Pending />;
@@ -420,22 +421,9 @@ function ProjectTab({ runId, enabled, codeDone }: { runId: string; enabled: bool
   const profiles = code.data?.data.profiles ?? [];
   return (
     <div className="space-y-4">
+      <FeatureInventory items={inv} subject={client} />
+      <DocumentedWorkflows flows={features.data?.data.documented_workflows ?? []} subject={client} />
       <PositioningCards data={features.data?.data} />
-      <Card title="Features">
-        <table className="w-full text-sm">
-          <thead className="text-left text-slate-500"><tr><th>Feature</th><th>Status</th><th>Technology</th><th>Evidence</th></tr></thead>
-          <tbody>
-            {inv.map((f: any) => (
-              <tr key={f.name} className="border-t align-top">
-                <td className="py-1.5">{f.name}<BasisTag basis={f.basis} /><div className="text-xs text-slate-500">{f.description}</div></td>
-                <td><Badge value={f.status} /></td>
-                <td className="text-xs">{(f.technology ?? []).join(", ") || "—"}</td>
-                <td><EvidenceRefs ids={f.evidence_ids} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
       {profiles.map((p: any) => (
         <Card key={p.url} title={<a className="underline" href={p.url} target="_blank" rel="noreferrer">{p.full_name}</a>}>
           <div className="text-sm space-y-2">

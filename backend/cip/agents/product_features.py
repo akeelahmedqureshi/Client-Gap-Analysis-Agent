@@ -12,38 +12,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from pydantic import BaseModel, Field
-
 from cip.agents.base import Agent, RunContext
 from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind_of
 from cip.core import positioning
 from cip.core.evidence import snippet
-from cip.core.grounding import Grounder, SourceDoc, pages_to_prompt
-from cip.core.llm import LLMError, LLMUnavailable
+from cip.core import offering
+from cip.core.grounding import SourceDoc
+from cip.core.llm import LLMUnavailable
 from cip.core.schemas import AgentResult, Basis, FeatureObservation, FeatureStatus, Finding
 from cip.core.taxonomy import Taxonomy
-
-
-class _LLMFeature(BaseModel):
-    name: str
-    feature_id: str | None = None
-    description: str = ""
-    status: str = "available"
-    user_type: str = ""
-    business_purpose: str = ""
-    source_url: str
-    quote: str = ""
-
-
-class _LLMFeatures(BaseModel):
-    features: list[_LLMFeature] = Field(default_factory=list)
-
-
-SYSTEM_PROMPT = """You are a product analyst. From the provided sources list the product features of the
-client's project. For each feature: a short name, the matching taxonomy feature_id if one fits (else null),
-a one-sentence description, status ('available' or 'partial'), the primary user type, the business purpose,
-the SOURCE url it was found in and a verbatim quote from that source. Only include features the sources
-actually state; never infer features that are not mentioned. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
 
 
 def combine_signals(signals: list[dict], coverage: dict[str, bool]) -> dict[str, FeatureObservation]:
@@ -164,40 +141,31 @@ class ProductFeatureAgent(Agent):
                 signals.append({"feature_id": fid, "status": "available", "evidence_id": ev.id,
                                 "source": "csv", "confidence": 0.7})
 
-        # LLM feature inventory, grounded ------------------------------------
+        # Detailed feature inventory and documented workflows, grounded (core/offering.py) ----------------
         inventory: list[dict] = []
-        docs = [SourceDoc(p["url"], f"{p.get('title', '')}\n{' / '.join(p.get('headings', []))}\n{p.get('text', '')}",
-                          "website") for p in pages]
+        documented_workflows: list[dict] = []
+        docs = offering.capability_docs(pages)
         csv_text = "\n".join(filter(None, [rec.project.description, "; ".join(rec.project.existing_features),
                                            rec.project.notes]))
         if csv_text:
             docs.append(SourceDoc(csv_source, csv_text, "csv"))
         if docs:
-            grounder = Grounder(ledger, docs)
             try:
-                result = await ctx.llm.complete_json(
-                    SYSTEM_PROMPT,
-                    f"Client: {rec.client.name}\nProject: {rec.project.name}\n\nTaxonomy:\n"
-                    f"{ctx.taxonomy.describe_for_prompt()}\n\n{pages_to_prompt(docs, 30_000)}",
-                    _LLMFeatures,
-                )
-                for f in result.features:
-                    ev = grounder.ground(f"{rec.project.name} feature: {f.name}", f.source_url, f.quote, 0.8)
-                    if not ev:
-                        continue
-                    fid = f.feature_id if f.feature_id in ctx.taxonomy else None
-                    inventory.append({"name": f.name, "feature_id": fid, "description": f.description,
-                                      "status": "partial" if f.status == "partial" else "available",
-                                      "user_type": f.user_type, "business_purpose": f.business_purpose,
-                                      "evidence_ids": [ev.id], "technology": [], "basis": "evidence"})
-                    if fid:
-                        signals.append({"feature_id": fid, "status": "partial" if f.status == "partial" else "available",
-                                        "evidence_id": ev.id, "source": "llm_extraction",
-                                        "confidence": ev.confidence})
+                inventory, errs = await offering.extract_features(
+                    ctx.llm, ledger, docs, rec.client.name, rec.project.name, ctx.taxonomy,
+                    max_batches=ctx.settings.feature_extraction_batches)
+                errors += errs
+                documented_workflows, errs = await offering.extract_workflows(
+                    ctx.llm, ledger, [d for d in docs if d.source_type == "website"], rec.client.name,
+                    rec.project.name)
+                errors += errs
             except LLMUnavailable:
                 pass
-            except LLMError as exc:
-                errors.append(f"LLM feature extraction failed: {exc}")
+            for item in inventory:
+                if item["feature_id"] and item["verification"] == "documented":
+                    signals.append({"feature_id": item["feature_id"], "status": item["status"],
+                                    "evidence_id": item["evidence_ids"][0], "source": "llm_extraction",
+                                    "confidence": 0.85})
 
         coverage = {"website": bool(pages), "code": bool(code.get("profiles")),
                     "csv": bool(rec.project.existing_features or rec.project.description)}
@@ -213,9 +181,14 @@ class ProductFeatureAgent(Agent):
                 techs = sorted({ledger.get(e).extracted_text for e in ob.evidence_ids
                                 if ledger.get(e) and ledger.get(e).source_type in ("github", "gitlab")
                                 and ledger.get(e).extracted_text and len(ledger.get(e).extracted_text) < 60})
-                inventory.append({"name": tf.name, "feature_id": fid, "description": "", "status": ob.status.value,
-                                  "user_type": "", "business_purpose": "", "evidence_ids": ob.evidence_ids,
-                                  "technology": techs, "basis": ob.basis.value})
+                inventory.append({
+                    "name": tf.name, "feature_id": fid, "category": tf.category_name, "description": "",
+                    "status": ob.status.value, "verification": ob.verification,
+                    "facts": {f: [] for f in offering.FACT_FIELDS},
+                    "interpretation": {"purpose": "", "intended_users": [], "use_cases": [], "benefits": []},
+                    "sources": list(dict.fromkeys(ledger.get(e).source_url for e in ob.evidence_ids if ledger.get(e))),
+                    "dropped_details": 0, "user_type": "", "business_purpose": "", "evidence_ids": ob.evidence_ids,
+                    "technology": techs, "basis": ob.basis.value})
 
         findings = [
             Finding(category="feature", title=f"{i['name']} ({i['status']})", detail=i["description"],
@@ -240,6 +213,12 @@ class ProductFeatureAgent(Agent):
             findings.append(Finding(category="positioning", title=f"Value proposition: {proposition['statement'][:150]}",
                                     detail=proposition.get("supporting") or "", evidence_ids=proposition["evidence_ids"],
                                     confidence=0.85))
+        for w in documented_workflows:
+            findings.append(Finding(
+                category="workflow", title=f"Workflow “{w['name']}”: {w['documented_steps']} of {len(w['steps'])} "
+                                           "steps documented",
+                detail=w["objective"] or w["outcome"], evidence_ids=w["evidence_ids"][:6], confidence=0.8,
+                basis=Basis.EVIDENCE if w["verification"] == "documented" else Basis.INFERRED))
         for w in flows:
             findings.append(Finding(
                 category="workflow", title=f"{w['actor'].title()} workflow “{w['name']}”: {w['supported']} of "
@@ -249,12 +228,17 @@ class ProductFeatureAgent(Agent):
                 basis=Basis.INFERRED))
         return AgentResult(
             findings=findings,
-            evidence=[ledger.get(e) for ob in observations.values() for e in ob.evidence_ids if ledger.get(e)],
+            evidence=[ledger.get(e) for e in dict.fromkeys(
+                [e for ob in observations.values() for e in ob.evidence_ids]
+                + [e for i in inventory for e in i["evidence_ids"]]
+                + [e for w in documented_workflows for e in w["evidence_ids"]]) if ledger.get(e)],
             confidence=0.8 if sum(coverage.values()) >= 2 else 0.5,
             errors=errors,
             data={"observations": {k: v.model_dump() for k, v in observations.items()},
                   "inventory": inventory, "coverage": coverage, "status_counts": dict(counts),
                   "positioning": {"value_proposition": proposition, "use_cases": cases, "customer_problems": problems,
                                   "audiences": who},
-                  "workflows": flows},
+                  # catalogue workflows mapped onto the capabilities (inferred), and workflows the company's
+                  # own pages document step by step
+                  "workflows": flows, "documented_workflows": documented_workflows},
         )

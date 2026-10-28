@@ -16,8 +16,10 @@ import importlib
 PROMPTS: dict[str, tuple[str, str, str, str]] = {
     "client_research.extract": ("cip.agents.client_research", "SYSTEM_PROMPT", "client_research",
                                 "Company facts extraction"),
-    "product_features.extract": ("cip.agents.product_features", "SYSTEM_PROMPT", "product_features",
-                                 "Product feature extraction"),
+    "product_features.extract": ("cip.core.offering", "FEATURE_PROMPT", "product_features",
+                                 "Detailed feature extraction (client and competitors)"),
+    "product_features.workflows": ("cip.core.offering", "WORKFLOW_PROMPT", "product_features",
+                                   "Documented workflow extraction"),
     "code_analysis.review": ("cip.agents.code_analysis", "SYSTEM_PROMPT", "code_analysis", "Repository review"),
     "industry_market.extract": ("cip.agents.industry_market", "PROMPT", "industry_market",
                                 "Industry and market extraction"),

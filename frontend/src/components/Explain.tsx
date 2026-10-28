@@ -144,7 +144,9 @@ export function PositioningCards({ data }: { data: any }) {
             : <Empty>No problem statements found on the client's pages.</Empty>}
         </div>
       </Card>
-      <Card title="Workflows">
+      <Card title="Typical workflows for this kind of product (inferred)">
+        <p className="text-xs text-slate-500 mb-2">A standard workflow catalogue mapped onto the capabilities found; an
+          inference, not the client's documented process (see <i>Documented workflows</i>).</p>
         {flows.length === 0 ? <Empty>No workflows visible on the client's public pages.</Empty> : (
           <ul className="space-y-3 text-sm">
             {flows.map((w) => (
