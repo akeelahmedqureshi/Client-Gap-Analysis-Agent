@@ -199,7 +199,7 @@ export default function RunDetailPage() {
         </div>
 
         <ErrorBoundary resetKey={tab}>
-        {tab === "Pipeline" && <>{done("quality_assurance") && <QualityCard runId={runId} />}<Pipeline run={r} /></>}
+        {tab === "Pipeline" && <>{done("quality_assurance") && <QualityCard runId={runId} finished={canAct && FINISHED.includes(r.status)} />}<Pipeline run={r} /></>}
         {tab === "Client" && <ClientTab runId={runId} enabled={done("client_research")} />}
         {tab === "Products & Services" && <ProjectTab runId={runId} enabled={done("product_features")} codeDone={done("code_analysis")} client="the client" />}
         {tab === "Competitors" && <CompetitorsTab runId={runId} projectId={r.project_id} enabled={done("competitor_research")} />}
@@ -289,10 +289,29 @@ function QualityBadge({ runId }: { runId: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${QA_STYLE[q.state]}`} title="Analysis completeness and quality">{q.label}</span>;
 }
 
-function QualityCard({ runId }: { runId: string }) {
+function QualityCard({ runId, finished }: { runId: string; finished: boolean }) {
   const q = useAgent(runId, "quality_assurance", true).data?.data;
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const navigate = useNavigate();
   if (!q) return null;
+  // One click re-runs the stages the failed consistency checks name (and everything downstream) as a new version.
+  async function rerun(stages: string[]) {
+    if (!confirm(`Re-run ${stages.join(", ").replaceAll("_", " ")} and every stage that depends on them? A new version of this analysis is created.`)) return;
+    setBusy(true);
+    try {
+      const next = await api.post<Run>(`/api/runs/${runId}/rerun`, { stages });
+      navigate(`/runs/${next.run_id}`);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const failed = (q.consistency ?? []).filter((c: any) => !c.passed);
+  const allStages: string[] = Array.from(new Set(failed.flatMap((c: any) => c.rerun)));
+  const weak = (q.corroboration ?? []).filter((c: any) => c.weaknesses.length);
   const m = q.metrics;
   const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`);
   const shown = q.issues.filter((i: any) => i.severity !== "info");
@@ -326,12 +345,36 @@ function QualityCard({ runId }: { runId: string }) {
                 {!c.passed && (
                   <div className="ml-5 text-xs">
                     <ul className="list-disc ml-4 text-slate-600">{c.items.map((i: string) => <li key={i}>{i}</li>)}</ul>
-                    <div className="text-slate-500">To rebuild the affected results, re-run: {c.rerun.join(", ")}.</div>
+                    <div className="text-slate-500 flex flex-wrap items-center gap-2">To rebuild the affected results, re-run: {c.rerun.join(", ")}.
+                      {finished && <button className="text-indigo-700 underline disabled:opacity-50" disabled={busy} onClick={() => rerun(c.rerun)}>Re-run these stages</button>}
+                    </div>
                   </div>
                 )}
               </li>
             ))}
           </ul>
+          {finished && failed.length > 1 && (
+            <Button className="mt-2 text-xs" variant="secondary" disabled={busy} onClick={() => rerun(allStages)}>Re-run all flagged stages</Button>
+          )}
+          <ErrorText error={error} />
+        </details>
+      )}
+      {q.corroboration?.length > 0 && (
+        <details className="mt-3" open={weak.some((c: any) => c.weaknesses.some((w: string) => w !== "single source"))}>
+          <summary className="cursor-pointer text-sm font-medium">
+            Corroboration of key findings: {q.corroboration.length - weak.length} of {q.corroboration.length} rest on more than one source
+          </summary>
+          <table className="mt-2 w-full text-sm">
+            <thead className="text-left text-xs text-slate-500"><tr><th className="py-1 pr-2">Finding</th><th className="pr-2">Why it matters</th><th className="pr-2">Sources</th><th>Weaknesses</th></tr></thead>
+            <tbody>{q.corroboration.map((c: any) => (
+              <tr key={c.gap_id} className="border-t align-top">
+                <td className="py-1 pr-2">{c.name}</td>
+                <td className="pr-2 text-xs text-slate-600">{c.why.join(", ")}</td>
+                <td className="pr-2">{c.sources}</td>
+                <td className="text-xs">{c.weaknesses.length ? <span className={c.weaknesses.some((w: string) => w !== "single source") ? "text-rose-700" : "text-amber-700"}>{c.weaknesses.join(", ")}</span> : <span className="text-emerald-700">corroborated</span>}</td>
+              </tr>))}</tbody>
+          </table>
+          <p className="text-xs text-slate-500 mt-1">Gaps stated to the client, confirmed or high-priority gaps and the top recommendations. A single source can be enough when it is the company's own page; search snippets and one-off mentions are not.</p>
         </details>
       )}
       <p className="text-xs text-slate-500 mt-2">

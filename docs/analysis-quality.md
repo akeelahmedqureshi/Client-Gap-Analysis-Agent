@@ -140,7 +140,20 @@ The quality check on the Pipeline tab verifies that the tabs agree:
 - the two readings of competitor prices;
 - the market analysis against the client's industry.
 
-A contradiction is reported with the stages to re-run, never silently kept.
+A contradiction is reported with the stages to re-run, never silently kept. **Re-run these stages** (or
+**Re-run all flagged stages**) creates a new version of the analysis that rebuilds those stages and
+everything that depends on them; the rest is reused.
+
+## Corroboration of key findings
+
+The findings that matter most are checked for corroboration: gaps stated to the client, confirmed or
+high-priority gaps, and the top recommendations. Each is listed with its number of sources and any
+weakness:
+
+- **Single source**: all its evidence comes from one page. This is shown for information, because one
+  documented page of the company itself can be enough.
+- **Search snippets only**: no page behind it was read. This is a warning.
+- **Mentions only**: no competitor's capability is documented or evidenced. This is a warning.
 
 ## Settings that control depth (Configuration → Analysis)
 

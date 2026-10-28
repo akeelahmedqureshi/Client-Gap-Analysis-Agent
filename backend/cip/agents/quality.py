@@ -46,6 +46,40 @@ LOW_CONFIDENCE = 0.45
 CORE = Path(__file__).resolve().parents[1] / "core"
 
 
+def corroboration(gaps: list[dict], opps: list[dict], recs: list[dict], sales: dict, ledger) -> list[dict]:
+    """How well the findings that matter most are corroborated: confirmed or high-priority gaps, the top
+    recommendations and the gaps the sales summary states to the client.
+
+    Weaknesses: *single source* (all evidence from one page), *snippets only* (only search-result snippets,
+    no page read) and *mentions only* (no competitor's capability is documented or evidenced)."""
+    verdicts = {o["gap_id"]: o for o in opps}
+    told = {g["gap_id"] for g in sales.get("top_gaps", [])}
+    top_recs = {r["gap_id"] for r in recs[:3]}   # recommendations are stored in ranked order
+    out = []
+    for g in gaps:
+        o = verdicts.get(g["id"], {})
+        why = [w for w, ok in (("stated to the client", g["id"] in told), ("confirmed gap", o.get("verdict") == "confirmed"),
+                                ("high priority", o.get("priority") == "high"), ("top recommendation", g["id"] in top_recs))
+               if ok]
+        if not why or g.get("gap_type") == "security":
+            continue  # security findings come from direct checks of the client's own systems
+        evidence = [ev for e in g.get("evidence_ids", []) if (ev := ledger.get(e))]
+        urls = {ev.source_url.rstrip("/").lower() for ev in evidence}
+        weak = []
+        if not evidence:
+            weak.append("no evidence")
+        elif all(ev.source_type == "search" for ev in evidence):
+            weak.append("search snippets only")
+        if len(urls) == 1:
+            weak.append("single source")
+        detail = (g.get("assessment") or {}).get("competitor_verified", {}).get("detail", "")
+        if g.get("competitors_with") and detail and all("(mentioned)" in part for part in detail.split(", ")):
+            weak.append("mentions only")
+        out.append({"gap_id": g["id"], "name": g["name"], "why": why, "sources": len(urls),
+                    "source_urls": sorted(urls)[:5], "weaknesses": weak, "client_facing": g["id"] in told})
+    return out
+
+
 def _hash(*parts: str) -> str:
     return hashlib.sha1("\n".join(parts).encode()).hexdigest()[:10]
 
@@ -200,8 +234,20 @@ class QualityAssuranceAgent(Agent):
                     and not r.get("review"):  # a reviewer's deliberate decision is not a scoring error
                 flag("blocking", "recommendations", f"“{r['feature']}” is High priority on low-confidence evidence.")
 
-        # --- output quality -------------------------------------------------------------------
+        # --- corroboration of the findings that matter most -------------------------------------
         sales = ctx.data("sales_intelligence")
+        corroborated = corroboration(gaps, opps, recs, sales, ledger)
+        for c in corroborated:
+            hard = [w for w in c["weaknesses"] if w != "single source"]
+            if hard:
+                # weak evidence behind a claim made to the client, or a confirmed / high-priority gap
+                flag("warning", "corroboration", f"“{c['name']}” ({', '.join(c['why'])}) rests on "
+                                                 f"{' and '.join(hard)}; corroborate before relying on it.")
+            elif c["weaknesses"]:
+                flag("info", "corroboration", f"“{c['name']}” ({', '.join(c['why'])}) rests on a single source "
+                                              f"({c['source_urls'][0]}).")
+
+        # --- output quality -------------------------------------------------------------------
         rec_ids = {r["id"] for r in recs}
         if sales and not {i["recommendation_id"] for i in sales.get("top_improvements", [])} <= rec_ids:
             flag("blocking", "outputs", "The sales summary does not match the recommendations.")
@@ -251,6 +297,10 @@ class QualityAssuranceAgent(Agent):
             "usage": ctx.usage.summary(),
             "manual_overrides": len(ctx.review),
             "consistency_issues": sum(1 for c in consistency if not c["passed"]),
+            "high_impact_findings": len(corroborated),
+            "single_source_findings": sum(1 for c in corroborated if "single source" in c["weaknesses"]),
+            "weakly_supported_findings": sum(1 for c in corroborated
+                                             if any(w != "single source" for w in c["weaknesses"])),
         }
         cfg = ctx.config or {}
         repro = {
@@ -282,7 +332,7 @@ class QualityAssuranceAgent(Agent):
             + [Finding(category=f"quality.{i['area']}", title=i["message"][:200], confidence=0.8,
                        basis=Basis.INFERRED) for i in blocking + warnings],
             data={"state": state, "label": label, "issues": issues, "conflicts": conflicts, "metrics": metrics,
-                  "consistency": consistency,
+                  "consistency": consistency, "corroboration": corroborated,
                   "reproducibility": repro,
                   "thresholds": {"min_evidence_coverage": MIN_EVIDENCE_COVERAGE, "low_confidence": LOW_CONFIDENCE,
                                  "fresh_days": s.freshness_fresh_days, "stale_days": s.freshness_stale_days}},

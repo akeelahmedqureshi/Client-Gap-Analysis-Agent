@@ -96,3 +96,28 @@ async def test_report_follows_the_brs_structure(make_ctx):
     assert "Reproducibility" in md[md.index("## Appendix B."):]
     sections_json = ctx.data("report")["report"]["sections"]
     assert sections_json["completeness"]["state"] == "complete" and sections_json["business_impact"]
+
+
+def test_high_impact_findings_on_weak_evidence_are_flagged():
+    from cip.agents.quality import corroboration
+    from cip.core.evidence import EvidenceLedger
+
+    ledger = EvidenceLedger()
+    snip = ledger.add("Rival offers chat", "https://search.example/q?chat", "search", 0.5)
+    page_a = ledger.add("Rival offers SSO", "https://rival.io/features", "website", 0.85)
+    page_b = ledger.add("Rival SSO plan", "https://rival.io/pricing", "website", 0.85)
+    gaps = [
+        {"id": "g1", "name": "Live chat", "gap_type": "missing", "evidence_ids": [snip.id], "competitors_with": ["c1"],
+         "assessment": {"competitor_verified": {"passed": False, "detail": "Rival (mentioned)"}}},
+        {"id": "g2", "name": "SSO", "gap_type": "missing", "evidence_ids": [page_a.id, page_b.id],
+         "competitors_with": ["c1"], "assessment": {"competitor_verified": {"passed": True, "detail": "Rival (documented)"}}},
+        {"id": "g3", "name": "Minor", "gap_type": "missing", "evidence_ids": [snip.id], "competitors_with": []},
+    ]
+    opps = [{"gap_id": "g1", "verdict": "potential", "priority": "high"},
+            {"gap_id": "g2", "verdict": "confirmed", "priority": "medium"},
+            {"gap_id": "g3", "verdict": "optional", "priority": "low"}]
+    sales = {"top_gaps": [{"gap_id": "g2"}]}
+    out = {c["name"]: c for c in corroboration(gaps, opps, [], sales, ledger)}
+    assert set(out) == {"Live chat", "SSO"}, "only high-impact findings are checked"
+    assert out["Live chat"]["weaknesses"] == ["search snippets only", "single source", "mentions only"]
+    assert out["SSO"]["weaknesses"] == [] and out["SSO"]["sources"] == 2 and out["SSO"]["client_facing"]

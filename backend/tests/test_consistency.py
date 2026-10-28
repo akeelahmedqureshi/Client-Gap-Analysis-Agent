@@ -43,3 +43,24 @@ async def test_contradictions_are_reported_with_the_stages_to_rerun(make_ctx):
     assert "feature_comparison" in checks["comparison_client"]["rerun"]
     assert checks["sales_vs_gaps"]["items"] == ["Removed gap"]
     assert "Contradiction" in checks["gaps_vs_client"]["items"][0]
+
+
+async def test_every_stage_a_check_names_can_be_rerun_in_one_click(make_ctx):
+    from cip.services.rerun import expand
+
+    ctx = make_ctx()
+    await run_all(ctx)
+    data = {name: copy.deepcopy(ctx.data(name)) for name in ctx.outputs}
+    data["sales_intelligence"]["top_gaps"] = [{"gap_id": "gap_gone", "name": "Removed gap"}]
+    data["feature_comparison"]["rows"][0]["client"] = "bogus"
+    checks = run_checks(lambda n: data.get(n, {}), "ABC Healthcare")
+    # Every stage any check can name (the failed ones above, plus the rest of the checks' lists).
+    named = {s for c in checks for s in c["rerun"]} | {
+        "feature_comparison", "gap_analysis", "opportunity_prioritization", "sales_intelligence", "outreach",
+        "competitor_research", "pricing_analysis", "industry_market"}
+    for stage in named:
+        selected, everything = expand([stage])
+        assert selected == [stage] and "quality_assurance" in everything   # QA re-checks the rebuilt results
+    # The button sends a failed check's list as is.
+    for c in (c for c in checks if not c["passed"]):
+        assert expand(c["rerun"])[0] == c["rerun"]
