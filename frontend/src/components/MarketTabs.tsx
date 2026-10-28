@@ -5,6 +5,7 @@ import { EvidenceList } from "./Explain";
 import { RunBenchmark } from "./Benchmarks";
 import { Badge, BasisTag, Card, Empty } from "./ui";
 import EvidenceRefs from "./EvidenceRefs";
+import { VerificationBadge } from "./Verification";
 
 const FACTOR_LABEL: Record<string, string> = {
   feature_overlap: "Feature overlap", product_similarity: "Product", industry_similarity: "Industry",
@@ -22,7 +23,7 @@ const CLASS_STYLE: Record<string, string> = {
 };
 const ICON: Record<string, string> = { available: "✅", partial: "🟡", missing: "❌", unknown: "❔" };
 const STATUS_LABEL: Record<string, string> = {
-  available: "available", partial: "partially available", unknown: "not publicly identified", missing: "confirmed missing",
+  available: "Available", partial: "Partially available", unknown: "Not publicly identified", missing: "Confirmed unavailable",
 };
 const pct = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v * 100)}%`);
 
@@ -285,15 +286,16 @@ export function ComparisonTab({ runId, enabled }: { runId: string; enabled: bool
             {rows.map((row: any) => (
               <tr key={row.feature_id} className="border-t">
                 <td className="py-1 text-slate-500">{row.category}</td>
-                <td>{row.feature_name}</td>
+                <td><button className="text-left hover:text-indigo-700 underline decoration-dotted" title="Compare in detail"
+                  onClick={() => setCell(cell?.feature === row.feature_id ? null : { feature: row.feature_id, party: "client" })}>{row.feature_name}</button></td>
                 {[["client", row.client], ...d.competitors.map((c: any) => [c.id, row.competitors[c.id] ?? "unknown"])].map(([party, st]: any) => {
                   const n = row.evidence?.[party]?.length ?? 0;
                   const active = cell?.feature === row.feature_id && cell?.party === party;
                   return (
                     <td key={party} className="text-center">
-                      <button disabled={!n} onClick={() => setCell(active ? null : { feature: row.feature_id, party })}
+                      <button onClick={() => setCell(active ? null : { feature: row.feature_id, party })}
                         title={`${STATUS_LABEL[st]}${n ? ` — ${n} source(s), click to see them` : ""}`}
-                        className={`rounded px-1 ${n ? "hover:bg-indigo-50 cursor-pointer" : "cursor-default"} ${active ? "ring-2 ring-indigo-400" : ""}`}>
+                        className={`rounded px-1 hover:bg-indigo-50 cursor-pointer ${active ? "ring-2 ring-indigo-400" : ""}`}>
                         {ICON[st]}{n ? <sup className="text-[9px] text-indigo-600">{n}</sup> : null}
                       </button>
                     </td>
@@ -309,17 +311,48 @@ export function ComparisonTab({ runId, enabled }: { runId: string; enabled: bool
       </div>
       {cell && (() => {
         const row = d.rows.find((r: any) => r.feature_id === cell.feature);
-        const who = cell.party === "client" ? "the client" : d.competitors.find((c: any) => c.id === cell.party)?.name;
+        if (!row) return null;
+        const parties: [string, string, string][] = [["client", "Client", row.client],
+          ...d.competitors.map((c: any) => [c.id, c.name, row.competitors[c.id] ?? "unknown"] as [string, string, string])];
         return (
-          <div className="mt-3 border rounded-lg p-3">
-            <div className="text-sm font-medium mb-2">Evidence: {row?.feature_name} — {who}</div>
-            <EvidenceList ids={row?.evidence?.[cell.party]} />
+          <div className="mt-3 border rounded-lg p-3 space-y-3">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="font-medium">{row.feature_name}</span><span className="text-xs text-slate-500">{row.category}</span>
+              <button className="ml-auto text-xs underline text-slate-500" onClick={() => setCell(null)}>Close</button>
+            </div>
+            {row.description && <p className="text-sm"><span className="text-slate-500">What it does:</span> {row.description}</p>}
+            <div className="text-sm grid md:grid-cols-2 gap-2">
+              {row.relevance && <div><span className="text-slate-500">Business relevance:</span> {row.relevance}</div>}
+              {row.significance && <div><span className="text-slate-500">Competitive significance:</span> {row.significance}</div>}
+            </div>
+            <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+              {parties.map(([id, name, st]) => {
+                const c = row.cells?.[id] ?? {};
+                return (
+                  <div key={id} className={`rounded-lg border p-2 text-sm ${cell.party === id ? "ring-2 ring-indigo-300" : ""}`}>
+                    <div className="font-medium">{name}</div>
+                    <div className="flex flex-wrap items-center gap-1 my-1">
+                      <span>{ICON[st]} {STATUS_LABEL[st]}</span>
+                      {c.verification && <VerificationBadge status={c.verification} />}
+                    </div>
+                    {c.implementation && <p className="text-slate-700">{c.implementation}</p>}
+                    {c.packaging && <p className="text-xs mt-1"><span className="text-slate-500">Packaging:</span> {c.packaging.add_on ? "paid add-on" : "included"}
+                      {c.packaging.plans?.length > 0 && <> in {c.packaging.plans.join(", ")}</>}</p>}
+                    {c.limitations?.length > 0 && <div className="text-xs mt-1"><span className="text-slate-500">Documented limitations:</span> {c.limitations.join("; ")}</div>}
+                    {c.platforms?.length > 0 && <div className="text-xs mt-1"><span className="text-slate-500">Platforms:</span> {c.platforms.join(", ")}</div>}
+                    {c.note && <div className="text-xs text-slate-500 mt-1">{c.note}</div>}
+                    <div className="mt-1"><EvidenceList ids={row.evidence?.[id]} /></div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })()}
-      <p className="text-xs text-slate-500 mt-2">Click a status with a number to see its evidence.
-        ✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing.
-        Not publicly identified means no public evidence was found, not that the capability is absent.</p>
+      <p className="text-xs text-slate-500 mt-2">Click a capability or a status to compare it in detail with its evidence.
+        ✅ Available: evidence confirms it is offered · 🟡 Partially available: offered with documented limits ·
+        ❔ Not publicly identified: the evidence does not establish whether it exists (never treated as missing) ·
+        ❌ Confirmed unavailable: the company's own pages say it is not offered.</p>
     </Card>
   );
 }

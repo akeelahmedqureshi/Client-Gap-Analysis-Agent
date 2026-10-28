@@ -74,7 +74,7 @@ SITES: dict[str, str] = {
         "the United States.</p>"),
     "https://abc-healthcare.com/products/patient-scheduler": html(
         "Patient Scheduler", "<h1>Patient Scheduler</h1><p>Online booking for clinics with a patient portal "
-        "and dashboard.</p>", "Patient Scheduler: online booking for clinics"),
+        "and dashboard. Video consultations are not available yet.</p>", "Patient Scheduler: online booking for clinics"),
     "https://abc-healthcare.com/contact": html(
         "Contact", "<p>Contact us: <a href='mailto:support@abc-healthcare.com'>support</a> "
         "<a href='mailto:jane.porter@abc-healthcare.com'>Jane</a> Call +1 512 555 0100</p>"),

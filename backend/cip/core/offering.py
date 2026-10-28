@@ -25,6 +25,7 @@ from cip.connectors.research.pages import CAPABILITY_KINDS, PRIORITY, kind_of
 from cip.core.evidence import EvidenceLedger
 from cip.core.grounding import Grounder, SourceDoc, pages_to_prompt
 from cip.core.llm import LLMClient, LLMError, LLMUnavailable
+from cip.core.negation import negates
 from cip.core.taxonomy import Taxonomy
 
 BATCH_CHARS = 30_000
@@ -107,7 +108,9 @@ List every product feature or service capability the sources describe — not ma
 For each feature give:
 - name; the matching taxonomy feature_id if one fits (else null); a category (e.g. Scheduling, Billing);
 - description: 2-4 sentences on what it does and how, using only what the sources say;
-- status: "available", or "partial" when the sources state a limitation or a basic version;
+- status: "available"; "partial" when the sources state a limitation or a basic version; "unavailable" ONLY
+  when a source explicitly says the capability is not offered (quote that statement) — never because a page
+  does not mention it;
 - source_url and a short verbatim quote proving the feature exists;
 - FACT lists — how_it_works, key_functionality, inputs, outputs, platforms (web, iOS, Android, API…),
   integrations (third-party services), prerequisites, limitations — each item with the source_url and a short
@@ -201,14 +204,20 @@ async def extract_features(llm: LLMClient, ledger: EvidenceLedger, docs: list[So
             m["sources"] = list(dict.fromkeys(m["sources"] + item["sources"]))
             if item["verification"] == "documented":
                 m["verification"] = "documented"
-            if item["status"] == "available" and item["verification"] == "documented":
-                m["status"] = "available"
+            if item["verification"] == "documented" and (item["status"] == "available" or m["status"] == "missing"):
+                m["status"] = item["status"]
             m["dropped_details"] += item["dropped_details"]
     return list(merged.values())[:MAX_FEATURES], errors
 
 
 def _feature_item(f: _LLMFeature, grounder: Grounder, company: str, taxonomy: Taxonomy) -> dict:
-    ev = grounder.ground_verified(f"{company} offers {f.name}", f.source_url, f.quote, 0.85)
+    unavailable = f.status == "unavailable"
+    if unavailable and not negates(f.quote):
+        # "Confirmed unavailable" needs a quote that actually says it is not offered; otherwise nothing is known.
+        return {**_feature_item(f.model_copy(update={"status": "available", "quote": ""}), grounder, company, taxonomy),
+                "status": "unknown", "verification": "unverified", "evidence_ids": [], "basis": "inferred"}
+    ev = grounder.ground_verified(f"{company} {'does not offer' if unavailable else 'offers'} {f.name}", f.source_url,
+                                  f.quote, 0.85)
     facts: dict[str, list[dict]] = {}
     dropped = 0
     for field in FACT_FIELDS:
@@ -225,7 +234,9 @@ def _feature_item(f: _LLMFeature, grounder: Grounder, company: str, taxonomy: Ta
     return {
         "name": f.name.strip(), "feature_id": fid, "category": f.category or (taxonomy.get(fid).category_name
                                                                               if fid else ""),
-        "description": f.description.strip(), "status": "partial" if f.status == "partial" else "available",
+        # "missing" = confirmed unavailable: only from an explicit, quoted statement of the company itself
+        "description": f.description.strip(), "status": {"partial": "partial", "unavailable": "missing"}.get(
+            f.status, "available"),
         "verification": "documented" if ev else "unverified",
         "facts": facts,
         "interpretation": {"purpose": f.purpose.strip(), "intended_users": f.intended_users,

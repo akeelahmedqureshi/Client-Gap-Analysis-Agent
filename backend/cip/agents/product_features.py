@@ -17,6 +17,7 @@ from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind
 from cip.core import positioning
 from cip.core.evidence import snippet
 from cip.core import offering
+from cip.core.negation import affirmed
 from cip.core.grounding import SourceDoc
 from cip.core.llm import LLMUnavailable
 from cip.core.schemas import AgentResult, Basis, FeatureObservation, FeatureStatus, Finding
@@ -46,7 +47,10 @@ def combine_signals(signals: list[dict], coverage: dict[str, bool]) -> dict[str,
         independent = sources - {"website", "llm_extraction", "path"}
         web_strong = (any(s.get("keywords", 1) >= 2 or kind_of(s.get("page") or "") in OFFERING_KINDS for s in web)
                       or len({s.get("page") for s in web}) >= 2 or (bool(web) and "path" in sources))
-        if documented:
+        if documented and all(s["status"] == "missing" for s in documented) and not (independent or web_strong):
+            # The company's own pages explicitly say it is not offered: confirmed unavailable.
+            grade, status = "documented", FeatureStatus.MISSING
+        elif documented:
             grade = "documented"
             status = (FeatureStatus.AVAILABLE if any(s["status"] == "available" for s in documented) or independent
                       or web_strong else FeatureStatus.PARTIAL)
@@ -109,6 +113,9 @@ class ProductFeatureAgent(Agent):
             text = " ".join([page.get("title", ""), page.get("description", ""), " ".join(page.get("headings", [])),
                              page.get("text", "")])
             for fid, kws in ctx.taxonomy.match_text(text).items():
+                kws = affirmed(text, kws)  # "video calls are not available yet" is not evidence of video calls
+                if not kws:
+                    continue
                 ev = ledger.add(f"Website mentions {ctx.taxonomy.get(fid).name}", page["url"], "website",
                                 0.6 if len(kws) > 1 else 0.5, extracted_text=snippet(text, kws[0]))
                 signals.append({"feature_id": fid, "status": "available", "evidence_id": ev.id,

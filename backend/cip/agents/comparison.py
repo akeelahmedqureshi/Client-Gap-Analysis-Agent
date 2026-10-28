@@ -22,6 +22,63 @@ from cip.core.schemas import AgentResult, ComparisonRow, FeatureStatus, Finding
 
 HAS = (FeatureStatus.AVAILABLE, FeatureStatus.PARTIAL)
 MIN_LANDSCAPE = 4
+STATUS_WORDS = {"available": "available", "partial": "partially available", "unknown": "not publicly identified",
+                "missing": "confirmed unavailable"}
+
+
+def packaging(fid: str, taxonomy, detail: dict | None) -> dict | None:
+    """How a capability is sold, from the grounded pricing detail: as an add-on, or in which plans."""
+    if not detail or not detail.get("available"):
+        return None
+    add_on, plans, ev = False, [], []
+    for p in detail.get("plans", []):
+        for item in p.get("add_ons", []):
+            if fid in taxonomy.match_text(item["text"]):
+                add_on = True
+                ev.append(item["evidence_id"])
+        for item in p.get("included_features", []):
+            if fid in taxonomy.match_text(item["text"]):
+                plans.append(p["name"])
+                ev.append(item["evidence_id"])
+    if not (add_on or plans):
+        return None
+    return {"add_on": add_on, "plans": list(dict.fromkeys(plans)), "evidence_ids": list(dict.fromkeys(ev))[:4]}
+
+
+def cell(fid: str, taxonomy, ob: dict | None, inventory: list[dict], detail: dict | None) -> dict:
+    """What one party offers for a capability, as documented — not just its status."""
+    item = next((i for i in inventory if i.get("feature_id") == fid), None)
+    status = (ob or {}).get("status", "unknown")
+    out = {"status": status, "label": STATUS_WORDS.get(status, status),
+           "verification": (ob or {}).get("verification", "") or (item or {}).get("verification", ""),
+           "note": (ob or {}).get("notes", "") if (ob or {}).get("verification") == "mentioned" else ""}
+    if item:
+        out["implementation"] = item.get("description", "")
+        facts = item.get("facts") or {}
+        out["limitations"] = [x["text"] for x in facts.get("limitations", [])]
+        out["platforms"] = [x["text"] for x in facts.get("platforms", [])]
+    pack = packaging(fid, taxonomy, detail)
+    if pack:
+        out["packaging"] = pack
+    return out
+
+
+def relevance(f) -> str:
+    d = f.defaults or {}
+    value = d.get("business_value", 0) + d.get("user_impact", 0) + d.get("revenue_potential", 0)
+    level = "high" if value >= 11 else "medium" if value >= 7 else "low"
+    return f"{level} business relevance" + (" (AI capability)" if f.ai else "")
+
+
+def significance(cls: str, have: int, total: int, top10: int, top10_total: int, client_has: bool) -> str:
+    where = f"{have} of {total} deep-analysed competitors" + (f", {top10} of {top10_total} in the landscape"
+                                                               if top10_total >= MIN_LANDSCAPE else "")
+    if cls == "unique_to_client":
+        return "Differentiator for the client: no analysed competitor offers it publicly."
+    words = {"industry_standard": "Industry standard (customers expect it)", "emerging": "Emerging expectation",
+             "differentiator": "Differentiator for the few competitors who offer it",
+             "niche": "Niche capability"}.get(cls, cls)
+    return f"{words}: {where}." + ("" if client_has else " Not publicly identified for the client.")
 
 
 def market_class(share: float, count: int, *, ai: bool, client_has: bool) -> str:
@@ -37,10 +94,13 @@ def market_class(share: float, count: int, *, ai: bool, client_has: bool) -> str
 class FeatureComparisonAgent(Agent):
     name = "feature_comparison"
     description = "Build the client vs competitor feature matrix and classify market capabilities"
-    after = ("product_features", "competitor_research")
+    after = ("product_features", "competitor_research", "pricing_analysis")
 
     async def run(self, ctx: RunContext) -> AgentResult:
         client_obs = ctx.data("product_features").get("observations", {})
+        client_inventory = ctx.data("product_features").get("inventory", [])
+        client_pricing = (ctx.data("pricing_analysis").get("comparison") or {}).get("details", {}).get(
+            ctx.record.client.name)
         research = ctx.data("competitor_research")
         competitors = research.get("competitors", [])
         deep_ids = {c["id"] for c in competitors}
@@ -67,13 +127,21 @@ class FeatureComparisonAgent(Agent):
             share = top10 / len(land_feats) if use_landscape else coverage
             count = top10 if use_landscape else have
             cls = market_class(share, count, ai=f.ai, client_has=client_status in HAS)
-            if client_status in HAS or have or top10:
+            if client_status in HAS or have or top10 or client_status == FeatureStatus.MISSING:
+                cells = {"client": cell(f.id, ctx.taxonomy, client_obs.get(f.id), client_inventory, client_pricing)}
+                for c in competitors:
+                    ob = next((o for o in c["features"] if o["feature_id"] == f.id), None)
+                    cells[c["id"]] = cell(f.id, ctx.taxonomy, ob, c.get("inventory", []), c.get("pricing_detail"))
+                description = next((x["implementation"] for x in cells.values() if x.get("implementation")), "")
                 rows.append(ComparisonRow(
                     feature_id=f.id, feature_name=f.name, category=f.category_name, client=client_status,
                     competitors=comp_status, competitor_coverage=coverage, top3_count=have,
                     top3_total=len(deep_ids), top10_count=top10, top10_total=len(land_feats),
                     market_class=cls, must_have=cls == "industry_standard",
-                    evidence={k: ctx.ledger.validate_refs(v) for k, v in cell_evidence.items() if v}))
+                    evidence={k: ctx.ledger.validate_refs(v) for k, v in cell_evidence.items() if v},
+                    cells=cells, description=description, relevance=relevance(f),
+                    significance=significance(cls, have, len(deep_ids), top10, len(land_feats),
+                                              client_status in HAS)))
 
         rows.sort(key=lambda r: (r.category, -r.competitor_coverage))
         ahead = [r for r in rows if r.client in HAS and r.competitor_coverage < 0.34 and competitors]

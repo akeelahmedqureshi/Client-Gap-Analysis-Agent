@@ -32,6 +32,7 @@ from cip.connectors.research.web import registrable_domain
 from cip.connectors.source_control.base import parse_repo_url
 from cip.core import offering, pricing_detail
 from cip.core.evidence import snippet
+from cip.core.negation import affirmed
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
 from cip.core.relevance import (
@@ -528,7 +529,10 @@ class CompetitorResearchAgent(Agent):
                 status = FeatureStatus(item["status"])
                 o = obs.setdefault(fid, FeatureObservation(feature_id=fid, status=status, confidence=0.85))
                 o.evidence_ids = list(dict.fromkeys(o.evidence_ids + item["evidence_ids"][:2]))
-                if o.verification != "documented":
+                # An explicit "not offered" never overrides evidence that it is offered.
+                if o.verification != "documented" and not (status == FeatureStatus.MISSING
+                                                           and o.status in (FeatureStatus.AVAILABLE,
+                                                                            FeatureStatus.PARTIAL)):
                     o.status = status
                 o.verification, o.basis, o.notes = "documented", Basis.EVIDENCE, ""
 
@@ -572,6 +576,9 @@ def _keyword_features(ctx: RunContext, name: str, pages: list, obs: dict[str, Fe
             continue
         text = f"{p.title} {p.description} {' '.join(p.headings)} {p.text}"
         for fid, kws in ctx.taxonomy.match_text(text).items():
+            kws = affirmed(text, kws)
+            if not kws:
+                continue
             if fid in obs and any(ctx.ledger.get(e) and ctx.ledger.get(e).source_url == p.url
                                   for e in obs[fid].evidence_ids):
                 continue

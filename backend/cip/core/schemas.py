@@ -336,6 +336,12 @@ class ComparisonRow(BaseModel):
     must_have: bool = False
     # Evidence behind each cell (BRS 7.9 drill-down): "client" and competitor id -> evidence ids.
     evidence: dict[str, list[str]] = Field(default_factory=dict)
+    # Per party ("client" or competitor id): evidence grade, implementation as documented, documented limitations,
+    # packaging (core / add-on / plans including it) and notes (agents/comparison.py).
+    cells: dict[str, dict] = Field(default_factory=dict)
+    description: str = ""  # what the capability does, from the documented descriptions
+    relevance: str = ""  # business relevance (taxonomy scoring defaults)
+    significance: str = ""  # competitive significance, in words
 
 
 class GapType(str, Enum):
