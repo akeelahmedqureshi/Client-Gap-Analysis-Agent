@@ -17,6 +17,7 @@ standards the client offers publicly.
 from __future__ import annotations
 
 from cip.agents.base import Agent, RunContext
+from cip.core import capabilities
 from cip.core.categories import AUTOMATION_FEATURES
 from cip.core.schemas import AgentResult, ComparisonRow, FeatureStatus, Finding
 
@@ -94,15 +95,18 @@ def market_class(share: float, count: int, *, ai: bool, client_has: bool) -> str
 class FeatureComparisonAgent(Agent):
     name = "feature_comparison"
     description = "Build the client vs competitor feature matrix and classify market capabilities"
-    after = ("product_features", "competitor_research", "pricing_analysis")
+    after = ("product_features", "competitor_research", "pricing_analysis", "app_store")
 
     async def run(self, ctx: RunContext) -> AgentResult:
-        client_obs = ctx.data("product_features").get("observations", {})
+        apps = ctx.data("app_store")
+        client_obs = capabilities.client_observations(ctx.data("product_features").get("observations", {}), apps)
         client_inventory = ctx.data("product_features").get("inventory", [])
         client_pricing = (ctx.data("pricing_analysis").get("comparison") or {}).get("details", {}).get(
             ctx.record.client.name)
         research = ctx.data("competitor_research")
-        competitors = research.get("competitors", [])
+        # Effective capabilities: feature observations plus verified store listings (core/capabilities.py).
+        competitors = [{**c, "features": capabilities.competitor_observations(c, apps)}
+                       for c in research.get("competitors", [])]
         deep_ids = {c["id"] for c in competitors}
         landscape = research.get("landscape", [])
         # Feature sets across the landscape (deep competitors use their full deep-analysis features).

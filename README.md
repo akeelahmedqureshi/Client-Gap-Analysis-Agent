@@ -213,6 +213,8 @@ cd frontend && npm run build         # type-check and build
 
 - [docs/getting-started.md](docs/getting-started.md): complete setup (demo, local, Docker)
 - [docs/testing.md](docs/testing.md): how to test the complete system
+- [docs/analysis-quality.md](docs/analysis-quality.md): how findings are verified, the labels in each tab and the consistency checks
+- [docs/csv-format.md](docs/csv-format.md): the client CSV template and its columns
 - [docs/architecture.md](docs/architecture.md): layers, orchestration, state, data model
 - [docs/agents.md](docs/agents.md): each agent's inputs, outputs and evidence rules
 - [docs/connectors.md](docs/connectors.md): GitHub, GitLab, web, search and LinkedIn providers

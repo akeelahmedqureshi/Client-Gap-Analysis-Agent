@@ -313,6 +313,27 @@ function QualityCard({ runId }: { runId: string }) {
         </ul>
       )}
       {shown.length > 5 && <button className="text-xs text-indigo-700 underline mt-1" onClick={() => setOpen(!open)}>{open ? "Show less" : `Show all ${shown.length}`}</button>}
+      {q.consistency?.length > 0 && (
+        <details className="mt-3" open={q.consistency.some((c: any) => !c.passed)}>
+          <summary className="cursor-pointer text-sm font-medium">
+            Cross-tab consistency: {q.consistency.filter((c: any) => c.passed).length} of {q.consistency.length} checks passed
+          </summary>
+          <ul className="mt-2 space-y-1 text-sm">
+            {q.consistency.map((c: any) => (
+              <li key={c.name}>
+                <span className={c.passed ? "text-emerald-600" : "text-rose-600"}>{c.passed ? "✓" : "✗"}</span> {c.label}
+                <span className="text-slate-500"> — {c.detail}</span>
+                {!c.passed && (
+                  <div className="ml-5 text-xs">
+                    <ul className="list-disc ml-4 text-slate-600">{c.items.map((i: string) => <li key={i}>{i}</li>)}</ul>
+                    <div className="text-slate-500">To rebuild the affected results, re-run: {c.rerun.join(", ")}.</div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <p className="text-xs text-slate-500 mt-2">
         Model: {q.reproducibility.model} · prompts {q.reproducibility.prompt_version} · taxonomy {q.reproducibility.taxonomy_version}
         {q.reproducibility.config_versions && <> · configuration: analysis v{q.reproducibility.config_versions.analysis}, scoring “{q.reproducibility.config_versions.scoring_profile?.name}” v{q.reproducibility.config_versions.scoring_profile?.version}, LLM v{q.reproducibility.config_versions.llm}</>}

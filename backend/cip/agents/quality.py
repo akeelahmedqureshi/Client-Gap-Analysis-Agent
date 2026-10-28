@@ -28,6 +28,7 @@ from pathlib import Path
 
 from cip import agents as agents_pkg
 from cip.agents.base import Agent, RunContext
+from cip.core.consistency import run_checks
 from cip.core.relevance import industry_terms
 from cip.core.source_quality import mix as source_mix
 from cip.core.schemas import AgentResult, AgentStatus, Basis, Finding
@@ -114,6 +115,12 @@ class QualityAssuranceAgent(Agent):
             bad = [k for k, v in o.get("factors", {}).items() if not 0 <= v <= 5]
             if bad:
                 flag("blocking", "data", f"Opportunity “{o['name']}” has factor scores out of range: {', '.join(bad)}.")
+
+        # --- cross-tab consistency: the tabs read one dataset and must agree (core/consistency.py) -----------
+        consistency = run_checks(ctx.data, ctx.record.client.name)
+        for c in consistency:
+            if not c["passed"]:
+                flag("warning", "consistency", f"{c['label']}: {c['detail']}. Re-run: {', '.join(c['rerun'])}.")
 
         # --- evidence quality ------------------------------------------------------------------
         significant = ([("gap", g["name"], g.get("evidence_ids", []), g.get("confidence", 0), g.get("basis"))
@@ -243,6 +250,7 @@ class QualityAssuranceAgent(Agent):
             "blocking_issues": len(blocking), "warnings": len(warnings),
             "usage": ctx.usage.summary(),
             "manual_overrides": len(ctx.review),
+            "consistency_issues": sum(1 for c in consistency if not c["passed"]),
         }
         cfg = ctx.config or {}
         repro = {
@@ -274,6 +282,7 @@ class QualityAssuranceAgent(Agent):
             + [Finding(category=f"quality.{i['area']}", title=i["message"][:200], confidence=0.8,
                        basis=Basis.INFERRED) for i in blocking + warnings],
             data={"state": state, "label": label, "issues": issues, "conflicts": conflicts, "metrics": metrics,
+                  "consistency": consistency,
                   "reproducibility": repro,
                   "thresholds": {"min_evidence_coverage": MIN_EVIDENCE_COVERAGE, "low_confidence": LOW_CONFIDENCE,
                                  "fresh_days": s.freshness_fresh_days, "stale_days": s.freshness_stale_days}},
