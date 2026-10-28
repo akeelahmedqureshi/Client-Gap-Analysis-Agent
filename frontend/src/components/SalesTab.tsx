@@ -132,7 +132,7 @@ function SummaryCard({ runId, doc, canAct, onSaved, onError }: {
         </section>
         <section>
           <h3 className="font-semibold mb-1">Top 3 competitive gaps</h3>
-          {c.top_gaps.length === 0 && <Empty>No gap is confident enough to lead with.</Empty>}
+          {c.top_gaps.length === 0 && <Empty>No confirmed gap is strong enough to lead with.</Empty>}
           <ol className="list-decimal ml-5 space-y-1">
             {c.top_gaps.map((g: any) => (
               <li key={g.gap_id}>
@@ -141,9 +141,25 @@ function SummaryCard({ runId, doc, canAct, onSaved, onError }: {
               </li>
             ))}
           </ol>
+          {c.to_validate?.length > 0 && (
+            <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2">
+              <p className="text-xs font-medium text-amber-900">
+                To validate on the call <span className="font-normal">(internal: potential gaps, never stated as fact)</span>
+              </p>
+              <ul className="text-xs text-amber-900 list-disc ml-5 mt-1 space-y-0.5">
+                {c.to_validate.map((g: any) => (
+                  <li key={g.gap_id}>
+                    <b>{g.name}</b>{g.competitors?.length ? ` (${g.competitors.join(", ")})` : ""}
+                    {g.failed_checks?.length > 0 && <> — not yet established: {g.failed_checks.join("; ").toLowerCase()}</>}{" "}
+                    <EvidenceRefs ids={g.evidence_ids} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {c.claim_safety?.excluded_gaps?.length > 0 && (
             <p className="text-xs text-slate-500 mt-1">
-              Not used (low confidence): {c.claim_safety.excluded_gaps.map((g: any) => g.name).join(", ")}
+              Not used: {c.claim_safety.excluded_gaps.map((g: any) => `${g.name} (${g.reason})`).join(", ")}
             </p>
           )}
         </section>

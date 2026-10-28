@@ -32,6 +32,13 @@ async def test_sales_summary_is_claim_safe_and_consistent_with_the_analysis(make
     gaps = {g["id"]: g for g in ctx.data("gap_analysis")["gaps"]}
 
     assert 1 <= len(s["top_gaps"]) <= 3
+    verdicts = {o["gap_id"]: o["verdict"] for o in ctx.data("opportunity_prioritization")["opportunities"]}
+    assert all(verdicts[g["gap_id"]] == "confirmed" for g in s["top_gaps"]), "only confirmed gaps are claimed"
+    # Potential gaps are questions for the call, never facts in the email.
+    assert s["to_validate"] and all(verdicts[g["gap_id"]] == "potential" and g["failed_checks"]
+                                    for g in s["to_validate"])
+    facts = str(s["outreach_input"]["facts"])
+    assert not any(g["name"] in facts for g in s["to_validate"])
     for g in s["top_gaps"]:
         assert g["confidence"] >= 0.5 and g["competitors"], "only evidenced, confident gaps lead"
         assert gaps[g["gap_id"]]["gap_type"] not in ("security", "technology")

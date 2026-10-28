@@ -6,8 +6,10 @@ revenue opportunity, a conversation angle, relevant capabilities and case studie
 step. It is assembled deterministically from the same gaps, scores and matches as the report, so the
 two never disagree. Claim safety:
 
-* only gaps with confidence >= ``MIN_CLAIM_CONFIDENCE`` and real competitor evidence lead the summary;
-  weaker ones are listed under ``claim_safety`` instead of driving the conversation;
+* only *confirmed* gaps (all evidence, value and effort checks pass; see ``prioritization.gap_verdict``) with
+  confidence >= ``MIN_CLAIM_CONFIDENCE`` and real competitor evidence lead the summary and the email. *Potential*
+  gaps are listed internally under ``to_validate`` (raise them as questions on the call, never as claims);
+  weaker or *optional* ones are listed under ``claim_safety`` instead of driving the conversation;
 * security issues and pricing opinions are internal-only pain points;
 * only approved, client-facing knowledge-base matches are offered for client use.
 
@@ -102,9 +104,14 @@ class SalesIntelligenceAgent(Agent):
         gaps = {g["id"]: g for g in ctx.data("gap_analysis").get("gaps", [])}
         rows_by_feature = {r["feature_id"]: r for r in ctx.data("feature_comparison").get("rows", [])}
         prio = ctx.data("opportunity_prioritization")
-        opps = sorted(prio.get("opportunities", []), key=lambda o: -o["score"]["total"])
+        # Opportunities rated optional (the value or the effort check fails) are never pitched.
+        all_opps = sorted(prio.get("opportunities", []), key=lambda o: -o["score"]["total"])
+        verdicts = {o["gap_id"]: o.get("verdict", "confirmed") for o in all_opps}
+        opps = [o for o in all_opps if verdicts[o["gap_id"]] != "optional"]
         recs = {r["gap_id"]: r for r in prio.get("recommendations", [])}
-        recommendations = sorted(prio.get("recommendations", []), key=lambda r: -r["score"]["total"])
+        recommendations = sorted((r for r in prio.get("recommendations", [])
+                                  if verdicts.get(r["gap_id"], "confirmed") != "optional"),
+                                 key=lambda r: -r["score"]["total"])
         matching = ctx.data("capability_matching")
         matches_by_gap = {m["gap_id"]: m["matches"] for m in matching.get("matches", [])}
 
@@ -138,14 +145,27 @@ class SalesIntelligenceAgent(Agent):
                           "confidence": 0.7, "internal_only": True})
 
         # --- top competitive gaps (claim-safe) -----------------------------------------------
-        top_gaps, excluded = [], []
-        ranked = [gaps[o["gap_id"]] for o in opps if o["gap_id"] in gaps]
+        top_gaps, excluded, to_validate = [], [], []
+        by_gap = {o["gap_id"]: o for o in all_opps}
+        ranked = [gaps[o["gap_id"]] for o in all_opps if o["gap_id"] in gaps]
         for g in ranked:
             if g["gap_type"] not in CLIENT_GAP_TYPES or not g.get("competitors_with"):
                 continue
             if g["confidence"] < MIN_CLAIM_CONFIDENCE or g.get("basis") == "estimate":
                 excluded.append({"name": g["name"], "confidence": g["confidence"],
                                  "reason": "confidence below the client-facing threshold"})
+                continue
+            verdict = verdicts.get(g["id"], "confirmed")
+            if verdict == "optional":
+                excluded.append({"name": g["name"], "confidence": g["confidence"],
+                                 "reason": "optional: the value or effort check fails"})
+                continue
+            if verdict == "potential":
+                failed = [c["label"] for c in by_gap[g["id"]].get("checks", []) if not c["passed"]]
+                to_validate.append({"gap_id": g["id"], "name": g["name"],
+                                    "competitors": _names(g["competitors_with"], comp_names),
+                                    "failed_checks": failed, "risks": by_gap[g["id"]].get("risks", []),
+                                    "evidence_ids": g["evidence_ids"][:5], "confidence": g["confidence"]})
                 continue
             names = _names(g["competitors_with"], comp_names)
             row = rows_by_feature.get(g.get("feature_id") or "", {})
@@ -335,9 +355,11 @@ class SalesIntelligenceAgent(Agent):
             "saving_estimate": saving, "further_findings": further_findings,
             "conversation_angle": angle, "next_step": next_step,
             "relevant_capabilities": client_facing, "internal_capabilities": internal, "case_studies": case_studies,
-            "contact": contact,
+            "contact": contact, "to_validate": to_validate,
             "claim_safety": {"min_confidence": MIN_CLAIM_CONFIDENCE, "excluded_gaps": excluded,
-                             "notes": ["Cost-saving and revenue opportunities are estimates."]
+                             "notes": ["Only confirmed gaps are stated to the client; potential gaps are "
+                                       "questions to validate on the call.",
+                                       "Cost-saving and revenue opportunities are estimates."]
                              + ([f"The “up to {saving['percent']}%” saving in the outreach email is an estimate from "
                                  f"the {saving['level']} resource-saving level of “{saving['process']}” "
                                  "(Configuration → Analysis sets the percentage per level)."] if saving else [])

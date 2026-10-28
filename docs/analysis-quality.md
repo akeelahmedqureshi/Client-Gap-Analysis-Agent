@@ -101,10 +101,18 @@ six checks:
 Checks 1–3 come from the evidence. Checks 4–6 come from the deterministic scoring factors. The checks
 lead to a verdict:
 
-- **Confirmed**: all six checks pass.
+- **Confirmed**: the three evidence checks pass, and the value and effort checks pass. A gap that gives no
+  competitive advantage (a security or accessibility fix, for example) can still be confirmed; the failed
+  check is shown.
 - **Potential, needs validation**: the value is there, but the evidence is uncertain. Process gaps,
   which rest on assumptions about the client's internal processes, are never higher than this.
 - **Optional**: the value or the effort check fails.
+
+### What the client is told
+
+The sales summary and the outreach email state only **confirmed** gaps. **Potential** gaps are listed on
+the Sales tab under *To validate on the call*, with the checks still open; they are questions to ask,
+never claims. **Optional** gaps are not pitched.
 
 ## Cross-tab consistency
 
