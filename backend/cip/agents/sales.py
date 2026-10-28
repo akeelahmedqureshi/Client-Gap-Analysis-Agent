@@ -171,12 +171,16 @@ class SalesIntelligenceAgent(Agent):
             row = rows_by_feature.get(g.get("feature_id") or "", {})
             wider = (f" and {row['top10_count']} of the top {row['top10_total']} in the wider market"
                      if row.get("top10_total", 0) >= 4 else "")
+            # A capability gap says who offers it; an observed issue (a rating, a missing call to action) is
+            # stated as observed, because "competitors offer a low app rating" would be wrong.
+            capability = bool(g.get("feature_id"))
             top_gaps.append({
-                "gap_id": g["id"], "name": g["name"], "competitors": names,
+                "gap_id": g["id"], "name": g["name"], "competitors": names, "capability": capability,
                 "coverage": f"{len(g['competitors_with'])} of {n_comp}",
                 "statement": f"{_join(names)} offer{'s' if len(names) == 1 else ''} {g['name']} "
                              f"({len(g['competitors_with'])} of {n_comp} competitors analysed in depth{wider}); it was "
-                             f"not publicly identified for {product}.",
+                             f"not publicly identified for {product}." if capability else
+                             f"{g['name']}: {g['description'].rstrip('.')}.",
                 "market_class": g.get("market_class"),
                 "why": (recs.get(g["id"]) or {}).get("business_impact", ""),
                 "evidence_ids": g["evidence_ids"][:5], "confidence": g["confidence"],
@@ -275,7 +279,7 @@ class SalesIntelligenceAgent(Agent):
             verb = "offers" if len(g["competitors"]) == 1 else "offer"
             facts.append(Fact("gap", g["statement"], g["evidence_ids"],
                               email_text=f"{g['name']}: {_join(g['competitors'])} {both}{verb} it, and we could not "
-                                         f"find it publicly for {product}."))
+                                         f"find it publicly for {product}." if g["capability"] else g["statement"]))
         if top_gaps:
             lead_gap, lead_rec = top_gaps[0], recs.get(top_gaps[0]["gap_id"]) or {}
             reasons = [x.strip().rstrip(".") for x in (lead_gap.get("why"), lead_rec.get("user_impact"))
@@ -288,8 +292,9 @@ class SalesIntelligenceAgent(Agent):
                 facts.append(Fact(
                     "gap_detail", f"Why {lead_gap['name']} matters for {product}: " + "; ".join(reasons) + ".",
                     lead_gap["evidence_ids"], estimate=True,
-                    email_text=f"{_join(names)} already offer{'s' if len(names) == 1 else ''} it "
-                               f"({lead_gap['coverage']} competitors we analysed in depth). What it could bring: "
+                    email_text=(f"{_join(names)} already offer{'s' if len(names) == 1 else ''} it "
+                                f"({lead_gap['coverage']} competitors we analysed in depth). " if lead_gap["capability"]
+                                else "") + "What it could bring: "
                                + ", and ".join(b for b in bring if b) + "."))
         # What else the analysis found that bears on operating cost and growth (an invitation to the call).
         shown = {g["gap_id"] for g in top_gaps[:3]}

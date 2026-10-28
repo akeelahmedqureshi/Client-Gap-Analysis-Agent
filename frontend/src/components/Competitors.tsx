@@ -52,7 +52,9 @@ const price = (p: any) =>
 /** The competitor's own plans: grounded plan detail when available, else the price parser's reading. */
 function Plans({ c }: { c: any }) {
   const detailed = c.pricing_detail?.available && c.pricing_detail.plans?.length;
-  const plans: any[] = detailed ? c.pricing_detail.plans : c.pricing_profile?.plans ?? [];
+  // The price parser records the currency once for the page, not per plan.
+  const plans: any[] = detailed ? c.pricing_detail.plans
+    : (c.pricing_profile?.plans ?? []).map((p: any) => ({ ...p, currency: p.currency ?? c.pricing_profile.currency }));
   if (!plans.length) return null;
   return (
     <div>

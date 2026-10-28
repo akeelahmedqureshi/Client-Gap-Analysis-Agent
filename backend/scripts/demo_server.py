@@ -8,6 +8,8 @@ so you can click through the whole product with no API keys and no internet acce
     python scripts/demo_server.py                 # API on http://localhost:8000
     python scripts/demo_server.py --client-app    # the fake client also has an iOS app with reviews
     python scripts/demo_server.py --landscape     # six competitors: Top-10 ranking and Top-3 deep analysis
+    python scripts/demo_server.py --scripted-ai   # canned AI extractions (features, workflows, plans) so the
+                                                  # detailed panels have data; no AI provider is called
 
 Then either ``cd frontend && npm run dev`` (http://localhost:5173) or build the UI first
 (``npm run build``) and open http://localhost:8000 — the demo serves ``frontend/dist`` when present.
@@ -44,6 +46,9 @@ def main() -> None:
     parser.add_argument("--client-app", action="store_true", help="give the fake client an iOS app with reviews")
     parser.add_argument("--landscape", action="store_true",
                         help="a wider competitive landscape (6 competitors: Top-10 ranking + Top-3 deep analysis)")
+    parser.add_argument("--scripted-ai", action="store_true",
+                        help="answer the feature, workflow and pricing extractions with the test-suite's canned "
+                             "responses (no AI provider is called)")
     args = parser.parse_args()
 
     if os.environ.get("CIP_ENVIRONMENT", "").lower() == "production":
@@ -106,6 +111,11 @@ def main() -> None:
         ctx.fetcher = WebFetcher(transport=web_transport(sites))
         ctx.search = FakeSearch(landscape=args.landscape)
         ctx.source_control_factory = lambda ref, token: FakeSourceControl(ref, token)
+        if args.scripted_ai:
+            from fakes import ScriptedLLM
+            from test_comparison_detail import features, pricing
+            from test_report_detail import workflows
+            ctx.llm = ScriptedLLM({"_LLMFeatures": features, "_LLMPricing": pricing, "_LLMWorkflows": workflows})
 
     runner.context_hook = use_fakes
     from cip.api.routes import uploads

@@ -42,7 +42,11 @@ async def test_sales_summary_is_claim_safe_and_consistent_with_the_analysis(make
     for g in s["top_gaps"]:
         assert g["confidence"] >= 0.5 and g["competitors"], "only evidenced, confident gaps lead"
         assert gaps[g["gap_id"]]["gap_type"] not in ("security", "technology")
-        assert "not publicly identified" in g["statement"] and "lack" not in g["statement"]
+        assert "lack" not in g["statement"]
+        # capability gaps say who offers it; observed issues are stated as observed
+        assert ("not publicly identified" in g["statement"]) == g["capability"]
+        if not g["capability"]:
+            assert g["statement"].startswith(g["name"] + ": ") and " offer " not in g["statement"]
         assert g["evidence_ids"]
     recs = {r["id"] for r in ctx.data("opportunity_prioritization")["recommendations"]}
     assert {i["recommendation_id"] for i in s["top_improvements"]} <= recs

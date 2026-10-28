@@ -150,7 +150,7 @@ function SummaryCard({ runId, doc, canAct, onSaved, onError }: {
                 {c.to_validate.map((g: any) => (
                   <li key={g.gap_id}>
                     <b>{g.name}</b>{g.competitors?.length ? ` (${g.competitors.join(", ")})` : ""}
-                    {g.failed_checks?.length > 0 && <> — not yet established: {g.failed_checks.join("; ").toLowerCase()}</>}{" "}
+                    {g.failed_checks?.length > 0 && <> — checks still open: {g.failed_checks.join("; ").toLowerCase()}</>}{" "}
                     <EvidenceRefs ids={g.evidence_ids} />
                   </li>
                 ))}

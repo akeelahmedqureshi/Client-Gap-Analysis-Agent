@@ -174,7 +174,7 @@ function Participants({ landscape, pricing }: { landscape: any[]; pricing?: any 
   };
   const all = rows.filter((r) => r.kind === "competitor" && r.monthly_normalized && !r.quote_based).map((r) => r.monthly_normalized);
   return (
-    <div className="mt-3 border-t pt-3">
+    <div className="mt-3 border-t pt-3 first:mt-0 first:border-0 first:pt-0">
       <h4 className="font-medium text-sm mb-2">Competitors identified in this analysis</h4>
       <div className="grid md:grid-cols-2 gap-4">
         {CLASS_GROUPS.map(([title, classes]) => {

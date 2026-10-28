@@ -119,6 +119,21 @@ Start the demo (see [getting-started.md § A](getting-started.md#a-offline-demo-
 open http://localhost:8000 and work through each step. Expected values below are for
 `scripts/demo_server.py` without `--client-app`, right after start (before `/demo/change`).
 
+### 3.0 Automated browser check of every tab
+
+`--scripted-ai` answers the feature, workflow and pricing extractions with the test suite's canned
+responses, so the detailed panels have data. Next to it, `scripts/render_tabs.js` runs an analysis and
+opens every tab in headless Chromium:
+
+```bash
+cd frontend && npm run build
+cd ../backend && python scripts/demo_server.py --scripted-ai --client-app --port 8765 &
+node scripts/render_tabs.js ../examples/clients.csv /tmp/shots   # needs Playwright
+```
+
+It prints the errors for each tab, saves a screenshot per tab, and exits non-zero on any page or console
+error.
+
 ### 3.1 Onboarding and upload
 
 - [ ] **Create an organization**: you land on the Dashboard as admin.
