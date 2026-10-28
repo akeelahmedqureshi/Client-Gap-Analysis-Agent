@@ -18,6 +18,7 @@ import { ComparisonTab, LandscapeCard, MarketTab } from "../components/MarketTab
 import { CompetitorHistory, PositioningCards, WhyChain } from "../components/Explain";
 import ClientContacts from "../components/ClientContacts";
 import { DocumentedWorkflows, FeatureInventory } from "../components/Offering";
+import CompetitorProfiles from "../components/Competitors";
 
 const TABS = ["Pipeline", "Client", "Products & Services", "Security", "UX", "Competitors", "Pricing", "Apps", "Market", "Comparison", "Gaps", "Opportunities",
   "Cost & AI", "Sales", "Review", "Evidence", "Report"] as const;
@@ -459,22 +460,7 @@ function CompetitorsTab({ runId, projectId, enabled }: { runId: string; projectI
     <div className="space-y-4">
       {d.landscape?.length > 0 && <LandscapeCard landscape={d.landscape} ranking={d.ranking} />}
       <CompetitorHistory projectId={projectId} runId={runId} />
-      <h2 className="font-semibold">Top {d.competitors.length} — deep analysis</h2>
-      <div className="grid lg:grid-cols-2 gap-4">
-        {d.competitors.map((c: any) => (
-          <Card key={c.id} title={<>{c.rank && <span className="text-slate-400">#{c.rank} </span>}<a className="underline" href={c.url} target="_blank" rel="noreferrer">{c.name}</a> <Badge value={c.classification} /></>}>
-            <p className="text-sm">{c.description} <EvidenceRefs ids={c.evidence_ids} /></p>
-            {c.pricing && <p className="text-sm mt-1"><span className="text-slate-500">Pricing:</span> {c.pricing}</p>}
-            {c.target_market && <p className="text-sm"><span className="text-slate-500">Market:</span> {c.target_market}</p>}
-            <p className="text-xs text-slate-500 mt-1">{c.rationale}</p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {c.features.map((f: any) => <span key={f.feature_id} className="text-xs bg-slate-100 rounded px-1.5 py-0.5">{f.feature_id}</span>)}
-            </div>
-            <div className="mt-2 flex items-center gap-3"><Confidence value={c.confidence} />
-              <span className="text-xs text-slate-500">{c.pages_analysed?.length ?? 0} page(s) analysed{c.deep_error && " · deep analysis failed, light profile shown"}</span></div>
-          </Card>
-        ))}
-      </div>
+      <CompetitorProfiles competitors={d.competitors} />
       {d.competitors.length === 0 && <Empty>No verified competitors. {res.data?.findings[0]?.detail}</Empty>}
       {d.rejected.length > 0 && (
         <Card title="Rejected candidates">

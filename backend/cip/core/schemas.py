@@ -308,6 +308,13 @@ class Competitor(BaseModel):
     deep_error: str | None = None
     pages_analysed: list[str] = Field(default_factory=list)
     stars: int | None = None  # open-source alternatives
+    # Deep analysis (Top 3), every item grounded in the competitor's own pages (agents/competitor_research.py):
+    # section -> [{"value", "evidence_id", "source_url"}] for overview, products, value_proposition, …
+    profile: dict = Field(default_factory=dict)
+    inventory: list[dict] = Field(default_factory=list)  # detailed features (core/offering.py)
+    workflows: list[dict] = Field(default_factory=list)  # documented workflows / use cases
+    # {"shared": [...], "competitor_only": [...], "client_only": [...]} of {"feature_id", "name"}
+    overlap: dict = Field(default_factory=dict)
 
 
 class ComparisonRow(BaseModel):

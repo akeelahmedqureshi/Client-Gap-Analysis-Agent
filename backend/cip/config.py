@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     # Detailed feature extraction reads whole pages in batches of ~30,000 characters (core/offering.py):
     # more batches read more of the site, at the cost of one LLM call each.
     feature_extraction_batches: int = 3
+    competitor_feature_batches: int = 2  # the same, per deep-analysed competitor
     crawler_timeout_seconds: float = 20.0
     crawler_user_agent: str = "CIPResearchBot/0.1 (+https://example.com/bot)"
     # Politeness and resilience per domain (BRS 20; PRD 10.24): concurrent requests to one domain, minimum

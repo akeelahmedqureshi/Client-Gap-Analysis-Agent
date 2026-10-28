@@ -30,6 +30,7 @@ from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind
 from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.web import registrable_domain
 from cip.connectors.source_control.base import parse_repo_url
+from cip.core import offering
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, SourcedValue, pages_to_prompt
 from cip.core.llm import LLMError, LLMUnavailable
@@ -90,6 +91,25 @@ class _LLMCompetitorProfile(BaseModel):
     target_market: SourcedValue | None = None
     pricing: SourcedValue | None = None
     features: list[_LLMCompFeature] = Field(default_factory=list)
+    # Deep profile sections; every item quoted from the competitor's own pages.
+    overview: list[SourcedValue] = Field(default_factory=list)
+    products: list[SourcedValue] = Field(default_factory=list)
+    target_customers: list[SourcedValue] = Field(default_factory=list)
+    industries: list[SourcedValue] = Field(default_factory=list)
+    value_proposition: list[SourcedValue] = Field(default_factory=list)
+    positioning: list[SourcedValue] = Field(default_factory=list)
+    integrations: list[SourcedValue] = Field(default_factory=list)
+    ai_capabilities: list[SourcedValue] = Field(default_factory=list)
+    automation: list[SourcedValue] = Field(default_factory=list)
+    onboarding_support: list[SourcedValue] = Field(default_factory=list)
+    differentiators: list[SourcedValue] = Field(default_factory=list)
+    strengths: list[SourcedValue] = Field(default_factory=list)
+    limitations: list[SourcedValue] = Field(default_factory=list)
+
+
+PROFILE_SECTIONS = ("overview", "products", "target_customers", "industries", "value_proposition", "positioning",
+                    "integrations", "ai_capabilities", "automation", "onboarding_support", "differentiators",
+                    "strengths", "limitations")
 
 
 DISCOVERY_PROMPT = """You are a market research analyst. Identify products that compete with the client's
@@ -101,7 +121,15 @@ classification must be one of: direct, indirect, adjacent, open_source, enterpri
 PROFILE_PROMPT = """You are analysing a potential competitor's website. Decide whether it is genuinely
 comparable to the client's project (is_comparable) and classify it (direct, indirect, adjacent, open_source,
 enterprise, emerging). Extract description, target market and pricing, and the product features using ONLY
-feature ids from the taxonomy. Every value needs the SOURCE url and a verbatim quote from that page. Sources may be in any language: copy quotes verbatim in the source's language and write extracted values in English."""
+feature ids from the taxonomy. Then build a profile specific to THIS company — never generic statements that
+would fit any competitor — with these lists: overview (company and business), products (products and
+services offered), target_customers, industries, value_proposition, positioning (how it presents itself in the
+market), integrations (named third-party integrations, API), ai_capabilities, automation, onboarding_support
+(onboarding, training, support channels and hours), differentiators (what it claims sets it apart),
+strengths and limitations (only those the pages show, e.g. documented restrictions, plan limits, missing
+platforms). Every value needs the SOURCE url and a short verbatim quote copied exactly from that page; leave a
+list empty when the pages do not say it. Sources may be in any language: copy quotes verbatim in the source's
+language and write extracted values in English."""
 
 
 MARKETPLACE_HOSTS = ("g2.com", "capterra.com", "producthunt.com", "getapp.com", "softwareadvice.com",
@@ -437,17 +465,30 @@ class CompetitorResearchAgent(Agent):
                 llm_classified = True
             if prof.rationale:
                 comp.rationale = f"{prof.rationale} {comp.relevance['reason'] if comp.relevance else ''}".strip()
+            # Only values whose quote is found in the competitor's page are kept (never unverified text).
             for attr in ("description", "target_market", "pricing"):
                 sv = getattr(prof, attr)
-                e = grounder.ground_value(f"{comp.name} {attr.replace('_', ' ')}", sv)
+                e = sv and grounder.ground_verified(f"{comp.name} {attr.replace('_', ' ')}: {sv.value}",
+                                                    sv.source_url, sv.quote)
                 if e:
                     setattr(comp, attr, sv.value)
                     comp.evidence_ids.append(e.id)
+            profile: dict[str, list[dict]] = {}
+            for section in PROFILE_SECTIONS:
+                items = []
+                for sv in getattr(prof, section):
+                    e = grounder.ground_verified(f"{comp.name} {section.replace('_', ' ')}: {sv.value}",
+                                                 sv.source_url, sv.quote, 0.8)
+                    if e and sv.value.strip() and sv.value.strip().lower() not in {i["value"].lower() for i in items}:
+                        items.append({"value": sv.value.strip(), "evidence_id": e.id, "source_url": sv.source_url})
+                if items:
+                    profile[section] = items
+            comp.profile = profile
             for f in prof.features:
                 if f.feature_id not in ctx.taxonomy:
                     continue
-                e = grounder.ground(f"{comp.name} offers {ctx.taxonomy.get(f.feature_id).name}", f.source_url,
-                                    f.quote, 0.85)
+                e = grounder.ground_verified(f"{comp.name} offers {ctx.taxonomy.get(f.feature_id).name}",
+                                             f.source_url, f.quote, 0.85)
                 if not e:
                     continue
                 status = FeatureStatus.PARTIAL if f.status == "partial" else FeatureStatus.AVAILABLE
@@ -469,8 +510,31 @@ class CompetitorResearchAgent(Agent):
             comp.rationale = f"Rejected as not comparable after deep analysis. {comp.rationale}".strip()
             return None
 
+        # Detailed features and documented workflows / use cases, as for the client (core/offering.py).
+        page_dicts = [{"url": p.url, "title": p.title, "headings": p.headings, "text": p.text} for p in pages]
+        offer_docs = offering.capability_docs(page_dicts)
+        try:
+            comp.inventory, errs = await offering.extract_features(
+                ctx.llm, ledger, offer_docs, comp.name, comp.name, ctx.taxonomy,
+                max_batches=ctx.settings.competitor_feature_batches)
+            errors += [f"{comp.name}: {e}" for e in errs]
+            comp.workflows, errs = await offering.extract_workflows(ctx.llm, ledger, offer_docs, comp.name, comp.name)
+            errors += [f"{comp.name}: {e}" for e in errs]
+        except LLMUnavailable:
+            pass
+        for item in comp.inventory:
+            fid = item["feature_id"]
+            if fid and item["verification"] == "documented":
+                status = FeatureStatus(item["status"])
+                o = obs.setdefault(fid, FeatureObservation(feature_id=fid, status=status, confidence=0.85))
+                o.evidence_ids = list(dict.fromkeys(o.evidence_ids + item["evidence_ids"][:2]))
+                if o.verification != "documented":
+                    o.status = status
+                o.verification, o.basis, o.notes = "documented", Basis.EVIDENCE, ""
+
         comp.description = comp.description or pages[0].description or ""
         comp.features = list(obs.values())
+        comp.overlap = feature_overlap(ctx, comp.features, client_feats)
         comp.pages_analysed = list(dict.fromkeys([*comp.pages_analysed, *(p.url for p in pages)]))
         comp.pricing_profile = record_pricing(ledger, comp.name, extract_pricing(pages))
         if comp.pricing_profile and not comp.pricing:
@@ -479,7 +543,7 @@ class CompetitorResearchAgent(Agent):
                             if entry else "custom / contact sales" if comp.pricing_profile.get("enterprise_contact")
                             else None)
         if not llm_classified and comp.classification not in ("open_source", "adjacent"):
-            overlap = len({o.feature_id for o in comp.features} & client_feats) / max(1, len(client_feats))
+            overlap = len(comp.overlap.get("shared", [])) / max(1, len(client_feats))
             comp.classification = "direct" if overlap >= 0.4 else "indirect" if overlap >= 0.2 else "adjacent"
         return comp
 
@@ -518,6 +582,18 @@ def _keyword_features(ctx: RunContext, name: str, pages: list, obs: dict[str, Fe
                 o.status, o.verification, o.basis, o.notes = (FeatureStatus.AVAILABLE, "evidenced", Basis.EVIDENCE,
                                                                "")
     return obs
+
+
+def feature_overlap(ctx: RunContext, features: list[FeatureObservation], client_feats: set[str]) -> dict:
+    """Which evidenced capabilities the competitor shares with the client, and which only one of them offers."""
+    theirs = {o.feature_id for o in features if o.status in (FeatureStatus.AVAILABLE, FeatureStatus.PARTIAL)}
+
+    def named(ids: set[str]) -> list[dict]:
+        return sorted(({"feature_id": f, "name": ctx.taxonomy.get(f).name} for f in ids if ctx.taxonomy.get(f)),
+                      key=lambda x: x["name"])
+
+    return {"shared": named(theirs & client_feats), "competitor_only": named(theirs - client_feats),
+            "client_only": named(client_feats - theirs)}
 
 
 def _client_profile(ctx: RunContext, profile: dict, industry: dict, client_feats: set[str]) -> ClientProfile:
