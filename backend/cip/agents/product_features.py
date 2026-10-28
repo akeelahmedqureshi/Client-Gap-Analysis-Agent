@@ -15,6 +15,7 @@ from collections import defaultdict
 from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
+from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind_of
 from cip.core import positioning
 from cip.core.evidence import snippet
 from cip.core.grounding import Grounder, SourceDoc, pages_to_prompt
@@ -46,25 +47,45 @@ actually state; never infer features that are not mentioned. Sources may be in a
 
 
 def combine_signals(signals: list[dict], coverage: dict[str, bool]) -> dict[str, FeatureObservation]:
-    """Merge per-source signals into one observation per taxonomy feature."""
+    """Merge per-source signals into one observation per taxonomy feature, graded by evidence strength.
+
+    * documented — a grounded quote from the client's own pages (LLM extraction): its stated status;
+    * evidenced  — code dependencies, the client's records, a match on a page where the company states its
+      offering (home, product, features, pricing, docs, help, integrations), several keywords on one page or the
+      same capability on two or more pages: available;
+    * mentioned  — one keyword on one other page (about, customers…): "not publicly identified", with the
+      mention kept as a note.
+    """
     by_feature: dict[str, list[dict]] = defaultdict(list)
     for s in signals:
         by_feature[s["feature_id"]].append(s)
     out: dict[str, FeatureObservation] = {}
     for fid, sigs in by_feature.items():
         sources = {s["source"] for s in sigs}
-        strong = [s for s in sigs if s["status"] == "available" and s["confidence"] >= 0.6]
-        if strong or len(sources) >= 2:
-            status = FeatureStatus.AVAILABLE
+        documented = [s for s in sigs if s["source"] == "llm_extraction"]
+        web = [s for s in sigs if s["source"] == "website"]
+        # A folder or file name ("path") alone is as weak as a single keyword; dependencies, code review, the
+        # client's records and app listings are independent evidence.
+        independent = sources - {"website", "llm_extraction", "path"}
+        web_strong = (any(s.get("keywords", 1) >= 2 or kind_of(s.get("page") or "") in OFFERING_KINDS for s in web)
+                      or len({s.get("page") for s in web}) >= 2 or (bool(web) and "path" in sources))
+        if documented:
+            grade = "documented"
+            status = (FeatureStatus.AVAILABLE if any(s["status"] == "available" for s in documented) or independent
+                      or web_strong else FeatureStatus.PARTIAL)
+        elif independent or web_strong:
+            grade, status = "evidenced", FeatureStatus.AVAILABLE
         else:
-            status = FeatureStatus.PARTIAL
+            grade, status = "mentioned", FeatureStatus.UNKNOWN
         best = max(s["confidence"] for s in sigs)
         conf = min(0.97, best + 0.08 * (len(sources) - 1))
         ev_ids = list(dict.fromkeys(s["evidence_id"] for s in sigs))
+        note = f"signals: {', '.join(sorted(sources))}"
+        if grade == "mentioned":
+            note = "mentioned once on the website; not confirmed as an offered capability"
         out[fid] = FeatureObservation(
-            feature_id=fid, status=status, evidence_ids=ev_ids, confidence=round(conf, 3),
-            notes=f"signals: {', '.join(sorted(sources))}",
-            basis=Basis.EVIDENCE if strong else Basis.INFERRED,
+            feature_id=fid, status=status, evidence_ids=ev_ids, confidence=round(conf, 3), notes=note,
+            basis=Basis.EVIDENCE if grade != "mentioned" else Basis.INFERRED, verification=grade,
         )
     return out
 
@@ -103,15 +124,27 @@ class ProductFeatureAgent(Agent):
         ledger = ctx.ledger
         errors: list[str] = []
 
-        # Website keyword matches ------------------------------------------
+        # Website keyword matches, only on pages that can describe the offering (not blog posts, job adverts
+        # or legal pages: connectors/research/pages.py) ------------------------------------------------
         for page in pages:
+            if kind_of(page["url"]) not in CAPABILITY_KINDS:
+                continue
             text = " ".join([page.get("title", ""), page.get("description", ""), " ".join(page.get("headings", [])),
                              page.get("text", "")])
             for fid, kws in ctx.taxonomy.match_text(text).items():
                 ev = ledger.add(f"Website mentions {ctx.taxonomy.get(fid).name}", page["url"], "website",
                                 0.6 if len(kws) > 1 else 0.5, extracted_text=snippet(text, kws[0]))
                 signals.append({"feature_id": fid, "status": "available", "evidence_id": ev.id,
-                                "source": "website", "confidence": ev.confidence})
+                                "source": "website", "confidence": ev.confidence, "keywords": len(kws),
+                                "page": page["url"]})
+
+        # The company's own product announcements (client research found them on its blog / news pages) are
+        # evidence of a capability; other blog text is not.
+        for a in research.get("announcements", []):
+            if a.get("is_product") and a.get("evidence_id"):
+                for fid in ctx.taxonomy.match_text(a.get("title", "")):
+                    signals.append({"feature_id": fid, "status": "available", "evidence_id": a["evidence_id"],
+                                    "source": "announcement", "confidence": 0.75})
 
         # Language versions declared with hreflang = localization (multi-language analysis) ----------
         with_alt = next((p for p in pages if len({k.split("-")[0] for k in (p.get("alternates") or {})}) >= 2), None)
@@ -120,7 +153,7 @@ class ProductFeatureAgent(Agent):
             ev = ledger.add(f"Website is published in {len(langs)} languages ({', '.join(langs)})", with_alt["url"],
                             "website", 0.85, extracted_text="hreflang: " + ", ".join(sorted(with_alt["alternates"])))
             signals.append({"feature_id": "ux.localization", "status": "available", "evidence_id": ev.id,
-                            "source": "website", "confidence": 0.85})
+                            "source": "website", "confidence": 0.85, "keywords": 2, "page": with_alt["url"]})
 
         # CSV-declared features ----------------------------------------------
         csv_source = f"csv://row/{rec.row_number}"

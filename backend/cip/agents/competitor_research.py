@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from cip.agents.base import Agent, RunContext
 from cip.agents.pricing_analysis import record_pricing
+from cip.connectors.research.pages import CAPABILITY_KINDS, OFFERING_KINDS, kind_of
 from cip.connectors.research.pricing import extract_pricing
 from cip.connectors.research.web import registrable_domain
 from cip.connectors.source_control.base import parse_repo_url
@@ -370,7 +371,8 @@ class CompetitorResearchAgent(Agent):
             return comp
 
         result = score_candidate(client, CandidateSignals(
-            text=text, features={o.feature_id for o in comp.features}, marketplace=marketplace,
+            text=text, features={o.feature_id for o in comp.features if o.status != FeatureStatus.UNKNOWN},
+            marketplace=marketplace,
             search_mentions=mentions, oss_stars=comp.stars or 0, has_pricing=has_pricing, has_docs=has_docs,
             evidence_count=len(comp.evidence_ids) + len(comp.features)))
         comp.relevance = result
@@ -453,6 +455,11 @@ class CompetitorResearchAgent(Agent):
                                                                     confidence=e.confidence))
                 o.evidence_ids.append(e.id)
                 o.confidence = max(o.confidence, e.confidence)
+                # Stated on its own pages with a verbatim quote: documented, with the status it states (an
+                # earlier "available" from keywords stays unless the competitor says it is limited).
+                if o.verification != "documented" or status == FeatureStatus.AVAILABLE:
+                    o.status = status if o.verification != "documented" else FeatureStatus.AVAILABLE
+                o.verification, o.basis, o.notes = "documented", Basis.EVIDENCE, ""
         except LLMUnavailable:
             pass
         except LLMError as exc:
@@ -483,8 +490,16 @@ DEEP_PATHS = ["/pricing", "/plans", "/features", "/product", "/products", "/inte
 
 def _keyword_features(ctx: RunContext, name: str, pages: list, obs: dict[str, FeatureObservation]
                       ) -> dict[str, FeatureObservation]:
-    """Deterministic feature evidence from taxonomy keyword matches on the competitor's own pages."""
+    """Deterministic feature evidence from taxonomy keyword matches on the competitor's own pages.
+
+    Same rules as for the client (agents/product_features.combine_signals): only pages that can describe the
+    offering count (never blog posts, job adverts or legal pages). A match on a page where the company states
+    its offering, several keywords on one page, or two pages make it *evidenced* (available); a single keyword
+    on one other page is only *mentioned* and stays "not publicly identified"."""
     for p in pages:
+        kind = kind_of(p.url)
+        if kind not in CAPABILITY_KINDS:
+            continue
         text = f"{p.title} {p.description} {' '.join(p.headings)} {p.text}"
         for fid, kws in ctx.taxonomy.match_text(text).items():
             if fid in obs and any(ctx.ledger.get(e) and ctx.ledger.get(e).source_url == p.url
@@ -492,10 +507,16 @@ def _keyword_features(ctx: RunContext, name: str, pages: list, obs: dict[str, Fe
                 continue
             e = ctx.ledger.add(f"{name} offers {ctx.taxonomy.get(fid).name}", p.url, "website",
                                0.6 if len(kws) > 1 else 0.5, extracted_text=snippet(text, kws[0]))
-            o = obs.setdefault(fid, FeatureObservation(feature_id=fid, status=FeatureStatus.AVAILABLE,
-                                                       confidence=e.confidence, basis=Basis.EVIDENCE))
+            o = obs.setdefault(fid, FeatureObservation(
+                feature_id=fid, status=FeatureStatus.UNKNOWN, confidence=e.confidence, basis=Basis.INFERRED,
+                verification="mentioned",
+                notes=f"mentioned once on {p.url}; not confirmed as an offered capability"))
             o.evidence_ids.append(e.id)
             o.confidence = max(o.confidence, e.confidence)
+            strong = len(kws) > 1 or kind in OFFERING_KINDS or len(o.evidence_ids) >= 2
+            if strong and o.verification == "mentioned":
+                o.status, o.verification, o.basis, o.notes = (FeatureStatus.AVAILABLE, "evidenced", Basis.EVIDENCE,
+                                                               "")
     return obs
 
 

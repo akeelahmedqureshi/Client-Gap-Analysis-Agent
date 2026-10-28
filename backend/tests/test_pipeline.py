@@ -74,8 +74,11 @@ async def test_full_pipeline_deterministic(make_ctx):
     # Gaps & prioritization
     gaps = {g["name"]: g for g in ctx.data("gap_analysis")["gaps"]}
     assert gaps["AI assistant / chatbot"]["gap_type"] == "ai"
-    # The client's blog announces SMS reminders, so SMS is only a partial gap; video calls are truly missing.
-    assert gaps["SMS notifications"]["gap_type"] == "partial"
+    # The client's blog announces SMS reminders (a product announcement), so SMS is offered, not a gap;
+    # video calls are not publicly identified.
+    assert "SMS notifications" not in gaps
+    sms = ctx.data("product_features")["observations"]["comm.sms"]
+    assert sms["status"] == "available" and sms["verification"] == "evidenced"
     assert gaps["Video calls"]["gap_type"] == "missing"
     assert "Native mobile app" in gaps and gaps["Native mobile app"]["gap_type"] == "ux"
     assert "CI/CD pipeline" in gaps and "Secrets management" in gaps

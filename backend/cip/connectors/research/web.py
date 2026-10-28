@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
+import itertools
 import io
 import ipaddress
 import json
@@ -717,29 +719,51 @@ class WebFetcher:
             return await self._crawl(start_url, max_pages, prefer or [])
 
     async def _crawl(self, start_url: str, max_pages: int | None = None, prefer: list[str] = ()) -> list[Page]:
+        """Read the pages that say most about the offering first (connectors/research/pages.py): product,
+        features, pricing, docs, help and integrations; then company pages; blog, news and careers pages only a
+        few; legal and sign-in pages never. Links the site itself shows beat guessed paths of the same kind."""
+        from cip.connectors.research.pages import kind_of, link_priority
+
         max_pages = max_pages or self._settings.crawler_max_pages
         start_url = normalize_url(start_url)
         p = urlparse(start_url)
         origin = f"{p.scheme}://{p.netloc}"
-        queue = [start_url] + [origin + path for path in prefer] + \
-            [origin + path for path in PRIORITY_PATHS if path != "/" and path not in prefer]
+        order = itertools.count()
+        queue: list[tuple[int, int, str]] = []  # (-priority, insertion order, url)
+
+        def push(url: str, priority: int) -> None:
+            heapq.heappush(queue, (-priority, next(order), url))
+
+        push(start_url, 100)
+        for path in prefer:
+            push(origin + path, 50)
+        for path in PRIORITY_PATHS:
+            if path != "/" and path not in prefer:
+                push(origin + path, link_priority(origin + path) - 1)  # a guess: real links of the kind go first
         seen: set[str] = set()
         pages: list[Page] = []
         pdfs = 0
+        low_value = 0  # news / careers pages read so far
+        max_low_value = max(2, max_pages // 6)
 
         def skip(u: str) -> bool:
             low = u.lower()
             if low.endswith(".pdf"):  # only a few PDFs that look like product or pricing material
                 return pdfs >= self._max_pdfs or not any(h in urlparse(low).path for h in PDF_HINTS)
-            return low.endswith(SKIP_EXTENSIONS)
+            return low.endswith(SKIP_EXTENSIONS) or kind_of(u) in ("legal", "account")
 
         async with self._client() as client:
             while queue and len(pages) < max_pages:
                 batch = []
                 while queue and len(batch) < 4:
-                    u = queue.pop(0).rstrip("/") or origin
+                    _, _, u = heapq.heappop(queue)
+                    u = u.rstrip("/") or origin
                     if u in seen or skip(u):
                         continue
+                    if kind_of(u) in ("news", "careers"):
+                        if low_value >= max_low_value:
+                            continue
+                        low_value += 1
                     seen.add(u)
                     batch.append(u)
                 results = await asyncio.gather(*(self.fetch(u, client) for u in batch))
@@ -750,16 +774,13 @@ class WebFetcher:
                         continue
                     pages.append(page)
                     pdfs += page.content_type == "pdf"
-                    # Discovered links: priority-looking ones jump the queue.
+                    anchors = dict(page.link_texts)
                     for link in page.links:
                         key = link.rstrip("/")
                         if key in seen or skip(key):
                             continue
-                        path = urlparse(link).path.lower()
-                        if path.endswith(".pdf"):
-                            queue.append(link)  # after the HTML pages
-                        elif any(h in path for h in PRIORITY_HINTS):
-                            queue.insert(0, link)
-                        elif path.count("/") <= 2:
-                            queue.append(link)
+                        if urlparse(link).path.lower().endswith(".pdf"):
+                            push(link, 2)  # after the HTML pages
+                        else:
+                            push(link, link_priority(link, anchors.get(link, "")))
         return pages

@@ -102,15 +102,15 @@ async def test_client_app_reviews_drive_gaps_and_priorities(ctx_with_app, make_c
     assert not any(g["feature_id"] == "ux.mobile_app" for g in gaps)
     assert any(e["feature_id"] == "ux.mobile_app" for e in ctx.data("gap_analysis")["existing"])
 
-    # Customers asking for SMS raise market demand for that gap (+1 vs the same run without the app reviews).
-    request = next(r for r in data["requests"] if r["feature_id"] == "comm.sms")
+    # Customers asking for video calls raise market demand for that gap (+1 vs the same run without the reviews).
+    request = next(r for r in data["requests"] if r["feature_id"] == "comm.video")
     assert request["count"] == 2
-    sms = next(o for o in ctx.data("opportunity_prioritization")["opportunities"] if "SMS" in o["name"])
-    assert "2 recent App Store reviews" in sms["business_opportunity"]
+    video = next(o for o in ctx.data("opportunity_prioritization")["opportunities"] if o["name"] == "Video calls")
+    assert "2 recent App Store reviews" in video["business_opportunity"]
     baseline = make_ctx()
     await run_all(baseline)
-    sms_before = next(o for o in baseline.data("opportunity_prioritization")["opportunities"] if "SMS" in o["name"])
-    assert sms["factors"]["market_demand"] == min(5, sms_before["factors"]["market_demand"] + 1)
+    before = next(o for o in baseline.data("opportunity_prioritization")["opportunities"] if o["name"] == "Video calls")
+    assert video["factors"]["market_demand"] == min(5, before["factors"]["market_demand"] + 1)
 
     # A crash-ridden app is a top priority, with a mobile-quality patch plan.
     recs = {r["feature"]: r for r in ctx.data("opportunity_prioritization")["recommendations"]}

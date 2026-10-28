@@ -266,6 +266,14 @@ STATUS_LABELS = {
 }
 
 
+# How strong the evidence for a capability is (independent of its status):
+#   documented — stated on the company's own product, feature, docs or pricing pages (grounded verbatim quote);
+#   evidenced  — several independent signals: several keywords on a product page, two or more pages, a code
+#                dependency, an app-store listing or the client's own records;
+#   mentioned  — a single keyword on a single page: not enough to call it available ("not publicly identified").
+EvidenceGrade = Literal["documented", "evidenced", "mentioned", ""]
+
+
 class FeatureObservation(BaseModel):
     feature_id: str
     status: FeatureStatus
@@ -273,6 +281,7 @@ class FeatureObservation(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     notes: str = ""
     basis: Basis = Basis.EVIDENCE
+    verification: EvidenceGrade = ""
 
 
 CompetitorClass = Literal["direct", "indirect", "adjacent", "open_source", "enterprise", "emerging"]

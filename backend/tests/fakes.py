@@ -157,8 +157,8 @@ CLIENT_APP_REVIEWS = {"feed": {"entry": [
         (2, "Buggy", "So buggy since the last update, the calendar is broken."),
         (1, "Freezes", "App freezes on the login screen and then crashes."),
         (2, "Can't sign in", "Cannot sign in, password reset email never arrives (me@example.com)."),
-        (3, "Please add SMS", "Works ok but please add SMS reminders, my patients don't read email."),
-        (3, "Missing texts", "Would be nice to get SMS reminders instead of email."),
+        (3, "Please add video", "Works ok but please add a video consultation option, my patients can't come in."),
+        (3, "Missing video", "Would be nice to have a video call with the doctor instead of driving in."),
         (5, "Love it", "Easy online booking for my clinic."),
         (4, "Good", "Nice and simple."),
     ]]}}
