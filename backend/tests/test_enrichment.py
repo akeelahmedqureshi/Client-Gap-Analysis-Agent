@@ -73,4 +73,5 @@ async def test_pipeline_enrichment_end_to_end(make_ctx):
     md = ctx.data("report")["markdown"]
     assert "### Hiring signals" in md and "AI / Machine learning | 2" in md
     assert "### Recent announcements" in md and "**Product:** [Introducing SMS reminders" in md
-    assert "**Legal Name:** ABC Healthcare Holdings Inc." in md and "**Markets served:** United States, Canada" in md
+    assert "| Legal Name | ABC Healthcare Holdings Inc. | schema.org (official website)" in md
+    assert "| Markets served | United States, Canada |" in md

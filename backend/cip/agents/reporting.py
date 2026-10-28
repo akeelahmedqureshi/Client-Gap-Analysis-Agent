@@ -17,17 +17,34 @@ from pydantic import BaseModel
 from cip.agents.base import Agent, ApprovalRequest, RunContext
 from cip.core.language import name as lang_name
 from cip.core.llm import LLMError, LLMUnavailable
+from cip.core.market_research import SECTION_TITLES as MARKET_TITLES, SECTIONS as MARKET_SECTIONS
+from cip.core.offering import FACT_FIELDS
 from cip.core.schemas import STATUS_LABELS, AgentResult
 from cip.agents.pricing_analysis import MODEL_LABELS
 from cip.core.scoring import PHASE_LABELS
 from cip.connectors.research.ux import PRACTICES
 
 STATUS_ICON = {"available": "✅", "partial": "🟡", "missing": "❌", "unknown": "❔"}
-STATUS_LEGEND = "✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed missing"
+STATUS_LEGEND = ("✅ available · 🟡 partially available · ❔ not publicly identified · ❌ confirmed unavailable "
+                 "(the company's own pages say it is not offered)")
+GRADE_LABEL = {"documented": "documented", "evidenced": "evidenced", "mentioned": "mentioned only",
+               "unverified": "unverified", "reviewed": "reviewed", "partial": "partially documented"}
+ORIGIN_LABEL = {"official_site": "official website", "schema_org": "schema.org (official website)",
+                "search_snippet": "search snippet", "third_party": "third-party page", "csv": "CSV"}
+FACT_VERIFICATION = {"verified": "verified", "partial": "partially verified (page not read)",
+                     "unverified": "unverified"}
 
 
 SUMMARY_PROMPT = ("You write concise executive summaries for account managers. Use only the structured findings "
                   "provided; do not introduce new facts. 3-5 key findings, 3-5 major opportunities.")
+
+
+PROFILE_LABELS = (
+    ("products", "Products & services"), ("target_customers", "Target customers"), ("industries", "Industries"),
+    ("value_proposition", "Core value proposition"), ("positioning", "Market positioning"),
+    ("integrations", "Integrations & technology"), ("ai_capabilities", "AI capabilities"), ("automation", "Automation"),
+    ("onboarding_support", "Onboarding & support"), ("differentiators", "Key differentiators (as it presents them)"),
+    ("strengths", "Strengths (shown by its pages)"), ("limitations", "Limitations (shown by its pages)"))
 
 
 class _LLMSummary(BaseModel):
@@ -107,6 +124,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "products": [{**p, "cite": cite(p.get("evidence_ids"))} for p in profile.get("products", [])],
         "leadership": [{**p, "cite": cite(p.get("evidence_ids"))} for p in research.get("leadership", [])],
         "contacts": profile.get("contacts", []),
+        "fact_sources": profile.get("fact_sources"),
     }
     pos = features.get("positioning") or {}
     vp = pos.get("value_proposition")
@@ -117,6 +135,9 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "workflows": [{**w, "cite": cite([e for st in w["steps"] for e in st["evidence_ids"]], 3)}
                       for w in features.get("workflows", [])],
         "features": [{**f, "cite": cite(f.get("evidence_ids"))} for f in features.get("inventory", [])],
+        "documented_workflows": [{**w, "steps": [{**st, "cite": cite([st["evidence_id"]] if st.get("evidence_id") else [])}
+                                                 for st in w["steps"]]}
+                                 for w in features.get("documented_workflows", [])],
         "coverage": features.get("coverage", {}),
         "repositories": [{
             "full_name": p["full_name"], "url": p["url"], "architecture": p.get("architecture", []),
@@ -156,6 +177,12 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "market": pricing.get("market", {}),
         "client": {**client_pricing, "cite": cite(client_pricing.get("evidence_ids"))} if client_pricing else None,
         "competitors": [{**r, "cite": cite(r.get("evidence_ids"))} for r in pricing.get("competitors", [])],
+        "comparison": None if not (pricing.get("comparison") or {}).get("rows") else {
+            **pricing["comparison"],
+            "rows": [{**r, "cite": cite([r["evidence_id"]] if r.get("evidence_id") else [])}
+                     for r in pricing["comparison"]["rows"]],
+            "implications": [{**i, "cite": cite(i.get("evidence_ids"))}
+                             for i in pricing["comparison"].get("implications", [])]},
     }
     apps = ctx.data("app_store")
     sections["app_store"] = None if not apps.get("enabled") or not (apps.get("client_apps") or
@@ -173,6 +200,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
     sections["feature_comparison"] = comparison
     sections["gap_analysis"] = [{**g, "cite": cite(g.get("evidence_ids"))} for g in gaps]
     sections["opportunities"] = prio.get("opportunities", [])
+    sections["verdicts"] = prio.get("verdicts", {})
     sections["scoring_weights"] = prio.get("scoring_weights", {})
     sections["roadmap"] = {
         phase: [{**r, "cite": cite(r.get("evidence_ids"))} for r in prio.get("recommendations", [])
@@ -188,6 +216,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "issues": [i for i in qa["issues"] if i["severity"] in ("blocking", "warning")],
         "conflicts": [{**c, "cite": cite(c.get("evidence_ids"))} for c in qa.get("conflicts", [])],
         "reproducibility": qa.get("reproducibility", {}), "thresholds": qa.get("thresholds", {}),
+        "consistency": qa.get("consistency", []), "corroboration": qa.get("corroboration", []),
     }
     im = ctx.data("industry_market")
     sections["industry"] = None if not im else {
@@ -196,6 +225,7 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "cite": cite(im.get("evidence_ids"), 3),
         "trends": [{**t, "cite": cite([t["evidence_id"]])} for t in im.get("trends", [])],
         "market": comparison.get("market"),
+        "research": _research_with_cites(im.get("research") or {}, cite),
     }
     research_c = ctx.data("competitor_research")
     sections["landscape"] = [{**c, "cite": cite(c.get("evidence_ids"), 2)} for c in research_c.get("landscape", [])]
@@ -205,8 +235,16 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "rationale": c.get("rationale"), "pages_analysed": len(c.get("pages_analysed", [])),
         "deep_error": c.get("deep_error"), "cite": cite(c.get("evidence_ids")),
         "capabilities": [{"name": ctx.taxonomy.get(o["feature_id"]).name if ctx.taxonomy.get(o["feature_id"]) else
-                          o["feature_id"], "status": o["status"], "cite": cite(o.get("evidence_ids"), 1)}
+                          o["feature_id"], "status": o["status"], "verification": o.get("verification") or "",
+                          "cite": cite(o.get("evidence_ids"), 1)}
                          for o in c.get("features", []) if o["status"] in ("available", "partial")],
+        "profile": {k: [{**i, "cite": cite([i["evidence_id"]])} for i in v] for k, v in (c.get("profile") or {}).items()},
+        "overlap": c.get("overlap") or {},
+        "documented_features": sum(1 for i in c.get("inventory", []) if i.get("verification") == "documented"),
+        "workflows": [w["name"] for w in c.get("workflows", [])],
+        "plans": [{**pl, "cite": cite([pl["evidence_id"]] if pl.get("evidence_id") else [])}
+                  for pl in ((c.get("pricing_detail") or {}).get("plans") or []) if (c.get("pricing_detail") or {}).get("available")],
+        "announcements": [{**a, "cite": cite([a["evidence_id"]])} for a in c.get("announcements", [])[:5]],
     } for c in comp]
     rows = comparison.get("rows", [])
     sections["common_capabilities"] = {
@@ -255,6 +293,16 @@ def build_report(ctx: RunContext, summary: _LLMSummary | None) -> dict:
         "run_id": ctx.run_id,
         "sections": sections,
     }
+
+
+def _research_with_cites(r: dict, cite) -> dict:
+    """Market research (core/market_research.py) with a citation on every statement and figure."""
+    if not r:
+        return {}
+    return {**r, "sections": {k: [{**i, "cite": cite([i["evidence_id"]])} for i in v]
+                              for k, v in (r.get("sections") or {}).items()},
+            "figures": [{**f, "cite": cite([f["evidence_id"]] if f.get("evidence_id") else [])}
+                        for f in r.get("figures", [])]}
 
 
 def _md_list(items: list[str]) -> str:
@@ -334,19 +382,44 @@ def render_markdown(report: dict) -> str:
     c = ci["company"]
     out += ["## 2. Client Overview", f"{c.get('description') or '_No public description found._'}"
             f"{ci['company_citations']}", ""]
-    facts = [f"**{k.replace('_', ' ').title()}:** {v}" for k, v in c.items()
-             if v and k not in ("name", "description")]
+    src = ci.get("fact_sources")
     langs = ci.get("languages") or {}
-    if langs.get("pages") and (langs.get("primary") != "en" or len(langs["pages"]) > 1):
-        facts.append("**Website language(s):** " + ", ".join(f"{lang_name(k)} ({n} page{'s' if n != 1 else ''})"
-                                                           for k, n in langs["pages"].items()))
-    out += [_md_list(facts), ""]
-    if ci["locations"]:
-        out += [f"**Locations:** {', '.join(ci['locations'])}", ""]
-    for key, label in (("geographic_markets", "Markets served"), ("brands", "Brands"),
-                       ("subsidiaries", "Subsidiaries"), ("divisions", "Business divisions")):
-        if ci.get(key):
-            out += [f"**{label}:** {', '.join(ci[key])}", ""]
+    if src is not None:
+        # Every company fact with where it came from and how it was checked.
+        if c.get("domain"):
+            out += [f"**Website analysed:** {c['domain']}", ""]
+        values = [(k.replace("_", " ").title(), k, v) for k, v in c.items()
+                  if v and k not in ("name", "description", "domain")]
+        values += [(label, key, ", ".join(ci[key])) for key, label in (
+            ("locations", "Locations"), ("geographic_markets", "Markets served"), ("brands", "Brands"),
+            ("subsidiaries", "Subsidiaries"), ("divisions", "Business divisions"),
+            ("target_customers", "Target customers")) if ci.get(key)]
+        out += ["| Fact | Value | Source | Verification |", "|---|---|---|---|"]
+        for label, key, v in values:
+            entries = src.get(key) or []
+            origin = ", ".join(dict.fromkeys(ORIGIN_LABEL.get(e["origin"], e["origin"]) for e in entries)) or "—"
+            urls = list(dict.fromkeys(e["source_url"] for e in entries if e.get("source_url")))
+            links = " ".join(f"[source]({u})" for u in urls[:2])
+            worst = min((e["verification"] for e in entries), key=["unverified", "partial", "verified"].index,
+                        default=None)
+            out.append(f"| {label} | {_cell(v)} | {origin} {links} | {FACT_VERIFICATION.get(worst, 'not recorded')} |")
+        out.append("")
+        if langs.get("pages") and (langs.get("primary") != "en" or len(langs["pages"]) > 1):
+            out += ["**Website language(s):** " + ", ".join(f"{lang_name(k)} ({n} page{'s' if n != 1 else ''})"
+                                                          for k, n in langs["pages"].items()), ""]
+    else:
+        facts = [f"**{k.replace('_', ' ').title()}:** {v}" for k, v in c.items()
+                 if v and k not in ("name", "description")]
+        if langs.get("pages") and (langs.get("primary") != "en" or len(langs["pages"]) > 1):
+            facts.append("**Website language(s):** " + ", ".join(f"{lang_name(k)} ({n} page{'s' if n != 1 else ''})"
+                                                               for k, n in langs["pages"].items()))
+        out += [_md_list(facts), ""]
+        if ci["locations"]:
+            out += [f"**Locations:** {', '.join(ci['locations'])}", ""]
+        for key, label in (("geographic_markets", "Markets served"), ("brands", "Brands"),
+                           ("subsidiaries", "Subsidiaries"), ("divisions", "Business divisions")):
+            if ci.get(key):
+                out += [f"**{label}:** {', '.join(ci[key])}", ""]
     out += ["### Products & services"]
     out += [_md_list([f"**{p['name']}** ({p['kind']}) — {p.get('description', '')}{p['cite']}" for p in ci["products"]]), ""]
     if ci["leadership"]:
@@ -387,18 +460,50 @@ def render_markdown(report: dict) -> str:
                          + [f"**Use case:** {u['name']} {u['cite']}".strip() for u in pa["use_cases"]]
                          + [f"**Problem addressed:** “{x['statement']}” {x['cite']}".strip()
                             for x in pa["customer_problems"]]), ""]
+    for w in pa.get("documented_workflows", []):
+        if w is pa["documented_workflows"][0]:
+            out += ["### Documented workflows",
+                    "_Steps the company's own pages document (with the source quote) or, where marked, inferred._", ""]
+        actors = ", ".join(a.get("name", "") for a in w.get("actors", []) if a.get("name"))
+        out += [f"**{w['name']}** — {w['documented_steps']} of {len(w['steps'])} steps documented"
+                + (f" · actors: {actors}" if actors else ""),
+                *([f"_Objective:_ {w['objective']}"] if w.get("objective") else []), ""]
+        out += [f"{st['order']}. {st['action']}" + (f" _({st['actor']})_" if st.get("actor") else "")
+                + (st["cite"] if st.get("documented") else " _(inferred)_") for st in w["steps"]]
+        if w.get("outcome"):
+            out.append(f"\n_Outcome:_ {w['outcome']}")
+        out.append("")
     if pa.get("workflows"):
         mark = {"supported": "✅", "mentioned": "🟡", "not_identified": "❔"}
-        out += ["### User, customer and business workflows", "| Workflow | Actor | Steps | Evidence |", "|---|---|---|---|"]
+        out += ["### Typical workflows for this kind of product _(inferred)_",
+                "| Workflow | Actor | Steps | Evidence |", "|---|---|---|---|"]
         out += [f"| {w['name']} | {w['actor']} | " + " → ".join(f"{mark[st['status']]} {st['name']}" for st in w["steps"])
                 + f" | {w['cite'].strip() or '—'} |" for w in pa["workflows"]]
         out += ["", "_✅ capability offered · 🟡 mentioned on the site · ❔ not publicly identified._", ""]
     out += ["### Capability inventory",
-            "| Feature | Status | Technology | Evidence |", "|---|---|---|---|"]
+            "| Feature | Status | Evidence grade | Technology | Evidence |", "|---|---|---|---|---|"]
     for f in pa["features"]:
-        out.append(f"| {f['name']} | {STATUS_ICON.get(f['status'], '')} {f['status']} | "
+        out.append(f"| {_cell(f['name'])} | {STATUS_ICON.get(f['status'], '')} {STATUS_LABELS.get(f['status'], f['status'])} | "
+                   f"{GRADE_LABEL.get(f.get('verification') or '', '—')} | "
                    f"{', '.join(f.get('technology') or []) or '—'} | {f['cite'].strip() or '—'} |")
     out.append("")
+    detailed = [f for f in pa["features"] if f.get("description") or any((f.get("facts") or {}).values())]
+    if detailed:
+        out += ["### Feature details",
+                "_Facts are quoted from the company's pages; the purpose and users are the analyst's interpretation._", ""]
+        for f in detailed:
+            facts = f.get("facts") or {}
+            bits = [f"{k.replace('_', ' ').capitalize()}: " + "; ".join(x["text"] for x in facts[k])
+                    for k in FACT_FIELDS if facts.get(k)]
+            interp = f.get("interpretation") or {}
+            if interp.get("purpose"):
+                bits.append(f"Purpose _(analysis)_: {interp['purpose']}")
+            if interp.get("intended_users"):
+                bits.append(f"Intended users _(analysis)_: {', '.join(interp['intended_users'])}")
+            out += [f"- **{f['name']}** ({GRADE_LABEL.get(f.get('verification') or '', 'not graded')})"
+                    + (f" — {f['description']}" if f.get("description") else "") + f["cite"]]
+            out += [f"  - {b}" for b in bits]
+        out.append("")
     for r in pa["repositories"]:
         out += [f"### Repository: [{r['full_name']}]({r['url']})",
                 f"**Architecture:** {', '.join(r['architecture']) or 'Not determined'}"]
@@ -519,6 +624,33 @@ def render_markdown(report: dict) -> str:
                 out += [f"**{label}**", _md_list([f"{t['statement']}{t['cite']}" for t in items]), ""]
         if not ind.get("trends"):
             out += ["_" + ((ind.get("notes") or ["No sourced market trends were found."])[0]) + "_", ""]
+        mr = ind.get("research") or {}
+        if mr.get("available"):
+            if mr.get("figures"):
+                out += ["### Market figures", "| Metric | Value | Period | Geography | Definition | Original source | Evidence |",
+                        "|---|---|---|---|---|---|---|"]
+                out += [f"| {_cell(f['metric'])} | {_cell(f['value'])} | {_cell(f.get('period') or 'not stated')} | "
+                        f"{_cell(f.get('geography') or 'not stated')} | {_cell(f.get('definition') or '—')} | "
+                        f"{_cell(f.get('original_source') or '—')} | {f['cite'].strip() or '—'} |" for f in mr["figures"]]
+                out.append("")
+            else:
+                out += ["_No reliable market figure (size, growth, share) was found in the sources read; the "
+                        "assessment is qualitative._", ""]
+            for key, items in MARKET_SECTIONS.items():
+                found = [(label, mr["sections"].get(field, [])) for field, label in items if mr["sections"].get(field)]
+                if not found:
+                    continue
+                out += [f"### {key}. {MARKET_TITLES[key]}"]
+                for label, statements in found:
+                    out += [f"**{label}**", _md_list([f"{x['statement']}{x['cite']}" for x in statements]), ""]
+            if mr.get("qualitative_assessment"):
+                out += [f"**Qualitative assessment _(estimate)_:** {mr['qualitative_assessment']}", ""]
+            if mr.get("sources"):
+                out += ["**Market sources read:** " + "; ".join(
+                    f"[{_cell(x.get('title') or x['url'])[:80]}]({x['url']}) (accessed {(x.get('accessed_at') or '')[:10]})"
+                    for x in mr["sources"]), ""]
+        elif mr.get("reason"):
+            out += [f"_Deep market research: {mr['reason']}_", ""]
         m = ind.get("market") or {}
         if m.get("landscape_size"):
             pct = lambda v: "—" if v is None else f"{v:.0%}"  # noqa: E731
@@ -563,6 +695,26 @@ def render_markdown(report: dict) -> str:
                     + (f" {m['excluded_other_currency']} competitor(s) priced in another currency were excluded."
                        if m.get("excluded_other_currency") else "")]
         out.append("")
+    cmp_ = pr.get("comparison")
+    if cmp_:
+        base = cmp_.get("base_currency")
+        out += ["### Plan-level pricing", "| Company | Plan | Published price | ≈ per month | Listing | Evidence |",
+                "|---|---|---|---|---|---|"]
+        for r in cmp_["rows"]:
+            published = ("contact sales" if r.get("quote_based") else "free" if r.get("free") else
+                         f"{r['price']:g} {r.get('currency') or ''}/{r.get('period') or '?'}".strip()
+                         + (f" per {r['unit']}" if r.get("unit") in ("user", "seat") else "")
+                         if r.get("price") is not None else "not stated")
+            monthly = f"{r['monthly_normalized']:g} {base}" if r.get("monthly_normalized") else "—"
+            who = "**Client**" if r["kind"] == "client" else _cell(r["subject"])
+            out.append(f"| {who} | {_cell(r['name'])}{' ⚠ conflicting readings' if r.get('conflict') else ''} | "
+                       f"{_cell(published)} | {monthly} | {r.get('listing') or '—'} | {r['cite'].strip() or '—'} |")
+        out += ["", f"_Monthly figures are converted to {base} with configured rates"
+                    + (f" ({cmp_['rates_date']})" if cmp_.get("rates_date") else "") + "; the published price is "
+                    "authoritative._", ""]
+        if cmp_.get("implications"):
+            out += ["**What the pricing differences mean**", _md_list([f"{i['text']}{i['cite']}"
+                                                                      for i in cmp_["implications"]]), ""]
 
     # 5 ---------------------------------------------------------------------------------------
     out += ["## 5. Competitor Landscape",
@@ -592,9 +744,35 @@ def render_markdown(report: dict) -> str:
                  f"**Pages analysed:** {c['pages_analysed']}"
                  + (" (deep analysis failed; light profile shown)" if c.get("deep_error") else "")]
         out += [_md_list([f for f in facts if f]), ""]
+        for key, label in PROFILE_LABELS:
+            items = (c.get("profile") or {}).get(key)
+            if items:
+                out += [f"**{label}**", _md_list([f"{i['value']}{i['cite']}" for i in items]), ""]
         if c["capabilities"]:
             out += ["**Capabilities evidenced:** " + ", ".join(
-                f"{x['name']}{' (partial)' if x['status'] == 'partial' else ''}{x['cite']}" for x in c["capabilities"]), ""]
+                f"{x['name']}{' (partial)' if x['status'] == 'partial' else ''}"
+                f"{' — ' + GRADE_LABEL[x['verification']] if x.get('verification') in GRADE_LABEL else ''}{x['cite']}"
+                for x in c["capabilities"]), ""]
+        ov = c.get("overlap") or {}
+        if ov:
+            names = lambda xs: ", ".join(x["name"] for x in xs) or "—"  # noqa: E731
+            out += [_md_list([f"**Both offer:** {names(ov.get('shared', []))}",
+                              f"**Only {c['name']}:** {names(ov.get('competitor_only', []))} "
+                              "_(not publicly identified for the client)_",
+                              f"**Only the client:** {names(ov.get('client_only', []))}"]), ""]
+        if c.get("documented_features") or c.get("workflows"):
+            out += [f"{c.get('documented_features', 0)} documented feature(s)"
+                    + (f"; documented workflows: {', '.join(c['workflows'])}" if c.get("workflows") else "") + ".", ""]
+        if c.get("plans"):
+            out += ["**Plans:** " + "; ".join(
+                f"{p['name']} — " + ("contact sales" if p.get("quote_based") else "free" if p.get("free") else
+                                     f"{p['price']:g} {p.get('currency') or ''}/{p.get('period') or '?'}"
+                                     if p.get("price") is not None else "price not stated") + p["cite"]
+                for p in c["plans"]), ""]
+        if c.get("announcements"):
+            out += ["**Recent announcements:** " + "; ".join(
+                f"[{_cell(a['title'])}]({a['url']})" + (f" ({a['date']})" if a.get("date") else "") + a["cite"]
+                for a in c["announcements"]), ""]
     if not s.get("deep_competitors"):
         out += ["_No competitor was analysed in depth._", ""]
 
@@ -621,6 +799,9 @@ def render_markdown(report: dict) -> str:
             "_Confirmed: the competitor capability is verified, the client's status established, customers care and the "
             "value justifies the effort. Potential: worth it if the evidence holds; needs validation. Optional: the "
             "value does not clearly justify the effort._", "",
+            *([f"**{s['verdicts'].get('confirmed', 0)} confirmed, {s['verdicts'].get('potential', 0)} potential, "
+               f"{s['verdicts'].get('optional', 0)} optional.** Only confirmed gaps are stated to the client.", ""]
+              if s.get("verdicts") else []),
             "| Gap | Verdict | Category | Priority | Offered by | Description | Confidence | Evidence |",
             "|---|---|---|---|---|---|---|---|"]
     names = {c["id"]: c["name"] for c in comps}
@@ -629,7 +810,10 @@ def render_markdown(report: dict) -> str:
         est = " _(estimate)_" if g.get("basis") == "estimate" else ""
         offered = ", ".join(names.get(c, c) for c in g.get("competitors_with", [])) or "—"
         category = (g.get("classification") or "").replace("_", " ") or o.get("business_category") or g["gap_type"]
-        out.append(f"| {_cell(g['name'])} | {verdict_label.get(o.get('verdict'), '—')} | {category} | "
+        open_checks = [ch["label"].lower() for ch in o.get("checks", []) if not ch["passed"]]
+        verdict = verdict_label.get(o.get("verdict"), "—") + (f" — open: {'; '.join(open_checks)}"
+                                                             if open_checks and o.get("verdict") != "confirmed" else "")
+        out.append(f"| {_cell(g['name'])} | {_cell(verdict)} | {category} | "
                    f"{o.get('priority', '—')} | {_cell(offered)} | {_cell(g['description'])}{est} | "
                    f"{g['confidence']:.0%} | {g['cite'].strip() or '—'} |")
     out.append("")
@@ -776,6 +960,17 @@ def render_markdown(report: dict) -> str:
             out += ["**Conflicting information**", _md_list([f"{c['topic']}: {c['detail']}{c['cite']}" for c in q["conflicts"]]), ""]
         if q.get("issues"):
             out += ["**Quality issues**", _md_list([f"{i['severity']}: {i['message']}" for i in q["issues"]]), ""]
+        if q.get("consistency"):
+            passed = sum(1 for c in q["consistency"] if c["passed"])
+            out += [f"**Cross-tab consistency:** {passed} of {len(q['consistency'])} checks passed", _md_list([
+                f"{'✅' if c['passed'] else '❌'} {c['label']} — {c['detail']}"
+                + ("" if c["passed"] else f" (re-run: {', '.join(c['rerun'])})") for c in q["consistency"]]), ""]
+        if q.get("corroboration"):
+            out += ["**Corroboration of key findings**", "| Finding | Why it matters | Sources | Weaknesses |",
+                    "|---|---|---|---|"]
+            out += [f"| {_cell(c['name'])} | {', '.join(c['why'])} | {c['sources']} | "
+                    f"{', '.join(c['weaknesses']) or 'corroborated'} |" for c in q["corroboration"]]
+            out.append("")
         out += ["**Reproducibility**", _md_list([
             f"Model: {r.get('model')}" + (f" (temperature {r['llm_temperature']})" if r.get("llm_temperature") is not None else ""),
             f"Prompt version {r.get('prompt_version')} · taxonomy {r.get('taxonomy_version')} · process catalog "
