@@ -108,6 +108,10 @@ lead to a verdict:
   which rest on assumptions about the client's internal processes, are never higher than this.
 - **Optional**: the value or the effort check fails.
 
+A reviewer's decision closes the loop: **approving** a gap makes it confirmed ("validated by a reviewer"),
+**rework** makes it potential, and **reject** removes it. A reviewer can also set a capability's status
+(shown as *Reviewed*); this is the only other way a capability becomes *confirmed unavailable*.
+
 ### What the client is told
 
 The sales summary and the outreach email state only **confirmed** gaps. **Potential** gaps are listed on

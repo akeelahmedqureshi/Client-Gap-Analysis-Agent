@@ -6,7 +6,8 @@ Reviewers can correct what the analysis concluded:
   identified, **confirmed missing**). A reviewer's knowledge is the only way a capability becomes
   *confirmed missing*;
 * ``competitor`` — exclude a competitor that is not relevant;
-* ``gap`` — reject a gap, approve it, or request rework;
+* ``gap`` — reject a gap, approve it, or request rework. Approval makes the gap's verdict *confirmed*
+  (validated by the reviewer), so the sales summary and outreach may state it; rework makes it *potential*;
 * ``recommendation`` — change its priority, roadmap phase, business category or business impact.
 
 Every override is keyed by a **stable label** (capability id, competitor domain, gap name,
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 from cip.connectors.research.web import registrable_domain
 from cip.core.categories import CATEGORIES
+from cip.core.offering import FACT_FIELDS
 from cip.core.schemas import FeatureStatus
 from cip.core.scoring import PHASE_LABELS
 from cip.core.taxonomy import Taxonomy, load_taxonomy
@@ -38,7 +40,7 @@ STAGES = {
     "capability_status": ("business_process", "feature_comparison"),
     "competitor": ("pricing_analysis", "app_store", "ux_review", "feature_comparison"),
     "gap.reject": ("opportunity_prioritization",),
-    "gap": ("quality_assurance",),
+    "gap": ("opportunity_prioritization",),
     "recommendation": ("enhancement_planning", "capability_matching"),
 }
 
@@ -113,14 +115,25 @@ def apply_to(agent: str, data: dict, overrides: list[dict], taxonomy: Taxonomy |
             if fid not in tax:
                 continue
             ob = obs.setdefault(fid, {"feature_id": fid, "evidence_ids": [], "confidence": 0.9})
-            ob.update(status=status, confidence=0.95, basis="evidence", reviewed=True,
+            ob.update(status=status, confidence=0.95, basis="evidence", reviewed=True, verification="reviewed",
                       notes=f"Set by reviewer {o.get('by') or ''}: {o.get('note') or 'no note'}".replace("  ", " "))
+            old = next((i for i in inv if i.get("feature_id") == fid), None) or {}
             inv[:] = [i for i in inv if i.get("feature_id") != fid]
-            if status in ("available", "partial"):
-                inv.append({"name": tax.get(fid).name, "feature_id": fid, "description": o.get("note") or "",
-                            "status": status, "user_type": "", "business_purpose": "",
-                            "evidence_ids": ob.get("evidence_ids", []), "technology": [], "basis": "evidence",
-                            "reviewed": True})
+            if status != "unknown":
+                # Same structure as an extracted entry (core/offering.py); documented facts already found are kept.
+                tf = tax.get(fid)
+                inv.append({
+                    "name": old.get("name") or tf.name, "feature_id": fid,
+                    "category": old.get("category") or tf.category_name,
+                    "description": o.get("note") or old.get("description", ""), "status": status,
+                    "verification": "reviewed", "facts": old.get("facts") or {f: [] for f in FACT_FIELDS},
+                    "interpretation": old.get("interpretation") or {"purpose": "", "intended_users": [],
+                                                                    "use_cases": [], "benefits": []},
+                    "sources": old.get("sources", []), "dropped_details": old.get("dropped_details", 0),
+                    "user_type": old.get("user_type", ""), "business_purpose": old.get("business_purpose", ""),
+                    "evidence_ids": ob.get("evidence_ids", []), "technology": old.get("technology", []),
+                    "basis": "evidence", "reviewed": True,
+                    "review": {"status": status, "note": o.get("note", ""), "by": o.get("by")}})
     elif agent == "competitor_research":
         excluded = {o["label"]: o for o in _by(overrides, "competitor")}
         if excluded:
@@ -153,6 +166,25 @@ def apply_to(agent: str, data: dict, overrides: list[dict], taxonomy: Taxonomy |
             kept.append(g)
         data["gaps"] = kept
     elif agent == "opportunity_prioritization":
+        decisions = {o["label"]: o for o in _by(overrides, "gap") if o["value"] in ("approve", "rework")}
+        if decisions:
+            for opp in data.get("opportunities", []):
+                d = decisions.get(opp["name"])
+                if not d:
+                    continue
+                by = f" ({d['by']})" if d.get("by") else ""
+                if d["value"] == "approve":
+                    opp["verdict"] = "confirmed"
+                    opp["checks"] = [c for c in opp.get("checks", []) if c["name"] != "reviewed"] + [{
+                        "name": "reviewed", "label": "Validated by a reviewer", "passed": True,
+                        "detail": (d.get("note") or "approved") + by}]
+                else:
+                    opp["verdict"] = "potential"
+                    opp["risks"] = [*opp.get("risks", []),
+                                    f"Reviewer asked for rework{by}: {d.get('note') or 'no note'}."]
+                opp["review"] = {"decision": d["value"], "note": d.get("note", ""), "by": d.get("by")}
+            data["verdicts"] = {k: sum(1 for x in data.get("opportunities", []) if x.get("verdict") == k)
+                                for k in ("confirmed", "potential", "optional")}
         fields = _by(overrides, "recommendation")
         if fields:
             opps = {o["name"]: o for o in data.get("opportunities", [])}

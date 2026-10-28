@@ -23,6 +23,8 @@ const STYLES: Record<string, { label: string; cls: string; hint: string }> = {
     hint: "Several independent signals (offering pages, code, records, announcements)" },
   mentioned: { label: "Mentioned only", cls: "bg-slate-100 text-slate-700 border-slate-200",
     hint: "Named once on a page; not confirmed as an offered capability" },
+  reviewed: { label: "Reviewed", cls: "bg-violet-50 text-violet-800 border-violet-200",
+    hint: "Set or confirmed by a human reviewer" },
   not_checked: { label: "Not checked", cls: "bg-slate-50 text-slate-500 border-slate-200",
     hint: "Analysed before verification was added; re-run to check" },
 };

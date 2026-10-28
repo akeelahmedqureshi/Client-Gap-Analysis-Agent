@@ -31,6 +31,9 @@ async def test_review_overrides_flow_through_a_new_run_version(client):  # noqa:
     # A recommendation that does not depend on competitors, so it stays in the roadmap after MediBook goes.
     kinds = {g["id"]: g["gap_type"] for g in gaps}
     rec = next(r for r in recs if kinds.get(r["gap_id"]) in ("process", "technology", "security"))
+    # A potential gap (it rests on assumptions about the client) that a reviewer validates.
+    verdicts = {o["gap_id"]: o["verdict"] for o in (await _agent(client, h, run_id, "opportunity_prioritization"))["opportunities"]}
+    approve = next(g for g in gaps if g["gap_type"] == "process" and verdicts[g["id"]] == "potential")
 
     put = lambda body: client.put(f"/api/runs/{run_id}/review", headers=h, json=body)  # noqa: E731
     # Validation
@@ -45,16 +48,17 @@ async def test_review_overrides_flow_through_a_new_run_version(client):  # noqa:
                        "note": "Different segment"})).status_code == 200
     assert (await put({"kind": "gap", "target_id": reject["id"], "value": "reject", "note": "Not relevant"})).status_code == 200
     assert (await put({"kind": "gap", "target_id": rework["id"], "value": "rework", "note": "Check pricing page"})).status_code == 200
+    assert (await put({"kind": "gap", "target_id": approve["id"], "value": "approve", "note": "Confirmed with the client"})).status_code == 200
     r = await put({"kind": "recommendation", "target_id": rec["id"], "field": "priority", "value": "low", "note": "Budget"})
     assert r.status_code == 200
     # Upsert: the same target and field replaces the earlier value.
     r = await put({"kind": "recommendation", "target_id": rec["id"], "field": "priority", "value": "high", "note": "CEO priority"})
     overrides = (await client.get(f"/api/runs/{run_id}/review", headers=h)).json()
-    assert len(overrides) == 5 and all(o["status"] == "pending" for o in overrides)
+    assert len(overrides) == 6 and all(o["status"] == "pending" for o in overrides)
 
     applied = (await client.post(f"/api/runs/{run_id}/review/apply", headers=h)).json()
     new_id = applied["run_id"]
-    assert applied["applied"] == 5
+    assert applied["applied"] == 6
     assert {"feature_comparison", "pricing_analysis", "opportunity_prioritization", "enhancement_planning"} <= set(applied["stages"])
     await runner.wait(new_id)
     run = (await client.get(f"/api/runs/{new_id}", headers=h)).json()
@@ -62,6 +66,9 @@ async def test_review_overrides_flow_through_a_new_run_version(client):  # noqa:
 
     feats = (await _agent(client, h, new_id, "product_features"))["observations"]
     assert feats["ai.voice"]["status"] == "missing" and feats["ai.voice"]["reviewed"]
+    inventory = (await _agent(client, h, new_id, "product_features"))["inventory"]
+    voice = next(i for i in inventory if i["feature_id"] == "ai.voice")
+    assert voice["status"] == "missing" and voice["verification"] == "reviewed" and "facts" in voice
     rows = {r["feature_id"]: r for r in (await _agent(client, h, new_id, "feature_comparison"))["rows"]}
     assert all(medibook["id"] not in r["competitors"] for r in rows.values())
     new_comps = await _agent(client, h, new_id, "competitor_research")
@@ -73,8 +80,13 @@ async def test_review_overrides_flow_through_a_new_run_version(client):  # noqa:
     new_rec = next(r for r in (await _agent(client, h, new_id, "opportunity_prioritization"))["recommendations"]
                    if r["feature"] == rec["feature"])
     assert new_rec["priority"] == "high" and new_rec["review"][0]["note"] == "CEO priority"
+    # A reviewer's approval confirms the gap; rework makes it potential (never confirmed).
+    opps = {o["name"]: o for o in (await _agent(client, h, new_id, "opportunity_prioritization"))["opportunities"]}
+    assert opps[approve["name"]]["verdict"] == "confirmed"
+    assert any(c["name"] == "reviewed" and c["passed"] for c in opps[approve["name"]]["checks"])
+    assert opps[rework["name"]]["verdict"] == "potential" and "rework" in opps[rework["name"]]["risks"][-1]
     q = await _agent(client, h, new_id, "quality_assurance")
-    assert q["metrics"]["manual_overrides"] == 5
+    assert q["metrics"]["manual_overrides"] == 6
     assert any("rework" in i["message"] for i in q["issues"])
     assert not any("High priority on low-confidence" in i["message"] for i in q["issues"])
     md = (await client.get(f"/api/runs/{new_id}/report.md", headers=h)).text
@@ -93,7 +105,7 @@ async def test_review_overrides_flow_through_a_new_run_version(client):  # noqa:
     again = await _agent(client, h, refreshed["run_id"], "competitor_research")
     assert medibook["name"] not in {c["name"] for c in again["competitors"] + again["landscape"]}
     assert (await _agent(client, h, refreshed["run_id"], "product_features"))["observations"]["ai.voice"]["status"] == "missing"
-    assert len((await client.get(f"/api/runs/{refreshed['run_id']}/review", headers=h)).json()) == 5
+    assert len((await client.get(f"/api/runs/{refreshed['run_id']}/review", headers=h)).json()) == 6
 
 
 async def test_review_permissions_and_isolation(client):  # noqa: F811
