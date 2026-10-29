@@ -220,5 +220,5 @@ async def test_upload_with_malformed_url_cell_reports_issue_not_500(client):
     assert r.status_code == 201, r.text
     body = r.json()
     assert len(body["records"]) == 2
-    assert any("Invalid project URL" in i for i in body["records"][0]["issues"])
+    assert any("not a valid web address" in i for i in body["records"][0]["issues"])
     assert body["records"][1]["project"]["url"] == "https://shop.beta-corp.com"

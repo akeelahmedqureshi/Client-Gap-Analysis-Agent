@@ -13,6 +13,7 @@ from cip.api.routes import (
     config,
     connections,
     governance,
+    intake,
     integrations,
     knowledge,
     monitoring,
@@ -79,7 +80,7 @@ app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, al
                    allow_methods=["*"], allow_headers=["*"])
 for r in (auth.router, users.router, uploads.router, projects.router, runs.router, connections.router,
           monitoring.router, knowledge.router, sales.router, review.router, portfolio.router,
-          governance.router, config.router, integrations.router):
+          governance.router, config.router, integrations.router, intake.router):
     app.include_router(r)
 
 

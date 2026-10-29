@@ -96,6 +96,10 @@ class CsvUpload(Base):
     warnings: Mapped[list] = mapped_column(default=list)
     # Row number -> domain check (services: connectors/research/domain.py), from "Check domains" in the preview.
     domain_checks: Mapped[dict] = mapped_column(default=dict)
+    # The person's review in progress (column mapping, corrections, per-row decisions; services/intake.py) and,
+    # per row number, what was done when it was imported.
+    plan: Mapped[dict] = mapped_column(default=dict)
+    results: Mapped[dict] = mapped_column(default=dict)
     uploaded_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -109,6 +113,7 @@ class Client(Base):
     name: Mapped[str] = mapped_column(String(300))
     domain: Mapped[str | None] = mapped_column(String(300), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)  # the org's own id
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     projects: Mapped[list[Project]] = relationship(back_populates="client")
 

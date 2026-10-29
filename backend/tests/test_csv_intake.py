@@ -18,30 +18,42 @@ def test_column_aliases():
     assert unmapped == ["Random"]
 
 
-def test_infers_missing_fields_and_ignores_free_email_domains():
+def test_mandatory_fields_are_never_guessed_and_free_email_domains_are_ignored():
     csv = "Email,URL,Notes\njohn@gmail.com,https://www.acme-robotics.io,see https://gitlab.com/acme/core/-/tree/main and https://linkedin.com/company/acme\n"
-    rec = parse_csv(csv).records[0]
+    result = parse_csv(csv)
+    row, rec = result.rows[0], result.records[0]
     assert rec.client.domain == "acme-robotics.io"  # gmail ignored, website used
-    assert rec.client.name == "Acme Robotics"
+    assert rec.client.name == "" and row.errors == {"client_name": "Client name is required."}
+    assert any("Client name" in w for w in result.warnings)   # no column for a mandatory field
     assert rec.sources.gitlab == ["https://gitlab.com/acme/core"]
     assert rec.sources.linkedin == ["https://linkedin.com/company/acme"]
-    assert any("inferred" in i for i in rec.issues)
 
 
-def test_duplicates_and_invalid_urls():
+def test_invalid_values_are_reported_per_field():
     csv = (
-        "Client Name,Project Name,Project URL,Repository URL\n"
-        "Acme,Portal,https://acme.com,https://github.com/acme/portal\n"
-        "ACME,portal,https://acme.com/,\n"
-        "Acme,Mobile,not a url,https://example.org/repo\n"
+        "Client Name,Project Name,Project URL,Repository URL,Client Email,Start Date\n"
+        "Acme,Portal,https://acme.com,https://github.com/acme/portal,ops@acme.com,2023-02-01\n"
+        "Acme,Mobile,not a url,https://example.org/repo,not-an-email,Feb 2023\n"
+        ",Shop,,,,\n"
     )
     result = parse_csv(csv)
-    assert result.valid
-    r2, r3, r4 = result.records
-    assert r3.duplicate_of_row == 2
-    assert any("Invalid project URL" in i for i in r4.issues)
-    assert any("not a recognised GitHub/GitLab" in i for i in r4.issues)
-    assert any("same client" in w for w in result.warnings)
+    assert result.valid and len(result.rows) == 3
+    ok, bad, empty = result.rows
+    assert ok.errors == {}
+    assert set(bad.errors) == {"project_url", "repository_url", "client_email", "start_date"}
+    assert "not a GitHub or GitLab" in bad.errors["repository_url"].replace("Not", "not")
+    assert set(empty.errors) == {"client_name", "project_url"}  # the two mandatory fields
+    assert result.records[1].project.url is None and result.records[1].issues
+
+
+def test_project_name_defaults_to_the_client_name():
+    rec = parse_csv("Client Name,Website\nBeta GmbH,beta.de\n").records[0]
+    assert rec.project.name == "Beta GmbH" and rec.project.url == "https://beta.de"
+
+
+def test_a_repository_is_not_a_website():
+    row = parse_csv("Client,Website\nAcme,https://github.com/acme/app\n").rows[0]
+    assert "Repository URL" in row.errors["project_url"]
 
 
 def test_rejects_csv_without_identifying_columns():
@@ -84,7 +96,7 @@ def test_malformed_values_never_crash_the_upload():
     result = parse_csv(out.getvalue())
     assert not result.errors and len(result.records) == len(MALFORMED)
     first = result.records[0]
-    assert first.project.url is None and any("Invalid project URL" in x for x in first.issues)
+    assert first.project.url is None and "project_url" in result.rows[0].errors
     # Everything except the (valid, internationalised) emoji domain is rejected as a project URL.
     rejected = [r for r, bad in zip(result.records, MALFORMED) if not bad.endswith(".com") or " " in bad]
     assert all(r.project.url is None for r in rejected)

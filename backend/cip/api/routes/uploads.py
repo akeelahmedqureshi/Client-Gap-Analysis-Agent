@@ -1,4 +1,4 @@
-"""CSV upload → validate → preview → import (creates clients & projects)."""
+"""CSV upload → validate → review (corrections, duplicates, existing clients) → import. Rules: services/intake.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cip.agents.csv_intake import parse_csv
@@ -14,9 +13,9 @@ from cip.connectors.research.domain import check_many, is_problem
 from cip.connectors.research.web import WebFetcher
 from cip.api.deps import not_found, require_role
 from cip.core.schemas import NormalizedRecord
-from cip.db.models import Client, CsvUpload, Project, User
+from cip.db.models import CsvUpload, User
 from cip.db.session import get_session
-from cip.services import audit
+from cip.services import audit, intake
 from cip.services.storage import LocalObjectStore
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -39,18 +38,9 @@ class UploadOut(BaseModel):
     warnings: list[str]
     records: list[NormalizedRecord]
     domain_checks: dict[int, dict] = {}
-
-
-class ImportIn(BaseModel):
-    rows: list[int] | None = None  # row numbers to import; default: all non-duplicate rows
-    include_duplicates: bool = False
-
-
-class ImportOut(BaseModel):
-    created_projects: list[str]
-    reused_clients: int
-    created_clients: int
-    skipped_rows: list[int]
+    headers: list[str] = []
+    plan: dict = {}
+    results: dict = {}
 
 
 @router.post("", response_model=UploadOut, status_code=201)
@@ -76,11 +66,8 @@ async def upload_csv(request: Request, file: UploadFile = File(...), user: User 
 @router.get("/{upload_id}", response_model=UploadOut)
 async def get_upload(upload_id: str, user: User = Depends(require_role("viewer")),
                      session: AsyncSession = Depends(get_session)) -> UploadOut:
-    upload = await session.get(CsvUpload, upload_id)
-    if not upload or upload.org_id != user.org_id:
-        raise not_found("Upload")
-    parsed = parse_csv(LocalObjectStore().get(upload.storage_key))
-    return _out(upload, parsed)
+    upload = await _upload(session, user, upload_id)
+    return _out(upload, _parsed(upload))
 
 
 def _checks(upload: CsvUpload) -> dict[int, dict]:
@@ -93,7 +80,45 @@ def _out(upload: CsvUpload, parsed) -> UploadOut:
         rec.domain_check = checks.get(rec.row_number)
     return UploadOut(id=upload.id, filename=upload.filename, valid=parsed.valid,
                      column_mapping=parsed.column_mapping, unmapped_columns=parsed.unmapped_columns,
-                     errors=parsed.errors, warnings=parsed.warnings, records=parsed.records, domain_checks=checks)
+                     errors=parsed.errors, warnings=parsed.warnings, records=parsed.records, domain_checks=checks,
+                     headers=parsed.headers, plan=upload.plan or {}, results=upload.results or {})
+
+
+def _parsed(upload: CsvUpload, plan: intake.Plan | None = None):
+    mapping = plan.mapping if plan and plan.mapping is not None else (upload.plan or {}).get("mapping")
+    return parse_csv(LocalObjectStore().get(upload.storage_key), mapping)
+
+
+async def _upload(session: AsyncSession, user: User, upload_id: str) -> CsvUpload:
+    upload = await session.get(CsvUpload, upload_id)
+    if not upload or upload.org_id != user.org_id:
+        raise not_found("Upload")
+    return upload
+
+
+def _rows(upload: CsvUpload, parsed, plan: intake.Plan) -> list[intake.Incoming]:
+    return intake.incoming([(r.row_number, r.raw) for r in parsed.rows], plan, _checks(upload))
+
+
+def _done(upload: CsvUpload) -> dict[int, dict]:
+    return {int(k): v for k, v in (upload.results or {}).items() if v.get("ok")}
+
+
+@router.post("/{upload_id}/review")
+async def review_upload(upload_id: str, plan: intake.Plan, user: User = Depends(require_role("analyst")),
+                        session: AsyncSession = Depends(get_session)) -> dict:
+    """Validate every row with the person's corrections and decisions, find duplicates within the file and
+    matches with existing clients, and report what an import would do. The plan is saved with the upload so the
+    review can be resumed; nothing is imported."""
+    upload = await _upload(session, user, upload_id)
+    parsed = _parsed(upload, plan)
+    if not parsed.valid:
+        raise HTTPException(422, {"errors": parsed.errors})
+    result = await intake.review(session, user, _rows(upload, parsed, plan), plan, _done(upload))
+    upload.plan = plan.model_dump(mode="json")
+    await session.commit()
+    return {**result, "column_mapping": parsed.column_mapping, "unmapped_columns": parsed.unmapped_columns,
+            "headers": parsed.headers, "warnings": parsed.warnings}
 
 
 def _record_url(rec: NormalizedRecord) -> str | None:
@@ -105,10 +130,8 @@ async def check_domains(upload_id: str, request: Request, user: User = Depends(r
                         session: AsyncSession = Depends(get_session)) -> UploadOut:
     """Request each row's homepage once and classify it: ok, redirected, parked, unreachable or blocked.
     Problem rows are flagged in the preview (not blocked); the person decides whether to import them."""
-    upload = await session.get(CsvUpload, upload_id)
-    if not upload or upload.org_id != user.org_id:
-        raise not_found("Upload")
-    parsed = parse_csv(LocalObjectStore().get(upload.storage_key))
+    upload = await _upload(session, user, upload_id)
+    parsed = _parsed(upload)
     urls = {r.row_number: u for r in parsed.records[:MAX_DOMAIN_CHECKS] if (u := _record_url(r))}
     results = await check_many(domain_fetcher(), urls)
     upload.domain_checks = {str(k): v for k, v in results.items()}
@@ -119,50 +142,20 @@ async def check_domains(upload_id: str, request: Request, user: User = Depends(r
     return _out(upload, parsed)
 
 
-def _client_key(rec: NormalizedRecord) -> str:
-    return re.sub(r"[^a-z0-9.]", "", (rec.client.domain or rec.client.name).lower())
-
-
-@router.post("/{upload_id}/import", response_model=ImportOut)
-async def import_upload(upload_id: str, body: ImportIn, request: Request, user: User = Depends(require_role("analyst")),
-                        session: AsyncSession = Depends(get_session)) -> ImportOut:
-    upload = await session.get(CsvUpload, upload_id)
-    if not upload or upload.org_id != user.org_id:
-        raise not_found("Upload")
-    parsed = parse_csv(LocalObjectStore().get(upload.storage_key))
-    checks = _checks(upload)
-    for rec in parsed.records:
-        rec.domain_check = checks.get(rec.row_number)
+@router.post("/{upload_id}/import")
+async def import_upload(upload_id: str, plan: intake.Plan, request: Request,
+                        user: User = Depends(require_role("analyst")),
+                        session: AsyncSession = Depends(get_session)) -> dict:
+    """Apply the reviewed decisions. Refused (409, with the review) while records still need a decision, unless
+    ``allow_partial`` confirms that only the ready records should be imported."""
+    upload = await _upload(session, user, upload_id)
+    parsed = _parsed(upload, plan)
     if not parsed.valid:
         raise HTTPException(422, {"errors": parsed.errors})
-    created: list[str] = []
-    skipped: list[int] = []
-    new_clients = reused = 0
-    for rec in parsed.records:
-        if body.rows is not None and rec.row_number not in body.rows:
-            continue
-        if rec.duplicate_of_row and not body.include_duplicates:
-            skipped.append(rec.row_number)
-            continue
-        key = _client_key(rec)
-        client = (await session.execute(select(Client).where(Client.org_id == user.org_id,
-                                                             Client.key == key))).scalar_one_or_none()
-        if client is None:
-            client = Client(org_id=user.org_id, key=key, name=rec.client.name, domain=rec.client.domain,
-                            industry=rec.client.industry)
-            session.add(client)
-            await session.flush()
-            new_clients += 1
-        else:
-            reused += 1
-        project = Project(org_id=user.org_id, client_id=client.id, upload_id=upload.id, name=rec.project.name,
-                          created_by=user.id, restricted=False,
-                          url=rec.project.url, description=rec.project.description, record=rec.model_dump())
-        session.add(project)
-        await session.flush()
-        created.append(project.id)
-    audit.record(session, request, user, "upload.imported", "upload", upload.id, projects=len(created),
-                 skipped_rows=skipped or None)
+    try:
+        out = await intake.apply(session, request, user, _rows(upload, parsed, plan), plan, upload)
+    except intake.IntakeError as exc:
+        await session.rollback()
+        raise HTTPException(exc.status, {"message": exc.message, "review": exc.review}) from exc
     await session.commit()
-    return ImportOut(created_projects=created, created_clients=new_clients, reused_clients=reused,
-                     skipped_rows=skipped)
+    return out

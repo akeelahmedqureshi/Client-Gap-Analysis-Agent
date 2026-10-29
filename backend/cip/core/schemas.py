@@ -112,6 +112,7 @@ class ClientRecord(BaseModel):
     domain: str | None = None
     email: str | None = None
     industry: str | None = None
+    external_id: str | None = None  # the organization's own id for the client (CRM / accounting)
 
 
 class ProjectRecord(BaseModel):
