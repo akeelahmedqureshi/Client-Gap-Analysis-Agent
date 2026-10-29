@@ -31,10 +31,14 @@ reset, role change or deactivation invalidates existing sessions.
 
 | Method | Path | Role | Description |
 |---|---|---|---|
-| POST | `/api/uploads` | analyst | Multipart `file`. Validates and returns a preview (`records`, `column_mapping`, `errors`, `warnings`) |
+| POST | `/api/uploads` | analyst | Multipart `file`. Validates the file and returns its rows (`records`, `column_mapping`, `headers`, `errors`, `warnings`); the review endpoint does the rest |
 | GET | `/api/uploads/{id}` | viewer | Preview again |
 | POST | `/api/uploads/{id}/check-domains` | analyst | Requests each row's homepage once and classifies it: `ok`, `redirected` (answers on another domain), `parked` (for-sale or parking page), `unreachable` or `blocked` (robots.txt or non-public address). Results are kept with the upload (`domain_checks`, `records[].domain_check`) and copied into imported projects' records. Problem rows are flagged, not blocked |
-| POST | `/api/uploads/{id}/import` | analyst | `{rows?: int[], include_duplicates?: bool}`. Creates clients (de-duplicated by domain or name) and projects |
+| POST | `/api/uploads/{id}/review` | analyst | Plan `{mapping?, edits: {row: {field: value}}, decisions: {row: {action, target?, merge?: {field: existing\|incoming}, confirm_replace?}}, allow_partial?}`. Returns every row (values, errors, status, allowed actions, matches with existing clients and their fields, changes), duplicate groups, plan conflicts and a summary. Saves the plan with the upload; imports nothing |
+| POST | `/api/uploads/{id}/import` | analyst | The same plan. Applies only rows that are ready. 409 (with the review) while rows still need a decision, unless `allow_partial`. Returns counts (`added`, `updated`, `replaced`, `merged`, `skipped`, `failed_validation`, `pending`, `failed`), per-row results and failures |
+| GET | `/api/intake/schema` | viewer | The client fields: key, label, kind, mandatory, CSV column names, help |
+| POST | `/api/intake/review` | analyst | `{values: {field: value}, decision?}`. Validates one client (the manual form) and compares it with existing clients; saves nothing |
+| POST | `/api/intake/clients` | analyst | `{values, decision?}`. Saves the client: adds it, or updates / replaces / merges into the matching existing client. 409 while a decision is needed |
 | GET | `/api/clients` | viewer | Clients with project counts |
 | GET | `/api/clients/{id}` | viewer | Client detail: visible projects, the latest researched company profile, and the top 3 recommendations from the latest run of each project |
 | GET | `/api/projects?client_id=` | viewer | Projects with their latest run |

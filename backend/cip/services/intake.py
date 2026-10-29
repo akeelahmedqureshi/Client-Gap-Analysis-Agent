@@ -228,8 +228,11 @@ def duplicate_groups(rows: list[Incoming]) -> list[dict]:
                     distinct.append(x)
             if len(distinct) > 1:
                 conflicts.append({"field": f.key, "label": f.label, "values": {str(r): x for r, x in vals.items()}})
-        # identical rows are always "identical"; drop weaker reasons covered by the same rows
-        out.append({"id": i, "kind": g["kind"], "rows": members, "links": g["links"], "conflicts": conflicts})
+        # rows that are identical need no further reasons
+        identical = [set(x["rows"]) for x in g["links"] if x["reason"] == "identical rows"]
+        links = [x for x in g["links"] if x["reason"] == "identical rows"
+                 or not any(set(x["rows"]) <= rows for rows in identical)]
+        out.append({"id": i, "kind": g["kind"], "rows": members, "links": links, "conflicts": conflicts})
     return out
 
 
@@ -304,11 +307,11 @@ def review_row(inc: Incoming, matches: list[Match], group: dict | None, decision
     if inc.errors:
         needs.append("Fill in or correct: " + ", ".join(cs.BY_KEY[k].label for k in inc.errors) + " — or skip the row.")
     action = d.action or (None if affected else "add")
-    if action is None:
+    if action is None and (group or matches):
         options = " or ".join(ACTION_LABELS[a] for a in allowed)
         why = ("it matches an existing client" if matches else "it is a possible duplicate within the upload")
         needs.append(f"Choose what to do — {why}: {options}.")
-    elif action not in allowed:
+    elif action is not None and action not in allowed:
         reason = ("the record is the same client as an existing one (add would create a duplicate)"
                   if action == "add" else "no existing client you can access matches it")
         needs.append(f"“{ACTION_LABELS[action]}” is not available: {reason}.")

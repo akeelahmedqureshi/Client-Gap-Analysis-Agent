@@ -43,6 +43,7 @@ async def test_missing_mandatory_information_is_fixed_or_skipped_never_guessed(c
     r = rows_of(rv)
     assert r[2]["status"] == "ready" and r[2]["action"] == "add"
     assert r[3]["status"] == "invalid" and r[3]["missing"] == ["project_url"]
+    assert len(r[3]["needs"]) == 1 and "Website URL" in r[3]["needs"][0]   # nothing else is asked of it
     assert r[4]["status"] == "invalid" and r[4]["missing"] == ["client_name"]
     assert rv["summary"]["missing_mandatory"] == 2 and not rv["summary"]["can_import"]
 
@@ -75,6 +76,9 @@ async def test_duplicates_within_the_upload_need_an_explicit_choice(client):  # 
     rv = await review(client, h, up)
     groups = {tuple(g["rows"]): g for g in rv["groups"]}
     assert groups[(2, 3)]["kind"] == "confirmed" and any(x["reason"] == "same website URL" for x in groups[(2, 3)]["links"])
+    up2 = await upload(client, h, "Same,,,P,https://same.io,X\nSame,,,P,https://same.io,X\n")
+    (g,) = (await review(client, h, up2))["groups"]
+    assert [x["reason"] for x in g["links"]] == ["identical rows"]   # no weaker reasons repeated
     assert groups[(4, 5)]["kind"] == "potential"
     assert {x["field"] for x in groups[(4, 5)]["conflicts"]} >= {"project_url", "industry"}
     assert all(r["status"] == "pending" for r in rv["rows"])          # no default for any of them

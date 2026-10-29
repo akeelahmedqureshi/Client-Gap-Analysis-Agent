@@ -134,13 +134,29 @@ node scripts/render_tabs.js ../examples/clients.csv /tmp/shots   # needs Playwri
 It prints the errors for each tab, saves a screenshot per tab, and exits non-zero on any page or console
 error.
 
+`scripts/check_intake_ui.js` does the same for the Upload page. It drives the manual client form and a CSV review
+(a correction, duplicate decisions, a field-by-field merge with an existing client, and the import):
+`node scripts/check_intake_ui.js /tmp/intake-shots`.
+
 ### 3.1 Onboarding and upload
 
 - [ ] **Create an organization**: you land on the Dashboard as admin.
-- [ ] **Upload** `examples/clients.csv`, then **Validate**: 3 valid records, no errors, and the
-      detected column mapping is shown.
-- [ ] **Import**: 3 projects created. **Clients** lists ABC Healthcare, Northwind Logistics and
-      Contoso Retail.
+- [ ] **Upload → Upload CSV file**: choose `examples/clients.csv`, then **Upload and review**.
+      The columns are matched, 3 rows are valid, and there are no duplicates or existing clients.
+- [ ] **Review and confirm import… → Confirm and import**: 3 added. **Clients** lists ABC Healthcare,
+      Northwind Logistics and Contoso Retail.
+- [ ] Upload the same file again. All 3 rows match existing clients (identical) and **need a decision**;
+      the import button stays disabled. **Skip all** makes them skipped; nothing is changed.
+- [ ] Edit a copy so that one row has no website, two rows repeat, and one row gives ABC Healthcare a
+      different industry. Check that:
+      - the first row must be filled in or skipped;
+      - the repeated rows form a *confirmed* duplicate group needing Add or Skip on each row;
+      - the ABC row shows the existing and incoming values side by side. **Update existing** lists the
+        change; **Replace existing** asks for a confirmation; **Merge** asks for a value for each field
+        that differs.
+- [ ] **Add client manually**: an invalid email or website is flagged on the field. A new client saves
+      after confirmation and appears under **Projects**. Entering it again shows *This client may
+      already exist* and requires a choice.
 
 ### 3.2 Approvals (human gates)
 

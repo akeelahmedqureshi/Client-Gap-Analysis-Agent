@@ -86,6 +86,8 @@ export function formatApiError(detail: unknown, fallback: string): string {
     return [...new Set(detail.map((d) => describeIssue(d as ValidationIssue)))].join(" ");
   }
   if (detail && typeof detail === "object" && "msg" in detail) return describeIssue(detail as ValidationIssue);
+  if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string")
+    return (detail as { message: string }).message;
   return fallback;
 }
 
